@@ -57,7 +57,8 @@
   const S = W.__rpe = {
     auto: keep.auto ?? true,     // 一時停止したら自動で操作できるようにする
     noGravity: keep.noGravity ?? false,
-    swap: keep.swap ?? false,    // 2人のリプレイで、左右のプレイヤーの位置を入れ替える(見た目だけ)   // 操作中の重力をなくす(ハードドロップ・ソフトドロップでだけ落ちる)
+    swap: keep.swap ?? false,
+    counter: keep.counter ?? true,   // スピンカウンター(SPIN・T-SPIN・QUAD)も出す    // 2人のリプレイで、左右のプレイヤーの位置を入れ替える(見た目だけ)   // 操作中の重力をなくす(ハードドロップ・ソフトドロップでだけ落ちる)
     side: keep.side ?? 0,        // 操作する盤面(左から何番目か)
     panelClosed: updated ? !!keep.panelClosed : false,
     active: null,                // 操作中のゲーム
@@ -354,6 +355,7 @@
   const bAuto = btn('', () => { S.auto = !S.auto; if (!S.auto) leave(true); draw(); });
   const bSide = btn('', () => { S.side++; if (S.active) leave(true); draw(); });
   const bSwap = btn('', () => { S.swap = !S.swap; draw(); });
+  const bCounter = btn('', () => { S.counter = !S.counter; S.counter ? startCounter() : stopCounter(); draw(); });
   const bGrav = btn('', () => { S.noGravity = !S.noGravity; draw(); });
   const bReset = btn('止めた場面からやり直す(R)', () => retry());
   const bFumen = btn('', () => {
@@ -368,7 +370,7 @@
     window.open('https://fumen.zui.jp/?' + code, '_blank', 'noopener');
   });
   const bClose = btn('パネルを閉じる', () => setClosed(true));
-  panel.append(status, bAuto, bSide, bSwap, bGrav, bReset, bFumen, bClose);
+  panel.append(status, bAuto, bSide, bSwap, bGrav, bReset, bFumen, bCounter, bClose);
   const mini = document.createElement('div');
   mini.id = '__rpemini';
   mini.textContent = '盤面修正';
@@ -384,6 +386,7 @@
     bAuto.textContent = '止めたら操作: ' + (S.auto ? 'ON' : 'OFF');
     bGrav.textContent = '重力: ' + (S.noGravity ? 'なし' : 'あり');
     bSwap.textContent = '2人の左右を入れ替え: ' + (S.swap ? 'ON' : 'OFF');
+    bCounter.textContent = 'スピンカウンター: ' + (S.counter ? 'ON' : 'OFF');
     bFumen.textContent = S.active ? `fumen に書き出す(止めた場面 + ${undo.length - 1}ミノ)` : 'fumen で今の盤面を開く';
     const tgt = list.length ? list[S.side % list.length] : null;
     bSide.textContent = '操作する盤面: ' + (tgt ? name(tgt) : '-') + (list.length > 1 ? '(押すと切り替え)' : '');
@@ -426,6 +429,21 @@
       delete g.__rpeOrig; delete g.__rpeSet;
     }
   };
+
+  // ---- スピンカウンター ----
+  // 同じブックマークで、スピンカウンター(counter/tetrio-spin-counter.js)も起動する。
+  // ゲームのつかまえ方(gsm の受け口・W.__rpeGames)は共通。止めても数えた回数は残る
+  const COUNTER = SRC.replace('replay-edit/tetrio-replay-edit.js', 'counter/tetrio-spin-counter.js');
+  const startCounter = () => {
+    if (W.__scTeardown || W.__scLoading) return;
+    W.__scLoading = true;
+    const s = document.createElement('script');
+    s.src = COUNTER + '?v=' + Date.now();
+    s.onload = s.onerror = () => { W.__scLoading = false; };
+    document.head.appendChild(s);
+  };
+  const stopCounter = () => { if (W.__scTeardown) W.__scTeardown(false); };
+  if (S.counter) startCounter();
 
   // ---- 毎フレーム ----
   let raf = 0;
@@ -487,7 +505,7 @@
     panel.remove(); mini.remove();
     W.__rpeTeardown = null;
     unswapAll();
-    return { auto: S.auto, side: S.side, noGravity: S.noGravity, swap: S.swap, panelClosed: upd ? S.panelClosed : false };
+    return { auto: S.auto, side: S.side, noGravity: S.noGravity, swap: S.swap, counter: S.counter, panelClosed: upd ? S.panelClosed : false };
   };
 
   // ---- 自動更新(操作中は待つ) ----
