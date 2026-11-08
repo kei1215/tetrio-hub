@@ -56,7 +56,8 @@
   // ---- 状態 ----
   const S = W.__rpe = {
     auto: keep.auto ?? true,     // 一時停止したら自動で操作できるようにする
-    noGravity: keep.noGravity ?? false,   // 操作中の重力をなくす(ハードドロップ・ソフトドロップでだけ落ちる)
+    noGravity: keep.noGravity ?? false,
+    swap: keep.swap ?? false,    // 2人のリプレイで、左右のプレイヤーの位置を入れ替える(見た目だけ)   // 操作中の重力をなくす(ハードドロップ・ソフトドロップでだけ落ちる)
     side: keep.side ?? 0,        // 操作する盤面(左から何番目か)
     panelClosed: updated ? !!keep.panelClosed : false,
     active: null,                // 操作中のゲーム
@@ -352,6 +353,7 @@
   const btn = (label, fn) => { const b = document.createElement('button'); b.textContent = label; b.style.cssText = 'font:inherit;color:#fff;background:#0085a1;border:0;border-radius:4px;padding:4px 6px;cursor:pointer;text-align:left'; b.onclick = e => { e.stopPropagation(); fn(b); b.blur(); }; return b; };
   const bAuto = btn('', () => { S.auto = !S.auto; if (!S.auto) leave(true); draw(); });
   const bSide = btn('', () => { S.side++; if (S.active) leave(true); draw(); });
+  const bSwap = btn('', () => { S.swap = !S.swap; draw(); });
   const bGrav = btn('', () => { S.noGravity = !S.noGravity; draw(); });
   const bReset = btn('止めた場面からやり直す(R)', () => retry());
   const bFumen = btn('', () => {
@@ -366,7 +368,7 @@
     window.open('https://fumen.zui.jp/?' + code, '_blank', 'noopener');
   });
   const bClose = btn('パネルを閉じる', () => setClosed(true));
-  panel.append(status, bAuto, bSide, bGrav, bReset, bFumen, bClose);
+  panel.append(status, bAuto, bSide, bSwap, bGrav, bReset, bFumen, bClose);
   const mini = document.createElement('div');
   mini.id = '__rpemini';
   mini.textContent = '盤面修正';
@@ -381,6 +383,7 @@
     const list = shown();
     bAuto.textContent = '止めたら操作: ' + (S.auto ? 'ON' : 'OFF');
     bGrav.textContent = '重力: ' + (S.noGravity ? 'なし' : 'あり');
+    bSwap.textContent = '2人の左右を入れ替え: ' + (S.swap ? 'ON' : 'OFF');
     bFumen.textContent = S.active ? `fumen に書き出す(止めた場面 + ${undo.length - 1}ミノ)` : 'fumen で今の盤面を開く';
     const tgt = list.length ? list[S.side % list.length] : null;
     bSide.textContent = '操作する盤面: ' + (tgt ? name(tgt) : '-') + (list.length > 1 ? '(押すと切り替え)' : '');
@@ -397,12 +400,40 @@
     status.textContent = 'リプレイ盤面修正\n' + t + (S.msg ? '\n' + S.msg : '');
   };
 
+  // ---- 2人の左右の入れ替え(見た目だけ) ----
+  // TETR.IO は2人のリプレイで、盤面の位置を holderstate の ox / oy / os(左 -0.35・右 0.45 など)で決め、
+  // 表示の位置(cox など)がそこへなめらかに寄っていく。入れ替えるときは2人の ox / oy / os を交換する。
+  // TETR.IO が位置を置き直したとき(ラウンドが変わったときなど)は、それを新しい元の位置として入れ替え直す
+  const POS = ['ox', 'oy', 'os'];
+  const applySwap = list => {
+    const pair = games.filter(g => list.includes(g));   // 作られた順(左の人が先)
+    if (pair.length !== 2) return;
+    for (const g of pair) {
+      const hs = g.hm.H.holderstate;
+      if (!g.__rpeSet || POS.some(k => hs[k] !== g.__rpeSet[k])) g.__rpeOrig = { ox: hs.ox, oy: hs.oy, os: hs.os };
+    }
+    pair.forEach((g, i) => {
+      const want = S.swap ? pair[1 - i].__rpeOrig : g.__rpeOrig;
+      const hs = g.hm.H.holderstate;
+      if (POS.some(k => hs[k] !== want[k])) { for (const k of POS) hs[k] = want[k]; }
+      g.__rpeSet = { ox: hs.ox, oy: hs.oy, os: hs.os };
+    });
+  };
+  const unswapAll = () => {
+    for (const g of games) {
+      if (!g.__rpeOrig) continue;
+      try { const hs = g.hm.H.holderstate; for (const k of POS) hs[k] = g.__rpeOrig[k]; } catch (e) {}
+      delete g.__rpeOrig; delete g.__rpeSet;
+    }
+  };
+
   // ---- 毎フレーム ----
   let raf = 0;
   const loop = now => {
     raf = requestAnimationFrame(loop);
     try {
       const list = shown();
+      applySwap(list);
       if (S.active && (!alive(S.active) || !list.includes(S.active))) leave(false);
       if (!S.active && S.auto && list.length) {
         const n = list[S.side % list.length];
@@ -455,7 +486,8 @@
     clearInterval(W.__rpeUpd);
     panel.remove(); mini.remove();
     W.__rpeTeardown = null;
-    return { auto: S.auto, side: S.side, noGravity: S.noGravity, panelClosed: upd ? S.panelClosed : false };
+    unswapAll();
+    return { auto: S.auto, side: S.side, noGravity: S.noGravity, swap: S.swap, panelClosed: upd ? S.panelClosed : false };
   };
 
   // ---- 自動更新(操作中は待つ) ----
