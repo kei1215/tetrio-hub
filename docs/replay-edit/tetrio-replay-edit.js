@@ -239,43 +239,67 @@
   };
   addEventListener('blur', onBlur);
 
-  // ---- fumen(https://fumen.zui.jp/)で今の盤面を開く ----
+  // ---- fumen(https://fumen.zui.jp/)に書き出す ----
+  // 操作中: 1ページ目 = 止めた場面、2ページ目から = ミノを1つ置くごとの地形(1ミノ1ページ)。
+  //         Ctrl+Z で取り消したミノは入らない(今の流れだけ)
+  // 操作していないとき: 今の盤面を1ページで
   const FUMEN_PIECE = { i: 1, l: 2, o: 3, z: 4, t: 5, j: 6, s: 7, gb: 8, gbd: 8 };
   const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  const fumenOf = n => {
-    const t = n.gsm, rows = t.board, Wd = 10;
+  // TETR.IO の盤面(上から40行)→ fumen のマス(上から23行 + せり上がり用の空の1行 = 240マス)
+  const cellsOf = rows => {
     const cells = [];
     for (let y = 22; y >= 0; y--) {
       const row = rows[rows.length - 1 - y] || [];
-      for (let x = 0; x < Wd; x++) cells.push(FUMEN_PIECE[row[x]] || 0);
+      for (let x = 0; x < 10; x++) cells.push(FUMEN_PIECE[row[x]] || 0);
     }
-    for (let x = 0; x < Wd; x++) cells.push(0);   // せり上がり用の行(空)
+    for (let x = 0; x < 10; x++) cells.push(0);
+    return cells;
+  };
+  const fumenOfBoards = boards => {
     const out = [];
     const put = (v, len) => { for (let i = 0; i < len; i++) { out.push(B64[v % 64]); v = Math.floor(v / 64); } };
-    let prev = cells[0] + 8, count = 1, allEmpty = true;
-    const flush = () => { put(prev * 240 + (count - 1), 2); if (prev !== 8) allEmpty = false; };
-    for (let i = 1; i < 240; i++) {
-      const d = cells[i] + 8;
-      if (d === prev) { count++; continue; }
-      flush(); prev = d; count = 1;
-    }
-    flush();
-    if (allEmpty) put(0, 1);
-    // ミノなし・色付き・ロックありのページ
-    let v = 0;
-    v = v * 2 + 0; // せり上がりなし
-    v = v * 2 + 0; // 反転なし
-    v = v * 2 + 1; // 色付き
-    v = v * 2 + 0; // コメントなし
-    v = v * 2 + 0; // ロック(0 = する)
-    v = v * 240 + 0; v = v * 4 + 0; v = v * 8 + 0;
-    put(v, 3);
-    const s = out.join('');
-    let r = s.slice(0, 42);
-    for (let i = 42; i < s.length; i += 47) r += '?' + s.slice(i, i + 47);
+    const pages = boards.map(cellsOf);
+    let prev = new Array(240).fill(0), skip = 0;
+    const same = (a, b) => a.every((c, i) => c === b[i]);
+    pages.forEach((cells, p) => {
+      if (skip > 0) skip--;
+      else {
+        // 前のページとの差を、同じ値の続きでまとめて書く
+        let d0 = cells[0] - prev[0] + 8, count = 1;
+        for (let i = 1; i <= 240; i++) {
+          const d = i < 240 ? cells[i] - prev[i] + 8 : -1;
+          if (d === d0) { count++; continue; }
+          put(d0 * 240 + (count - 1), 2);
+          d0 = d; count = 1;
+        }
+        // 前のページと同じ地形なら、続けて同じ地形のページ数を書き、そのページの地形は省く
+        if (same(cells, prev)) {
+          let k = 0;
+          while (p + 1 + k < pages.length && k < 63 && same(pages[p + 1 + k], cells)) k++;
+          put(k, 1); skip = k;
+        }
+      }
+      // ミノなしのページ(色付きは1ページ目だけ・コメントなし)
+      let v = 0;
+      v = v * 2 + 0;               // せり上がりなし
+      v = v * 2 + 0;               // 反転なし
+      v = v * 2 + (p === 0 ? 1 : 0); // 色付き
+      v = v * 2 + 0;               // コメントなし
+      v = v * 2 + 0;               // ロック
+      v = v * 240; v = v * 4; v = v * 8;
+      put(v, 3);
+      prev = cells;
+    });
+    const str = out.join('');
+    let r = str.slice(0, 42);
+    for (let i = 42; i < str.length; i += 47) r += '?' + str.slice(i, i + 47);
     return 'v115@' + r;
   };
-  S.fumen = n => fumenOf(n || S.active || shown()[0]);
+  const fumenOf = n => fumenOfBoards([n.gsm.board]);
+  // 操作中の流れ(止めた場面 + 置いたミノごと)
+  const fumenOfEdit = () => fumenOfBoards(undo.map(u => u.state.game.board));
+  S.fumen = n => S.active && !n ? fumenOfEdit() : fumenOf(n || shown()[0]);
+  S.fumenBoards = fumenOfBoards;
 
   // ---- パネル ----
   const css = 'position:fixed;z-index:2147483646;font:12px/1.4 system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.82);border:1px solid #0085a1;border-radius:6px;';
@@ -289,11 +313,16 @@
   const bSide = btn('', () => { S.side++; if (S.active) leave(true); draw(); });
   const bGrav = btn('', () => { S.noGravity = !S.noGravity; draw(); });
   const bReset = btn('止めた場面からやり直す(R)', () => retry());
-  const bFumen = btn('fumen で今の盤面を開く', () => {
-    const list = shown();
-    const n = S.active || list[Math.min(S.side % Math.max(1, list.length), list.length - 1)];
-    if (!n) { S.msg = 'リプレイの盤面がありません'; return; }
-    window.open('https://fumen.zui.jp/?' + fumenOf(n), '_blank', 'noopener');
+  const bFumen = btn('', () => {
+    let code;
+    if (S.active) code = fumenOfEdit();
+    else {
+      const list = shown();
+      const n = list[S.side % Math.max(1, list.length)];
+      if (!n) { S.msg = 'リプレイの盤面がありません'; return; }
+      code = fumenOf(n);
+    }
+    window.open('https://fumen.zui.jp/?' + code, '_blank', 'noopener');
   });
   const bClose = btn('パネルを閉じる', () => setClosed(true));
   panel.append(status, bAuto, bSide, bGrav, bReset, bFumen, bClose);
@@ -311,6 +340,7 @@
     const list = shown();
     bAuto.textContent = '止めたら操作: ' + (S.auto ? 'ON' : 'OFF');
     bGrav.textContent = '重力: ' + (S.noGravity ? 'なし' : 'あり');
+    bFumen.textContent = S.active ? `fumen に書き出す(止めた場面 + ${undo.length - 1}ミノ = ${undo.length}ページ)` : 'fumen で今の盤面を開く';
     const tgt = list.length ? list[S.side % list.length] : null;
     bSide.textContent = '操作する盤面: ' + (tgt ? name(tgt) : '-') + (list.length > 1 ? '(押すと切り替え)' : '');
     let t;
