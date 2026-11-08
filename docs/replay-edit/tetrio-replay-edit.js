@@ -145,6 +145,7 @@
     n.gsm.setoptions.noreplay = true;
     const hd = config().handling;
     if (hd && typeof hd === 'object') Object.assign(n.gsm.handling, hd);
+    syncKeys(n);
     // 再生ボタンなどにフォーカスが残っていると、スペース(ハードドロップ)でそのボタンが押されてしまうので外す
     unfocus();
     S.msg = '';
@@ -163,6 +164,19 @@
     console.log(TAG, restore ? 'restored' : 'left (seek)');
   };
 
+  // 左右・ソフトドロップの「押しっぱなし」を、いま実際に押しているキーに合わせる。
+  // TETR.IO の状態の復元は押しっぱなしの情報(lShift / rShift / inputSoftdrop)まで戻すので、
+  // 戻した先(またはリプレイの元のプレイヤー)が押していたキーが、離していても長押し扱いで残ってしまう。
+  // 押していないキーは「離した」、押しているキーは「押した」を入れ直す(押していれば DAS がそのまま続く)。
+  // 回転などは押し直さない(Ctrl+Z の Ctrl が左回転のキーでも、戻した後に回らない)
+  const syncKeys = n => {
+    const b = getBinds();
+    for (const a of ['moveLeft', 'moveRight', 'softDrop']) {
+      const down = [...held].some(k => b.get(k) === a);
+      queue.push({ frame: n.esm.frame, type: down ? 'keydown' : 'keyup', data: { key: a, subframe: 0 } });
+    }
+  };
+
   // 保存した状態へ移る(操作モードのまま)
   const jump = u => {
     const n = S.active;
@@ -175,9 +189,7 @@
     if (hd && typeof hd === 'object') Object.assign(n.gsm.handling, hd);
     placed = n.gsm.stats.piecesplaced || 0;
     deadAt = 0; acc = 0; queue = [];
-    // 押しっぱなしの移動・ソフトドロップは、戻した直後にもう一度押した扱いにする(DAS がそのまま続く)。
-    // 回転などは押し直さない(Ctrl+Z の Ctrl が左回転のキーでも、戻した後に回らない)
-    for (const k of held) { const a = getBinds().get(k); if (a === 'moveLeft' || a === 'moveRight' || a === 'softDrop') queue.push({ frame: n.esm.frame, type: 'keydown', data: { key: a, subframe: 0 } }); }
+    syncKeys(n);
   };
   // R(リトライのキー): 止めた場面からやり直す
   const retry = () => {
