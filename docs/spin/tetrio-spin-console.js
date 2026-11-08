@@ -4,7 +4,7 @@
   const SRC = 'https://kei1215.github.io/tetrio-hub/spin/tetrio-spin-console.js';
   // いま実行しているこのファイル自身の URL(script タグで読んだとき)
   const ME = document.currentScript && document.currentScript.src;
-  const KEEP = ['on', 'sec', 'dir', 'angle', 'marker', 'group', 'mode', 'step', 'spinDir', 'hist', 'rot', 'target', 'panelClosed'];
+  const KEEP = ['on', 'sec', 'dir', 'angle', 'marker', 'group', 'mode', 'step', 'spinDir', 'rot', 'target', 'panelClosed'];
 
   // すでに動いている版があれば片付けてから起動し直す(設定は引き継ぐ)
   // 自動更新で読み込まれたときは updated = true(パネルの開閉もそのまま)。
@@ -44,13 +44,10 @@
       mode: 'spin',       // 'spin' = スピン判定のときだけ回す / 'always' = ずっと回す
       step: 90,           // スピン1回で回す角度(度)
       target: 0,          // スピンで回すときの目標角度(ラジアン)
-      spinDir: 1,         // スピンで回す向き(多い方)
-      hist: [],           // 直近の回転入れ(置いたときのスピン判定)の向き(-1 = 左回転, 1 = 右回転)
+      spinDir: 1,         // 最後の回転入れの向き
       panelClosed: false
     };
     for (const k of KEEP) if (k in keep) S[k] = keep[k];
-    if (!Array.isArray(S.hist)) S.hist = [];
-    const HIST = 20;
 
     // ---- 回転入れの検出(読むだけ。キー入力・ゲームの動きは一切変えない) ----
     // ・判定: ミノを置いてスピンと判定されると、TETR.IO は盤面(holder)の中に
@@ -89,14 +86,11 @@
       return binds;
     };
     // スピン判定が出たら: その向きを記録し、直近で多い方の向きへ step 度だけ回す
+    // 回転入れが出たら、その回転入れ(最後の回転)の向きへ step 度だけ回す。重み付けはしない
     const onSpin = d => {
-      if (d === 0) return;   // 180°回転でのスピンには反応しない(数えない・回さない)
-      S.hist.push(d);
-      if (S.hist.length > HIST) S.hist.shift();
-      let sum = 0;
-      for (const x of S.hist) sum += x;
-      S.spinDir = sum > 0 ? 1 : sum < 0 ? -1 : d;   // 同数ならそのスピンの向き
-      if (S.mode === 'spin' && S.on) S.target += S.spinDir * S.step * Math.PI / 180;
+      if (d === 0) return;   // 180°回転でのスピン、向きがわからないものには反応しない
+      S.spinDir = d;
+      if (S.mode === 'spin' && S.on) S.target += d * S.step * Math.PI / 180;
     };
 
     // 押された回転キー(-1 = 左, 1 = 右, 0 = 180°)を少しの間だけ覚えておく
@@ -239,6 +233,7 @@
           }
           h.__spinKick = null;
           S.last = `${label}(${d < 0 ? '左' : d > 0 ? '右' : why})`;
+          S.lastDir = d;
           onSpin(d);
         }
         h.__spinReady = true;
@@ -370,10 +365,8 @@
         S.center = null;
       }
 
-      const left = S.hist.filter(x => x < 0).length, right = S.hist.length - left;
       status.textContent = (shown.length ? `盤面: ${shown.length}` : '盤面: なし(ゲーム開始を待っています)') +
-        (S.mode === 'spin' ? `\n回転入れ(直近${HIST}回) 左${left}/右${right} → ${S.spinDir < 0 ? '左' : '右'}へ` +
-                             (S.last ? `\n最後: ${S.last}` : '') : '');
+        (S.mode === 'spin' ? '\n回転入れ: ' + (S.last ? `${S.last} → ${S.lastDir < 0 ? '左へ' : S.lastDir > 0 ? '右へ' : '回さない'}` : 'まだなし') : '');
       let k = 0;
       if (S.marker) {
         if (S.center) place(k++, S.center);
