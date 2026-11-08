@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>TETR.IO パッチ AI 版</title>
+  <script src="../assets/theme.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,700;1,400;1,700&family=Open+Sans:ital,wght@0,300;0,400;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/site.css">
+</head>
+<body>
+  <main class="container">
+    <h1>TETR.IO パッチ AI 版(vA)</h1>
+    <p class="note">AI 版は、指定の Discord サーバーでロールを持っている人だけがダウンロードできます。Discord でログインすると、そのサーバーでの自分のロールを確かめます。読み取るのは、そのサーバーでの自分のロールとユーザー情報だけです。</p>
+    <div id="view"><p>確認しています…</p></div>
+    <p><a href="./#desktop">← パッチの説明に戻る</a></p>
+  </main>
+  <script>
+    // Discord のアプリは Client ID だけを使う(シークレット・ボットのトークンは使わない)。サーバーなしで、本人の権限でロールを読む
+    (() => {
+      const CLIENT_ID = '1563594705151725660';
+      const GUILD = '1483436626855329903';
+      const ROLE = '1562481503185805393';
+      const REDIRECT = 'https://kei1215.github.io/tetrio-hub/bookmarklets/auth.html';
+      const CACHE = 'qp-ai-discord-v1';
+      const KEEP_MS = 24 * 60 * 60 * 1000;
+      const BASE = 'https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.8234/';
+      const view = document.getElementById('view');
+      const store = {
+        get(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } },
+        set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+        del(k) { try { localStorage.removeItem(k); } catch (e) {} }
+      };
+      const el = (tag, text, attrs = {}) => { const n = document.createElement(tag); if (text) n.textContent = text; for (const k in attrs) n.setAttribute(k, attrs[k]); return n; };
+
+      const showLogin = note => {
+        view.replaceChildren();
+        if (note) view.append(el('p', note));
+        const b = el('a', 'Discord でログインして AI 版を取得', { class: 'btn', href: '#' });
+        b.onclick = e => {
+          e.preventDefault();
+          const state = Array.from(crypto.getRandomValues(new Uint8Array(16)), x => x.toString(16).padStart(2, '0')).join('');
+          try { sessionStorage.setItem('qp-ai-state', state); } catch (err) {}
+          location.href = 'https://discord.com/oauth2/authorize?' + new URLSearchParams({
+            client_id: CLIENT_ID, response_type: 'token', redirect_uri: REDIRECT, scope: 'identify guilds.members.read', state
+          });
+        };
+        const row = el('p'); row.append(b); view.append(row);
+      };
+      const showDownloads = name => {
+        view.replaceChildren();
+        view.append(el('p', (name ? name + ' さん、' : '') + 'ロールを確認できました。'));
+        const ul = el('ul');
+        for (const [os, ext] of [['Mac', '.command'], ['Windows', '.cmd'], ['Linux', '.sh']]) {
+          const li = el('li');
+          li.append(el('a', `${os}(tetrio-patch-${os}-vA4.8234${ext})`, { href: BASE + `tetrio-patch-${os}-vA4.8234${ext}` }));
+          ul.append(li);
+        }
+        view.append(ul);
+        view.append(el('p', 'AI 版には、別に TETRIO-Resources-1.0.zip(Discord で配布)が必要です。起動ファイルと同じフォルダ、その一つ上、または「ダウンロード」フォルダに置いてください。使い方は通常版と同じです(実行前に TETR.IO を終了)。', { class: 'note' }));
+        const out = el('a', 'この端末の確認を消す', { href: '#' });
+        out.onclick = e => { e.preventDefault(); store.del(CACHE); showLogin(); };
+        const row = el('p'); row.append(out); view.append(row);
+      };
+
+      const p = new URLSearchParams(location.hash.slice(1));
+      if (location.hash) history.replaceState(null, '', location.pathname);   // アドレスバーからトークンを消す
+      const token = p.get('access_token'), error = p.get('error');
+      if (!token && !error) {
+        const c = store.get(CACHE);
+        return c && c.until > Date.now() ? showDownloads(c.name) : showLogin();
+      }
+      let expected = null;
+      try { expected = sessionStorage.getItem('qp-ai-state'); sessionStorage.removeItem('qp-ai-state'); } catch (e) {}
+      if (error) return showLogin('ログインがキャンセルされました。');
+      if (!expected || p.get('state') !== expected) return showLogin('ログインの確認に失敗しました。もう一度ログインしてください。');
+      fetch(`https://discord.com/api/v10/users/@me/guilds/${GUILD}/member`, { headers: { Authorization: 'Bearer ' + token } })
+        .then(async r => {
+          if (r.status === 404) return showLogin('このアカウントは、指定の Discord サーバーに参加していません。');
+          if (!r.ok) return showLogin('Discord で確認できませんでした(' + r.status + ')。少し待ってからもう一度ログインしてください。');
+          const m = await r.json();
+          if (!Array.isArray(m.roles) || !m.roles.includes(ROLE)) return showLogin('このアカウントは、指定のロールを持っていません。');
+          const name = m.nick || (m.user && (m.user.global_name || m.user.username)) || '';
+          store.set(CACHE, { name, until: Date.now() + KEEP_MS });
+          showDownloads(name);
+        })
+        .catch(e => showLogin('Discord で確認できませんでした: ' + e.message));
+    })();
+  </script>
+</body>
+</html>
