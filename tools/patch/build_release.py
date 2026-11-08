@@ -1,0 +1,215 @@
+#!/usr/bin/env python3
+"""Build a new A/R/O desktop patch release from an existing release folder.
+
+What it does (nothing is installed; it only writes the output folder):
+  1. Unpacks QP-Patch-v{R,O,A}<old>-Source.zip.
+  2. Rewrites O/transform.js:
+       - embeds the replay board edit (docs/replay-edit) and the spin counter
+         (docs/counter) and runs them only when CONFIG > REPLAY BOARD EDIT is ON
+         (localStorage 'qp-replay-edit-v1' == '1', online client, tools not paused);
+       - while it is ON, the patch's replay presentation (installReplayUI: QP replay
+         background, hidden seek bar, Z/X/C presentation keys, TL intro/score effects,
+         final FT screen) is skipped. The replay edit also turns off the native
+         "next round" auto play. Player names stay (native TETR.IO display);
+       - adds the ON/OFF entry to CONFIG > QP PATCH TOOLS.
+  3. Points the browser reverse-HYPERSPEED music at the published tetrio-hub copy.
+  4. Bumps package.json "update" and prepends a QP-CHANGELOG entry.
+  5. Re-zips deterministically and rebuilds the 9 launchers
+     (Mac .command / Linux .sh / Windows .cmd) with the new payload and SHA256.
+
+Usage:
+  python3 build_release.py OLD_RELEASE_DIR NEW_RELEASE_DIR --old 8233 --new 8234 --hub DOCS_DIR
+"""
+import argparse, base64, hashlib, io, json, os, re, shutil, stat, sys, zipfile
+from pathlib import Path
+
+KINDS = ('R', 'O', 'A')
+OS_FILES = (('Mac', '.command', 'sh'), ('Linux', '.sh', 'sh'), ('Windows', '.cmd', 'cmd'))
+OLD_MUSIC = 'https://kei1215.github.io/tetrio-patch/v4.8233/kugelhagel-overdrive.mp3'
+NEW_MUSIC = 'https://kei1215.github.io/tetrio-hub/patch/v4.8233/kugelhagel-overdrive.mp3'
+FIXED_TIME = (2026, 11, 9, 0, 0, 0)
+
+
+def sha256(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def replace_once(text, old, new, label):
+    if text.count(old) != 1:
+        raise SystemExit(f'{label}: anchor not found exactly once')
+    return text.replace(old, new)
+
+
+# CONFIG > QP PATCH TOOLS: REPLAY BOARD EDIT ON/OFF. Independent of installPatchDeleteUI so it
+# also appears when the presentation rewrite is skipped for a newer client.
+CONFIG_INSTALLER = r"""function qpReplayEditConfig(document, window) {
+ if(window.location.protocol!=='https:')return;
+ const install=()=>{
+  if(document.getElementById('qp-replay-edit-toggle'))return;
+  const account=document.getElementById('config_account');
+  const config=account?.closest?.('[data-menuview="config"]')||document.querySelector('[data-menuview="config"]');
+  if(!config)return;
+  const template=document.getElementById('config_export')||account;
+  const on=window.localStorage?.getItem('qp-replay-edit-v1')==='1';
+  const node=document.createElement('div');node.id='qp-replay-edit-toggle';
+  node.className=template?.className||'scroller_item scroller_item_config has_description ns rg_target_pri';
+  node.setAttribute('role','button');node.tabIndex=0;
+  const title=document.createElement('h1'),detail=document.createElement('p');
+  title.textContent=on?'REPLAY BOARD EDIT: ON':'REPLAY BOARD EDIT: OFF';
+  detail.textContent=on?'リプレイ盤面修正とスピンカウンターを使っています。リプレイ演出・シークバー非表示・次の自動再生は切っています。クリックで OFF':'クリックで ON。リプレイを止めるとその場面から操作でき、スピンカウンターも出ます(リプレイ演出は切ります)';
+  node.append(title,detail);
+  const toggle=()=>{if(on)window.localStorage?.removeItem('qp-replay-edit-v1');else window.localStorage?.setItem('qp-replay-edit-v1','1');window.location.reload()};
+  node.addEventListener('click',event=>{event.preventDefault();event.stopImmediatePropagation();toggle()},true);
+  node.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();toggle()}},true);
+  let footer=document.getElementById('qp-patch-tools-footer');
+  if(!footer){footer=document.createElement('div');footer.id='qp-patch-tools-footer';footer.className='scroller_block zero';const heading=document.createElement('h2');heading.className='ns';heading.textContent='QP PATCH TOOLS';heading.style.cssText='margin:.8em 0 .25em;color:#ff9866';footer.appendChild(heading);config.append(footer);}
+  const after=document.getElementById('qp-patch-tools-toggle');
+  if(after)after.after(node);else footer.after(node);
+ };
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
+}
+"""
+
+
+def patch_transform(src, edit_src, counter_src):
+    if 'qpReplayEditRunner' in src:
+        raise SystemExit('transform.js already contains the replay edit')
+    # (a) Skip the replay presentation while the replay edit is ON.
+    src = replace_once(src,
+        " if (window.__qpReplayUIInstalled) return;",
+        " if(window.location.protocol==='https:'&&window.localStorage?.getItem('qp-replay-edit-v1')==='1')return; // REPLAY BOARD EDIT is ON: keep the native replay screen\n"
+        " if (window.__qpReplayUIInstalled) return;",
+        'installReplayUI')
+    # (b) Inject the runner and the CONFIG entry from patchQPReplayNaming, the outermost
+    #     rewrite. It still applies when the presentation anchors no longer match a newer
+    #     TETR.IO client (then the patch keeps the game unchanged, but the replay edit only
+    #     relies on stable property names such as gsm / EjectState and still works).
+    src = replace_once(src,
+        "if(!updated){console.warn('[QP replay naming] No compatible download anchors found; client unchanged.');return src;}",
+        "if(!updated){console.warn('[QP replay naming] No compatible download anchors found; client unchanged.');return src+qpReplayEditTail(src);}",
+        'naming fallback')
+    src = replace_once(src,
+        "+patched+'\\n/* qp-replay-download-naming-v2 */';",
+        "+patched+'\\n/* qp-replay-download-naming-v2 */'+qpReplayEditTail(src);",
+        'naming return')
+    runner = (
+        "\n// REPLAY BOARD EDIT (tetrio-hub replay-edit + spin counter), embedded at build time.\n"
+        "// Runs only on the online client when CONFIG > REPLAY BOARD EDIT is ON and QP TOOLS are not paused.\n"
+        f"const QP_REPLAY_EDIT_SRC={json.dumps(edit_src, ensure_ascii=False)};\n"
+        f"const QP_SPIN_COUNTER_SRC={json.dumps(counter_src, ensure_ascii=False)};\n"
+        "function qpReplayEditRunner(){\n"
+        " return ';(function(window,document){try{if(window.location.protocol!==\"https:\")return;var ls=window.localStorage;"
+        "if(!ls||ls.getItem(\"qp-replay-edit-v1\")!==\"1\"||ls.getItem(\"qp-patch-online-tools-paused-v1\")===\"1\")return;"
+        "window.__qpEmbedded=true;window.__scEmbedded=function(){'+QP_SPIN_COUNTER_SRC+'\\n};"
+        "var run=function(){'+QP_REPLAY_EDIT_SRC+'\\n};"
+        "if(document.readyState===\"loading\")document.addEventListener(\"DOMContentLoaded\",run,{once:true});else run();"
+        "}catch(e){console.warn(\"[replay-edit]\",e)}})(window,document);';\n"
+        "}\n"
+        "function qpReplayEditTail(src){\n"
+        " if(src.includes('/* qp-replay-edit-v1 */'))return '';\n"
+        " return '\\n'+qpReplayEditRunner()+'\\n;('+qpReplayEditConfig.toString()+')(document,window);\\n/* qp-replay-edit-v1 */';\n"
+        "}\n"
+        + CONFIG_INSTALLER)
+    return runner + src
+
+
+def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src):
+    out = io.BytesIO()
+    with zipfile.ZipFile(old_zip) as zin, zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as zout:
+        names = sorted(n for n in zin.namelist() if not n.endswith('/'))
+        if len(names) != len(set(names)):
+            raise SystemExit('duplicate entries in ' + old_zip.name)
+        for name in names:
+            info = zin.getinfo(name)
+            data = zin.read(name)
+            if name == 'O/transform.js':
+                data = patch_transform(data.decode('utf-8'), edit_src, counter_src).encode('utf-8')
+            elif name == 'O/offline/reverse-hyper-browser.js':
+                data = replace_once(data.decode('utf-8'), OLD_MUSIC, NEW_MUSIC, name).encode('utf-8')
+            elif name == 'package.json':
+                pkg = json.loads(data)
+                if pkg.get('kind') != kind or pkg.get('update') != int(old):
+                    raise SystemExit(f'unexpected package.json in {old_zip.name}: {pkg}')
+                pkg['update'] = int(new)
+                data = json.dumps(pkg).encode('utf-8')
+            elif name == 'QP-CHANGELOG.txt':
+                entry = (f'v4.{new} replay board edit\n'
+                         '- CONFIG > QP PATCH TOOLS に REPLAY BOARD EDIT (ON/OFF) を追加。ON のとき、リプレイを止めるとその場面から操作でき、\n'
+                         '  スピンカウンター(SPIN・T-SPIN・QUAD)も表示する。リプレイ演出・シークバー非表示・次の自動再生は切る。\n'
+                         '- ブラウザ用リバースHYPERSPEED曲の参照先を kei1215.github.io/tetrio-hub に変更。\n\n')
+                data = (entry + data.decode('utf-8')).encode('utf-8')
+            zi = zipfile.ZipInfo(name, FIXED_TIME)
+            zi.compress_type = zipfile.ZIP_DEFLATED
+            zi.external_attr = info.external_attr
+            zi.create_system = info.create_system
+            zout.writestr(zi, data, compresslevel=9)
+    raw = out.getvalue()
+    new_zip.write_bytes(raw)
+    return raw
+
+
+def build_launcher(old_file, new_file, flavor, old, new, old_sha, payload):
+    raw = old_file.read_bytes()
+    eol = b'\r\n' if flavor == 'cmd' else b'\n'
+    begin = (b':: QP_PAYLOAD_BEGIN' if flavor == 'cmd' else b'# QP_PAYLOAD_BEGIN') + eol
+    end = (b':: QP_PAYLOAD_END' if flavor == 'cmd' else b'# QP_PAYLOAD_END') + eol
+    i = raw.find(begin)
+    if i < 0 or raw.count(begin) != 1:
+        raise SystemExit('payload marker not found in ' + old_file.name)
+    header = raw[:i].decode('ascii')
+    if header.count(old_sha) != 1:
+        raise SystemExit('payload sha not found in header of ' + old_file.name)
+    header = header.replace(old_sha, sha256(payload)).replace('4.' + old, '4.' + new).replace('4' + old, '4' + new)
+    if old in header:
+        raise SystemExit('old version left in header of ' + old_file.name)
+    b64 = base64.b64encode(payload).decode('ascii')
+    prefix = '' if flavor == 'cmd' else '# '
+    lines = ''.join(prefix + b64[k:k + 120] + eol.decode() for k in range(0, len(b64), 120))
+    data = header.encode('ascii') + begin + lines.encode('ascii') + end
+    new_file.write_bytes(data)
+    new_file.chmod(old_file.stat().st_mode & 0o777)
+    # Re-extract exactly like the launcher does and compare.
+    text = data.decode('ascii').split(eol.decode())
+    a = text.index(begin.decode().rstrip('\r\n')) + 1
+    b = text.index(end.decode().rstrip('\r\n'))
+    got = base64.b64decode(''.join(line[len(prefix):] for line in text[a:b]))
+    if got != payload:
+        raise SystemExit('round-trip check failed for ' + new_file.name)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('old_dir', type=Path)
+    ap.add_argument('new_dir', type=Path)
+    ap.add_argument('--old', required=True)
+    ap.add_argument('--new', required=True)
+    ap.add_argument('--hub', required=True, type=Path, help='tetrio-hub/docs')
+    a = ap.parse_args()
+    if a.new_dir.exists():
+        raise SystemExit('output folder already exists: ' + str(a.new_dir))
+    edit_src = (a.hub / 'replay-edit/tetrio-replay-edit.js').read_text(encoding='utf-8')
+    counter_src = (a.hub / 'counter/tetrio-spin-counter.js').read_text(encoding='utf-8')
+    a.new_dir.mkdir(parents=True)
+    sums = {}
+    for kind in KINDS:
+        old_zip = a.old_dir / f'QP-Patch-v{kind}4.{a.old}-Source.zip'
+        new_zip = a.new_dir / f'QP-Patch-v{kind}4.{a.new}-Source.zip'
+        old_sha = sha256(old_zip.read_bytes())
+        payload = build_zip(old_zip, new_zip, kind, a.old, a.new, edit_src, counter_src)
+        sums[new_zip.name] = sha256(payload)
+        for osname, ext, flavor in OS_FILES:
+            old_file = a.old_dir / f'tetrio-patch-{osname}-v{kind}4.{a.old}{ext}'
+            new_file = a.new_dir / f'tetrio-patch-{osname}-v{kind}4.{a.new}{ext}'
+            build_launcher(old_file, new_file, flavor, a.old, a.new, old_sha, payload)
+            sums[new_file.name] = sha256(new_file.read_bytes())
+        print(kind, 'ok', len(payload))
+    for extra in ('QP-Mission-Editor-v6.4.html',):
+        if (a.old_dir / extra).exists():
+            shutil.copy2(a.old_dir / extra, a.new_dir / extra)
+            sums[extra] = sha256((a.new_dir / extra).read_bytes())
+    (a.new_dir / 'SHA256SUMS.txt').write_text(''.join(f'{v}  {k}\n' for k, v in sorted(sums.items())), encoding='utf-8')
+    print('done', a.new_dir)
+
+
+if __name__ == '__main__':
+    main()

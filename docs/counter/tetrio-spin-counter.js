@@ -260,7 +260,9 @@
     } catch (e) {}
   };
   clearInterval(W.__scUpd);
-  checkUpdate();
-  W.__scUpd = setInterval(checkUpdate, 30000);
+  if (!W.__qpEmbedded) {   // パッチ版はパッチと一緒に更新する
+    checkUpdate();
+    W.__scUpd = setInterval(checkUpdate, 30000);
+  }
   console.log(TAG, 'started');
 })();

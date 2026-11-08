@@ -437,6 +437,8 @@
   const COUNTER = SRC.replace('replay-edit/tetrio-replay-edit.js', 'counter/tetrio-spin-counter.js');
   const startCounter = () => {
     if (W.__scTeardown || W.__scLoading) return;
+    // パッチ版: カウンターも一緒に埋め込まれているので、それを動かす(ネットからは読まない)
+    if (typeof W.__scEmbedded === 'function') { try { W.__scEmbedded(); } catch (e) { console.warn(TAG, e); } return; }
     W.__scLoading = true;
     const s = document.createElement('script');
     s.src = COUNTER + '?v=' + Date.now();
@@ -453,6 +455,11 @@
     try {
       const list = shown();
       applySwap(list);
+      // パッチ版: 盤面修正を ON にしている間は、次のラウンドへの自動再生を切る
+      if (W.__qpEmbedded && list.length) {
+        const nr = document.getElementById('replaytools_button_nextround');
+        if (nr && nr.classList.contains('active')) nr.classList.remove('active');
+      }
       if (S.active && (!alive(S.active) || !list.includes(S.active))) leave(false);
       if (!S.active && S.auto && list.length) {
         const n = list[S.side % list.length];
@@ -528,7 +535,10 @@
     } catch (e) {}
   };
   clearInterval(W.__rpeUpd);
-  checkUpdate();
-  W.__rpeUpd = setInterval(checkUpdate, 30000);
+  // パッチ版(W.__qpEmbedded)はパッチと一緒に更新するので、ネットからの自動更新はしない
+  if (!W.__qpEmbedded) {
+    checkUpdate();
+    W.__rpeUpd = setInterval(checkUpdate, 30000);
+  }
   console.log(TAG, 'started');
 })();
