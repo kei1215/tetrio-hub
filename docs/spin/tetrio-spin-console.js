@@ -1,9 +1,40 @@
 (() => {
   const W = window;
+  // 公開している本体。更新の確認と再実行に使う
+  const SRC = 'https://kei1215.github.io/tetrio-hub/spin/tetrio-spin-console.js';
+  // いま実行しているこのファイル自身の URL(script タグで読んだとき)
+  const ME = document.currentScript && document.currentScript.src;
+  const KEEP = ['on', 'sec', 'dir', 'angle', 'marker', 'group', 'mode', 'step', 'spinDir', 'hist', 'rot', 'target', 'panelClosed'];
+
+  // すでに動いている版があれば片付けてから起動し直す(設定は引き継ぐ)
+  // 自動更新で読み込まれたときは updated = true(パネルの開閉もそのまま)。
+  // ブックマークを押し直したときは false(パネルを開いた状態で起動し直す)
+  const updated = !!W.__spinUpdating;
+  W.__spinUpdating = false;
+  if (W.__spinTeardown) {
+    W.__spinTeardown(updated);
+  } else if (W.__spinUI) {
+    // 自動更新に対応する前の版: 回転を止め、パネルと目印とキーの監視を外す
+    const old = W.__spin;
+    if (old) {
+      W.__spinKeep = {};
+      for (const k of KEEP) if (k in old) W.__spinKeep[k] = old[k];
+      old.on = false; old.angle = null;
+    }
+    cancelAnimationFrame(W.__spinRaf);
+    document.querySelectorAll('#__spinpanel, #__spinmk, .__spinmk, #__spinmini').forEach(e => e.remove());
+    if (W.__spinKey) removeEventListener('keydown', W.__spinKey, true);
+    if (W.__spinAudio) W.__spinAudio.listener = null;
+    W.__spinUI = false;
+  }
 
   const startUI = () => {
     if (W.__spinUI) return;
     W.__spinUI = true;
+    const keep = W.__spinKeep || {};
+    delete W.__spinKeep;
+    const RUN = {};                 // この実行の目印(片付けるときに自分が付けたものだけ外す)
+    const attached = new Map();     // holder → 元の updateTransform
     const S = W.__spin = {
       on: true, sec: 60, dir: 1, angle: null, marker: true, rot: 0,
       group: 'each',      // 'each' = 盤面ごとに自分の中心で回す / 'together' = 全員の中心でまとめて回す
@@ -14,8 +45,11 @@
       step: 90,           // スピン1回で回す角度(度)
       target: 0,          // スピンで回すときの目標角度(ラジアン)
       spinDir: 1,         // スピンで回す向き(多い方)
-      hist: []            // 直近の回転入れ(置いたときのスピン判定)の向き(-1 = 左回転, 1 = 右回転)
+      hist: [],           // 直近の回転入れ(置いたときのスピン判定)の向き(-1 = 左回転, 1 = 右回転)
+      panelClosed: false
     };
+    for (const k of KEEP) if (k in keep) S[k] = keep[k];
+    if (!Array.isArray(S.hist)) S.hist = [];
     const HIST = 20;
 
     // ---- 回転の検出(読むだけ。キー入力・音・ゲームの動きは一切変えない) ----
@@ -212,9 +246,10 @@
     const active = () => S.on || S.angle != null;
 
     const attach = h => {
-      if (h.__spin) return;
-      h.__spin = 1;
+      if (h.__spinRun === RUN) return;
+      h.__spinRun = RUN;
       const o = h.updateTransform;
+      attached.set(h, o);
       h.updateTransform = function () {
         if (!active() || !this.parent) return o.call(this);
         const th = angleNow();
@@ -245,7 +280,7 @@
       return { x: r.left + p.x * r.width / s.width, y: r.top + p.y * r.height / s.height };
     };
 
-    for (const id of ['__spinpanel']) { const e = document.getElementById(id); if (e) e.remove(); }
+    for (const id of ['__spinpanel', '__spinmini']) { const e = document.getElementById(id); if (e) e.remove(); }
     document.querySelectorAll('.__spinmk').forEach(e => e.remove());
 
     const panel = document.createElement('div');
@@ -295,7 +330,7 @@
     const groupLabel = () => '2人以上: ' + (S.group === 'together' ? 'まとめて回す' : 'それぞれ回す');
     btn(groupLabel(), b => { S.group = S.group === 'together' ? 'each' : 'together'; S.center = null; b.textContent = groupLabel(); });
     btn('中心の目印 ON/OFF', () => { S.marker = !S.marker; });
-    btn('パネルを閉じる', () => panel.remove());
+    btn('パネルを閉じる', () => setClosed(true));
     document.body.append(panel);
 
     const marks = [];
@@ -374,6 +409,77 @@
       W.__spinRaf = requestAnimationFrame(loop);
     };
     loop();
+
+    // パネルを閉じると、左下の小さな「盤面回転」ボタンになる。押すと開く
+    const mini = document.createElement('button');
+    mini.id = '__spinmini';
+    mini.textContent = '盤面回転';
+    mini.title = '盤面回転のパネルを開く';
+    mini.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:2147483647;background:#000c;color:#fff;font:12px sans-serif;padding:4px 8px;border:1px solid #fff6;border-radius:6px;cursor:pointer;display:none';
+    mini.onclick = () => setClosed(false);
+    document.body.append(mini);
+    function setClosed(closed) {
+      S.panelClosed = closed;
+      panel.style.display = closed ? 'none' : 'grid';
+      mini.style.display = closed ? 'block' : 'none';
+    }
+    setClosed(!!S.panelClosed);
+    if (keep.updated) {
+      const note = document.createElement('div');
+      note.textContent = '最新版に更新しました';
+      note.style.cssText = 'color:#7fffa0';
+      panel.prepend(note);
+      setTimeout(() => note.remove(), 5000);
+    }
+
+    // 片付け: このファイルが付けたものをすべて外し、設定を次の版へ渡す
+    W.__spinTeardown = (updated = false) => {
+      cancelAnimationFrame(W.__spinRaf);
+      clearInterval(W.__spinUpd);
+      removeEventListener('keydown', W.__spinKey, true);
+      if (W.__spinAudio) W.__spinAudio.listener = null;
+      for (const [h, o] of attached) if (h.__spinRun === RUN) { h.updateTransform = o; delete h.__spinRun; }
+      attached.clear();
+      panel.remove();
+      mini.remove();
+      marks.forEach(m => m.remove());
+      W.__spinKeep = { updated };
+      for (const k of KEEP) W.__spinKeep[k] = S[k];
+      if (!updated) W.__spinKeep.panelClosed = false;   // 押し直したときはパネルを開く
+      W.__spinUI = false;
+      W.__spinTeardown = null;
+    };
+
+    // 自動更新: 30秒ごとに公開中の本体を確認し、変わっていたら読み込み直して再実行する
+    const hash = t => { let h = 0; for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0; return h; };
+    const fetchText = async url => {
+      const r = await fetch(url, { cache: 'no-store' });
+      if (!r.ok) throw new Error(r.status);
+      return r.text();
+    };
+    let base = null;
+    const checkUpdate = async () => {
+      try {
+        if (base == null) {
+          // 基準 = いま動いている版。script タグで読んだときはそのファイル、そうでなければ今の公開版
+          base = hash(await fetchText(ME || SRC + '?v=' + Date.now()));
+          return;
+        }
+        const h = hash(await fetchText(SRC + '?v=' + Date.now()));
+        if (h === base) return;
+        console.log('[spin] 更新を見つけたので再実行します');
+        clearInterval(W.__spinUpd);
+        const s = document.createElement('script');
+        s.src = SRC + '?v=' + Date.now();
+        // 新しい版は読み込まれるとすぐ、この版の片付け(W.__spinTeardown)を呼んで起動し直す
+        W.__spinUpdating = true;
+        s.onerror = () => { W.__spinUpdating = false; };
+        document.head.appendChild(s);
+      } catch (e) {}
+    };
+    clearInterval(W.__spinUpd);
+    checkUpdate();
+    W.__spinUpd = setInterval(checkUpdate, 30000);
     console.log('[spin] panel started');
   };
 
