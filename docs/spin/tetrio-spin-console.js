@@ -8,7 +8,77 @@
       on: true, sec: 60, dir: 1, angle: null, marker: true, rot: 0,
       group: 'each',      // 'each' = 盤面ごとに自分の中心で回す / 'together' = 全員の中心でまとめて回す
       center: null,       // まとめて回すときの中心(画面座標)
-      holders: []
+      holders: [],
+      v: 1,               // 実際の回転の向き(-1〜1)。dir に向かってなめらかに変わる
+      follow: false,      // true = 回転入力の多い方向に回す
+      hist: []            // 直近の回転入力(-1 = 左回転, 1 = 右回転)
+    };
+    const HIST = 20;
+
+    // ---- 回転入力の読み取り(読むだけ。キーを止めたり書き換えたりはしない) ----
+    // TETR.IO のキー設定は localStorage の userConfig.controls にある。
+    // style が guideline / wasd のときは既定の割り当て(+ゲームパッド)、custom のときは custom の割り当て。
+    const PRESET = {
+      guideline: {
+        ccw: ['CONTROL', 'CONTROLLEFT', 'Z', 'KEYZ', 'NUMPAD3', 'NUMPAD7', 'BUTTON_0'],
+        cw: ['ARROWUP', 'UP', 'X', 'KEYX', 'NUMPAD1', 'NUMPAD5', 'NUMPAD9', 'BUTTON_1']
+      },
+      wasd: {
+        ccw: ['ARROWLEFT', 'LEFT', 'NUMPAD7', 'BUTTON_0'],
+        cw: ['ARROWRIGHT', 'RIGHT', 'NUMPAD9', 'BUTTON_1']
+      }
+    };
+    let binds = null, bindsAt = 0;
+    const getBinds = () => {
+      if (binds && performance.now() - bindsAt < 3000) return binds;
+      let b = PRESET.guideline;
+      try {
+        const c = JSON.parse(localStorage.getItem('userConfig') || '{}').controls || {};
+        if (c.style === 'wasd') b = PRESET.wasd;
+        else if (c.style === 'custom' && c.custom) {
+          b = { ccw: (c.custom.rotateCCW || []).map(String), cw: (c.custom.rotateCW || []).map(String) };
+        }
+      } catch (e) {}
+      binds = { ccw: new Set(b.ccw.map(k => k.toUpperCase())), cw: new Set(b.cw.map(k => k.toUpperCase())) };
+      bindsAt = performance.now();
+      return binds;
+    };
+    const decide = () => {
+      if (!S.follow) return;
+      let sum = 0;
+      for (const x of S.hist) sum += x;
+      if (sum !== 0) S.dir = sum > 0 ? 1 : -1;   // 同数なら今の向きのまま
+    };
+    const record = d => {
+      S.hist.push(d);
+      if (S.hist.length > HIST) S.hist.shift();
+      decide();
+    };
+    const typing = t => t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+    if (W.__spinKey) removeEventListener('keydown', W.__spinKey, true);
+    W.__spinKey = e => {
+      if (e.repeat || typing(e.target)) return;
+      const b = getBinds();
+      const ks = [String(e.code || '').toUpperCase(), String(e.key || '').toUpperCase()];
+      if (ks.some(k => b.ccw.has(k))) record(-1);
+      else if (ks.some(k => b.cw.has(k))) record(1);
+    };
+    addEventListener('keydown', W.__spinKey, true);
+    const padPrev = new Map();
+    const pollPads = () => {
+      if (!navigator.getGamepads) return;
+      const b = getBinds();
+      for (const p of navigator.getGamepads()) {
+        if (!p) continue;
+        p.buttons.forEach((btn, i) => {
+          const k = p.index + ':' + i, down = btn.pressed, was = padPrev.get(k);
+          padPrev.set(k, down);
+          if (!down || was) return;
+          const name = 'BUTTON_' + i;
+          if (b.ccw.has(name)) record(-1);
+          else if (b.cw.has(name)) record(1);
+        });
+      }
     };
 
     // 盤面の holder を探す(ソロ・リプレイ・ルームのどれでも、盤面ごとに1つある)。
@@ -99,12 +169,18 @@
       return b;
     };
     const status = document.createElement('div');
-    status.style.cssText = 'opacity:.8';
+    status.style.cssText = 'opacity:.8;white-space:pre-line';
     panel.append(status);
     range('秒/周', 'sec', 2, 120, 1);
     const sa = range('固定角度', 'angle', 0, 360, 1);
     btn('回転 ON/OFF', () => { S.on = !S.on; });
-    btn('逆回転', () => { S.dir *= -1; });
+    const followLabel = () => '向き: ' + (S.follow ? '回転入力に合わせる' : '固定(逆回転ボタン)');
+    const followBtn = btn(followLabel(), b => {
+      S.follow = !S.follow;
+      decide(); // 今までの入力から向きを決め直す
+      b.textContent = followLabel();
+    });
+    btn('逆回転', () => { S.follow = false; S.dir *= -1; followBtn.textContent = followLabel(); });
     btn('固定角度を解除', () => { S.angle = null; sa.value = 0; });
     btn('角度を0に戻す', () => { S.rot = 0; S.angle = null; sa.value = 0; });
     const groupLabel = () => '2人以上: ' + (S.group === 'together' ? 'まとめて回す' : 'それぞれ回す');
@@ -140,7 +216,10 @@
       const now = performance.now();
       const dt = Math.min((now - last) / 1000, 0.1);
       last = now;
-      if (S.on) S.rot = (S.rot + S.dir * dt * 2 * Math.PI / S.sec) % (2 * Math.PI);
+      pollPads();
+      // 向きが変わったら、約0.5秒かけてなめらかに逆向きへ
+      S.v += (S.dir - S.v) * Math.min(1, dt * 4);
+      if (S.on) S.rot = (S.rot + S.v * dt * 2 * Math.PI / S.sec) % (2 * Math.PI);
       // holder はゲーム開始・リトライ・ルームの入れ替わりで作り直されるので、ときどき探し直す
       if (n % 30 === 0 || S.holders.some(h => h._destroyed || !h.parent)) {
         let found = [];
@@ -164,7 +243,9 @@
         S.center = null;
       }
 
-      status.textContent = shown.length ? `盤面: ${shown.length}` : '盤面: なし(ゲーム開始を待っています)';
+      const left = S.hist.filter(x => x < 0).length, right = S.hist.length - left;
+      status.textContent = (shown.length ? `盤面: ${shown.length}` : '盤面: なし(ゲーム開始を待っています)') +
+        (S.follow ? `\n直近${HIST}回 左${left}/右${right} → ${S.dir < 0 ? '左' : '右'}回転` : '');
       let k = 0;
       if (S.marker) {
         if (S.center) place(k++, S.center);
