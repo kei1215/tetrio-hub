@@ -71,9 +71,32 @@ CONFIG_INSTALLER = r"""function qpReplayEditConfig(document, window) {
 """
 
 
-def patch_transform(src, edit_src, counter_src):
+# TETR.IO client of 2026-11-09 renamed minified identifiers. Found by aligning the
+# old and new tetrio.js token streams (names that patch anchors use). Sa/La/ha are
+# the patch's own placeholders (replaced by adapt()) and must not be renamed.
+CLIENT_RENAMES_2026_11_09 = {'Bc': 'Sc', 'El': 'Ml', 'Ht': 'Rt', 'Js': 'Zs', 'Mc': 'Ec', 'Ql': 'Yl',
+                             'Qs': 'Ys', 'Ss': 'Bs', 'Yo': 'Qo', 'Zo': 'Jo'}
+
+
+def port_client(src):
+    """Adapt the anchors to the current TETR.IO client."""
+    src = replace_once(src,
+        "const clone=(src.match(/static FormatOptions\\(e,t,n=t\\.username\\)\\{if\\(t=([$\\w]+)\\(t\\),\"multi\"===e\\)/)||[])[1];",
+        "const clone=(src.match(/static FormatOptions\\(e,t,n=t\\.username\\)\\{if\\(t=([$\\w]+)\\(t\\),\"multi\"===e\\)/)||[])[1];\n    const zenithBase=(src.match(/([$\\w]+)\\.Zenith=class extends \\1(?![$\\w])/)||[])[1];",
+        'zenith alias')
+    src = replace_once(src, "if(!replayData||!audio||!bool||!clone){", "if(!replayData||!audio||!bool||!clone||!zenithBase){", 'alias guard')
+    src = replace_once(src, "'Qa.Zenith=class extends Qa'", "zenithBase+'.Zenith=class extends '+zenithBase", 'zenith check')
+    src = replace_once(src, "const presentation = new Qa.Zenith(", "const presentation = new ${zenithBase}.Zenith(", 'zenith new')
+    names = CLIENT_RENAMES_2026_11_09
+    pat = re.compile(r'(?<![\w$])(' + '|'.join(map(re.escape, names)) + r')(?![\w$])')
+    return pat.sub(lambda m: names[m.group(1)], src)
+
+
+def patch_transform(src, edit_src, counter_src, port=False):
     if 'qpReplayEditRunner' in src:
         raise SystemExit('transform.js already contains the replay edit')
+    if port:
+        src = port_client(src)
     # (a) Skip the replay presentation while the replay edit is ON.
     src = replace_once(src,
         " if (window.__qpReplayUIInstalled) return;",
@@ -113,7 +136,7 @@ def patch_transform(src, edit_src, counter_src):
     return runner + src
 
 
-def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src):
+def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=False):
     out = io.BytesIO()
     with zipfile.ZipFile(old_zip) as zin, zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as zout:
         names = sorted(n for n in zin.namelist() if not n.endswith('/'))
@@ -123,7 +146,7 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src):
             info = zin.getinfo(name)
             data = zin.read(name)
             if name == 'O/transform.js':
-                data = patch_transform(data.decode('utf-8'), edit_src, counter_src).encode('utf-8')
+                data = patch_transform(data.decode('utf-8'), edit_src, counter_src, port).encode('utf-8')
             elif name == 'O/offline/reverse-hyper-browser.js':
                 data = replace_once(data.decode('utf-8'), OLD_MUSIC, NEW_MUSIC, name).encode('utf-8')
             elif name == 'package.json':
@@ -133,7 +156,9 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src):
                 pkg['update'] = int(new)
                 data = json.dumps(pkg).encode('utf-8')
             elif name == 'QP-CHANGELOG.txt':
-                entry = (f'v4.{new} replay board edit\n'
+                entry = (f'v4.{new} replay board edit' + (' / TETR.IO 2026-11-09 client' if port else '') + '\n'
+                         + ('- 2026-11-09 の TETR.IO 更新(内部の名前の付け替え)に合わせて書き換え位置を更新。\n' if port else '')
+                         + 
                          '- CONFIG > QP PATCH TOOLS に REPLAY BOARD EDIT (ON/OFF) を追加。ON のとき、リプレイを止めるとその場面から操作でき、\n'
                          '  スピンカウンター(SPIN・T-SPIN・QUAD)も表示する。リプレイ演出・シークバー非表示・次の自動再生は切る。\n'
                          '- ブラウザ用リバースHYPERSPEED曲の参照先を kei1215.github.io/tetrio-hub に変更。\n\n')
@@ -184,6 +209,7 @@ def main():
     ap.add_argument('--old', required=True)
     ap.add_argument('--new', required=True)
     ap.add_argument('--hub', required=True, type=Path, help='tetrio-hub/docs')
+    ap.add_argument('--port-2026-11-09', dest='port', action='store_true', help='adapt anchors to the TETR.IO client of 2026-11-09')
     a = ap.parse_args()
     if a.new_dir.exists():
         raise SystemExit('output folder already exists: ' + str(a.new_dir))
@@ -195,7 +221,7 @@ def main():
         old_zip = a.old_dir / f'QP-Patch-v{kind}4.{a.old}-Source.zip'
         new_zip = a.new_dir / f'QP-Patch-v{kind}4.{a.new}-Source.zip'
         old_sha = sha256(old_zip.read_bytes())
-        payload = build_zip(old_zip, new_zip, kind, a.old, a.new, edit_src, counter_src)
+        payload = build_zip(old_zip, new_zip, kind, a.old, a.new, edit_src, counter_src, a.port)
         sums[new_zip.name] = sha256(payload)
         for osname, ext, flavor in OS_FILES:
             old_file = a.old_dir / f'tetrio-patch-{osname}-v{kind}4.{a.old}{ext}'
