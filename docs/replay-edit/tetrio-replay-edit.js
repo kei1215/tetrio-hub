@@ -56,6 +56,7 @@
   // ---- 状態 ----
   const S = W.__rpe = {
     auto: keep.auto ?? true,     // 一時停止したら自動で操作できるようにする
+    noGravity: keep.noGravity ?? false,   // 操作中の重力をなくす(ハードドロップ・ソフトドロップでだけ落ちる)
     side: keep.side ?? 0,        // 操作する盤面(左から何番目か)
     panelClosed: updated ? !!keep.panelClosed : false,
     active: null,                // 操作中のゲーム
@@ -71,6 +72,7 @@
   // 1手戻す(Ctrl+Z)用: ミノを置くたびに、次のミノが出た時点の状態を積む。undo[0] は止めた場面
   let undo = [], redo = [], placed = 0;
   let deadAt = 0;                // 自滅した時刻(0 = していない)
+  let stepping = false;          // このスクリプトがゲームを1フレーム進めている最中か
 
   const alive = n => { try { const h = n.hm.H.holder; return h && !h._destroyed && h.parent; } catch (e) { return false; } };
   const shown = () => {
@@ -110,7 +112,8 @@
     patches.push(() => { delete esm.Pull; delete esm.IsFinished; });
     // 2) リプレイ画面への通知(シークバーの位置・終了)を止める。操作中にシークバーは動かない
     const emit0 = elm.emit;
-    elm.emit = function (type, ...a) { if (type === 'frame' || type === 'end' || type === 'start') return undefined; return emit0.call(this, type, ...a); };
+    // (止めるのは、このスクリプトがゲームを進めている最中だけ。リプレイを閉じるときの通知は通す)
+    elm.emit = function (type, ...a) { if (stepping && (type === 'frame' || type === 'end' || type === 'start')) return undefined; return emit0.call(this, type, ...a); };
     patches.push(() => { elm.emit = emit0; });
     // 3) 再生・シークを見張る: 押されたら、ゲームが動き出す前に止めたときの状態へ戻す
     let spd = H.playbackSpeed;
@@ -122,14 +125,22 @@
     const inject0 = siom.InjectState;
     siom.InjectState = function (...a) { if (S.active === n) leave(false); return inject0.apply(this, a); };
     patches.push(() => { siom.InjectState = inject0; });
-    // 4') 自滅(ゲームオーバー)の処理は走らせない。走ると、リプレイ画面がもう片方の盤面を消すなどしてしまう。
-    //     代わりに盤面をその場で止め、少ししてから自滅したミノを置く前に戻す
+    // 4') 自分の操作で自滅したとき(ゲームを進めている最中)だけ、ゲームオーバーの処理を走らせない。
+    //     走ると、リプレイ画面がもう片方の盤面を消すなどしてしまう。代わりに盤面をその場で止め、
+    //     少ししてから自滅したミノを置く前に戻す。
+    //     それ以外(操作中のままリプレイを閉じたときの終了処理など)は、止めた場面に戻してから
+    //     そのまま TETR.IO の処理を走らせる。止めると盤面の描画が残ってしまう
     const gom = n.gom, over0 = gom.GameOver;
     gom.GameOver = function (...a) {
-      if (S.active !== n) return over0.apply(this, a);
-      if (!deadAt) deadAt = performance.now();
+      if (S.active === n && stepping) { if (!deadAt) deadAt = performance.now(); return; }
+      if (S.active === n) leave(true);
+      return over0.apply(this, a);
     };
     patches.push(() => { gom.GameOver = over0; });
+    // 5) 重力なし: 落下の計算に使う重力を 0 にする(ソフトドロップ・ハードドロップは効く)
+    const fm = n.fm;
+    fm.GetEffectiveGravity = function (...a) { return S.noGravity ? 0 : Object.getPrototypeOf(this).GetEffectiveGravity.apply(this, a); };
+    patches.push(() => { delete fm.GetEffectiveGravity; });
     // 4) 記録しない・自分のハンドリング(DAS/ARR/SDF)で動かす。どちらも戻すときに元へ戻る
     n.gsm.setoptions.noreplay = true;
     const hd = config().handling;
@@ -276,6 +287,7 @@
   const btn = (label, fn) => { const b = document.createElement('button'); b.textContent = label; b.style.cssText = 'font:inherit;color:#fff;background:#0085a1;border:0;border-radius:4px;padding:4px 6px;cursor:pointer;text-align:left'; b.onclick = e => { e.stopPropagation(); fn(b); b.blur(); }; return b; };
   const bAuto = btn('', () => { S.auto = !S.auto; if (!S.auto) leave(true); draw(); });
   const bSide = btn('', () => { S.side++; if (S.active) leave(true); draw(); });
+  const bGrav = btn('', () => { S.noGravity = !S.noGravity; draw(); });
   const bReset = btn('止めた場面からやり直す(R)', () => retry());
   const bFumen = btn('fumen で今の盤面を開く', () => {
     const list = shown();
@@ -284,7 +296,7 @@
     window.open('https://fumen.zui.jp/?' + fumenOf(n), '_blank', 'noopener');
   });
   const bClose = btn('パネルを閉じる', () => setClosed(true));
-  panel.append(status, bAuto, bSide, bReset, bFumen, bClose);
+  panel.append(status, bAuto, bSide, bGrav, bReset, bFumen, bClose);
   const mini = document.createElement('div');
   mini.id = '__rpemini';
   mini.textContent = '盤面修正';
@@ -298,6 +310,7 @@
   const draw = () => {
     const list = shown();
     bAuto.textContent = '止めたら操作: ' + (S.auto ? 'ON' : 'OFF');
+    bGrav.textContent = '重力: ' + (S.noGravity ? 'なし' : 'あり');
     const tgt = list.length ? list[S.side % list.length] : null;
     bSide.textContent = '操作する盤面: ' + (tgt ? name(tgt) : '-') + (list.length > 1 ? '(押すと切り替え)' : '');
     let t;
@@ -322,7 +335,7 @@
       if (S.active && (!alive(S.active) || !list.includes(S.active))) leave(false);
       if (!S.active && S.auto && list.length) {
         const n = list[S.side % list.length];
-        if (paused(n) && n.gsm.started) enter(n);
+        if (paused(n) && n.gsm.started && n.gsm.playing) enter(n);
       }
       const n = S.active;
       if (n) {
@@ -331,7 +344,8 @@
         let steps = 0;
         while (!deadAt && acc >= 1 / 60 && steps < 6) {
           acc -= 1 / 60; steps++;
-          n.lm.Update();
+          stepping = true;
+          try { n.lm.Update(); } finally { stepping = false; }
           const p = n.gsm.stats.piecesplaced || 0;
           if (p !== placed && !deadAt) {
             // ミノを置いた: 次のミノが出たこの時点を、1手戻す先として積む
@@ -370,7 +384,7 @@
     clearInterval(W.__rpeUpd);
     panel.remove(); mini.remove();
     W.__rpeTeardown = null;
-    return { auto: S.auto, side: S.side, panelClosed: upd ? S.panelClosed : false };
+    return { auto: S.auto, side: S.side, noGravity: S.noGravity, panelClosed: upd ? S.panelClosed : false };
   };
 
   // ---- 自動更新(操作中は待つ) ----
