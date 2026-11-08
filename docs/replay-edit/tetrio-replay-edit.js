@@ -73,6 +73,7 @@
   let undo = [], redo = [], placed = 0;
   let deadAt = 0;                // 自滅した時刻(0 = していない)
   let stepping = false;          // このスクリプトがゲームを1フレーム進めている最中か
+  let preClear = null;           // ライン消去の直前の盤面(置いたミノとそろったラインが見える)
 
   const alive = n => { try { const h = n.hm.H.holder; return h && !h._destroyed && h.parent; } catch (e) { return false; } };
   const shown = () => {
@@ -137,6 +138,14 @@
       return over0.apply(this, a);
     };
     patches.push(() => { gom.GameOver = over0; });
+    // 4'') ライン消去の直前の盤面を写しておく(fumen で「置いた所 → 消えた後」の順にページを出すため)
+    const bm = n.bm, full0 = bm.GetFullLines;
+    bm.GetFullLines = function (...a) {
+      const r = full0.apply(this, a);
+      if (stepping && r && r.length) preClear = n.gsm.board.map(row => row.slice());
+      return r;
+    };
+    patches.push(() => { bm.GetFullLines = full0; });
     // 5) 重力なし: 落下の計算に使う重力を 0 にする(ソフトドロップ・ハードドロップは効く)
     const fm = n.fm;
     fm.GetEffectiveGravity = function (...a) { return S.noGravity ? 0 : Object.getPrototypeOf(this).GetEffectiveGravity.apply(this, a); };
@@ -267,10 +276,22 @@
     for (let x = 0; x < 10; x++) cells.push(0);
     return cells;
   };
+  // boards: 盤面の配列({ board } でも可)。
+  // fumen は次のページへ進むとき、そろったラインを必ず消す。なので「消える前」のページの次は、
+  // fumen が消した後の地形からの差を書く(消えた後の地形がそのまま出る)
+  // fumen がページを進めるときと同じく、そろった行(上23行のうち)を消して上を詰める
+  const clearFull = cells => {
+    const rows = [];
+    for (let r = 0; r < 23; r++) rows.push(cells.slice(r * 10, r * 10 + 10));
+    const kept = rows.filter(row => !row.every(c => c !== 0));
+    while (kept.length < 23) kept.unshift(new Array(10).fill(0));
+    return [].concat(...kept, cells.slice(230));
+  };
   const fumenOfBoards = boards => {
     const out = [];
     const put = (v, len) => { for (let i = 0; i < len; i++) { out.push(B64[v % 64]); v = Math.floor(v / 64); } };
-    const pages = boards.map(cellsOf);
+    const list = boards.map(b => Array.isArray(b) ? { board: b } : b);
+    const pages = list.map(b => cellsOf(b.board));
     let prev = new Array(240).fill(0), skip = 0;
     const same = (a, b) => a.every((c, i) => c === b[i]);
     pages.forEach((cells, p) => {
@@ -300,7 +321,7 @@
       v = v * 2 + 0;               // ロック
       v = v * 240; v = v * 4; v = v * 8;
       put(v, 3);
-      prev = cells;
+      prev = clearFull(cells);
     });
     const str = out.join('');
     let r = str.slice(0, 42);
@@ -309,7 +330,15 @@
   };
   const fumenOf = n => fumenOfBoards([n.gsm.board]);
   // 操作中の流れ(止めた場面 + 置いたミノごと)
-  const fumenOfEdit = () => fumenOfBoards(undo.map(u => u.state.game.board));
+  // ラインを消したミノは「置いた所(消える前)」→「消えた後」の2ページ
+  const fumenOfEdit = () => {
+    const pages = [];
+    undo.forEach((u, i) => {
+      if (i > 0 && u.pre) pages.push({ board: u.pre, keep: true });
+      pages.push({ board: u.state.game.board });
+    });
+    return fumenOfBoards(pages);
+  };
   S.fumen = n => S.active && !n ? fumenOfEdit() : fumenOf(n || shown()[0]);
   S.fumenBoards = fumenOfBoards;
 
@@ -352,7 +381,7 @@
     const list = shown();
     bAuto.textContent = '止めたら操作: ' + (S.auto ? 'ON' : 'OFF');
     bGrav.textContent = '重力: ' + (S.noGravity ? 'なし' : 'あり');
-    bFumen.textContent = S.active ? `fumen に書き出す(止めた場面 + ${undo.length - 1}ミノ = ${undo.length}ページ)` : 'fumen で今の盤面を開く';
+    bFumen.textContent = S.active ? `fumen に書き出す(止めた場面 + ${undo.length - 1}ミノ)` : 'fumen で今の盤面を開く';
     const tgt = list.length ? list[S.side % list.length] : null;
     bSide.textContent = '操作する盤面: ' + (tgt ? name(tgt) : '-') + (list.length > 1 ? '(押すと切り替え)' : '');
     let t;
@@ -386,13 +415,13 @@
         let steps = 0;
         while (!deadAt && acc >= 1 / 60 && steps < 6) {
           acc -= 1 / 60; steps++;
-          stepping = true;
+          stepping = true; preClear = null;
           try { n.lm.Update(); } finally { stepping = false; }
           const p = n.gsm.stats.piecesplaced || 0;
           if (p !== placed && !deadAt) {
             // ミノを置いた: 次のミノが出たこの時点を、1手戻す先として積む
             placed = p;
-            try { undo.push({ state: n.siom.EjectState(), frame: n.esm.frame }); } catch (e) {}
+            try { undo.push({ state: n.siom.EjectState(), frame: n.esm.frame, pre: preClear }); } catch (e) {}
             if (undo.length > 300) undo.splice(1, 1);
             redo = [];
           }
