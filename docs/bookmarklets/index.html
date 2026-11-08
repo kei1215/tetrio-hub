@@ -1,64 +1,78 @@
 <!doctype html>
-<html lang="en">
+<html lang="ja">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>tetrio-patch Standalone OFFLINE Bookmarklet</title>
-  <style>
-    body { max-width: 760px; margin: 48px auto; padding: 0 20px; color: #eaf2ff; background: #0c111b; font: 16px/1.6 system-ui; }
-    a.button, button { display: inline-block; padding: 12px 18px; border:0; border-radius: 8px; color: #07101c; background: #8fc8ff; font:800 1em system-ui; text-decoration: none; cursor:pointer; }
-    code { color: #b9dcff; }
-    .note { padding: 14px 16px; border-left: 4px solid #8fc8ff; background: #141d2b; }
-    section { margin: 28px 0; padding-top: 8px; border-top: 1px solid #283850; }
-    textarea { width:100%; min-height:110px; box-sizing:border-box; color:#dcebff; background:#080c13; border:1px solid #405979; }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TETR.IO Standalone OFFLINE</title>
+  <script src="../assets/theme.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,700;1,400;1,700&family=Open+Sans:ital,wght@0,300;0,400;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/site.css">
+  <script src="https://use.fontawesome.com/releases/v6.3.0/js/all.js" crossorigin="anonymous"></script>
 </head>
 <body>
-  <h1>TETR.IO Standalone OFFLINE v4.8216</h1>
-  <p>下のボタンをブックマークバーへドラッグしてください。<code>https://tetr.io/</code> を開いてボタンを押すと、別タブにOFFLINEを起動します。</p>
-  <p><a id="install" class="button" href="#">Loading bookmarklet...</a></p>
-  <button id="copy" type="button">ブックマークコードをコピー</button>
-  <p id="copy-status" aria-live="polite"></p>
-  <p class="note">ブラウザ版は追加のインストール不要です。QP、ZEN、ローカル／オンラインリプレイ、端末内保存、OFFLINE盤面回転を利用できます。通常のオンライン対戦・ルーム・観戦は起動しません。</p>
-  <p>localhostは使用していません。<code>blob:https://tetr.io/…</code> の一時ページで動きます。OFFLINE用の接続先はGitHubリポジトリで、起動時だけ公式TETR.IOの画面素材と本体を読み込み、プレイはOFFLINE内で行います。</p>
-  <section>
-    <h2>iPhone／iPad（Safari）</h2>
-    <ol>
-      <li>このページを普通のブックマークとして一度保存します。</li>
-      <li>上の「ブックマークコードをコピー」を押します。</li>
-      <li>Safariのブックマーク編集を開き、保存したブックマークのURLを全削除してコードを貼り付けます。</li>
-      <li><code>https://tetr.io/</code>を開き、ブックマーク一覧から実行します。</li>
-    </ol>
-    <p>iOS版ChromeよりSafariを推奨します。ポップアップが止められた場合はTETR.IOのポップアップを許可してください。</p>
-  </section>
-  <section>
-    <h2>Android（Chrome）</h2>
-    <ol>
-      <li>このページをブックマークし、名前を「TETR.IO OFFLINE」に変更します。</li>
-      <li>コードをコピーし、ブックマーク編集画面のURLへ貼り付けて保存します。</li>
-      <li><code>https://tetr.io/</code>を開き、アドレスバーへ「TETR.IO OFFLINE」と入力して、候補に出るブックマークを選びます。</li>
-    </ol>
-  </section>
-  <section>
-    <h2>デスクトップ版(Mac／Windows／Linux)のパッチ v4.8217</h2>
-    <p>ブラウザではなく、TETR.IO デスクトップアプリに入れる版です。実行前に TETR.IO を終了してください。</p>
+  <main class="container">
+    <h1>TETR.IO Standalone OFFLINE v4.8216</h1>
+    <p>下のボタンをブックマークバーへドラッグしてください。<code>https://tetr.io/</code> を開いてボタンを押すと、別タブにOFFLINEを起動します。</p>
+    <p><a id="install" class="btn" href="#">Loading bookmarklet...</a></p>
+    <p><button id="copy" class="btn btn-outline" type="button">ブックマークコードをコピー</button> <span id="copy-status" aria-live="polite"></span></p>
+    <p class="note">ブラウザ版は追加のインストール不要です。QP、ZEN、ローカル／オンラインリプレイ、端末内保存、OFFLINE盤面回転を利用できます。通常のオンライン対戦・ルーム・観戦は起動しません。</p>
+    <p>localhostは使用していません。<code>blob:https://tetr.io/…</code> の一時ページで動きます。OFFLINE用の接続先はGitHubリポジトリで、起動時だけ公式TETR.IOの画面素材と本体を読み込み、プレイはOFFLINE内で行います。</p>
+
+    <section>
+      <h2>iPhone／iPad（Safari）</h2>
+      <ol>
+        <li>このページを普通のブックマークとして一度保存します。</li>
+        <li>上の「ブックマークコードをコピー」を押します。</li>
+        <li>Safariのブックマーク編集を開き、保存したブックマークのURLを全削除してコードを貼り付けます。</li>
+        <li><code>https://tetr.io/</code>を開き、ブックマーク一覧から実行します。</li>
+      </ol>
+      <p>iOS版ChromeよりSafariを推奨します。ポップアップが止められた場合はTETR.IOのポップアップを許可してください。</p>
+    </section>
+
+    <section>
+      <h2>Android（Chrome）</h2>
+      <ol>
+        <li>このページをブックマークし、名前を「TETR.IO OFFLINE」に変更します。</li>
+        <li>コードをコピーし、ブックマーク編集画面のURLへ貼り付けて保存します。</li>
+        <li><code>https://tetr.io/</code>を開き、アドレスバーへ「TETR.IO OFFLINE」と入力して、候補に出るブックマークを選びます。</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>デスクトップ版(Mac／Windows／Linux)のパッチ v4.8217</h2>
+      <p>ブラウザではなく、TETR.IO デスクトップアプリに入れる版です。実行前に TETR.IO を終了してください。</p>
+      <ul>
+        <li><strong>vO(OFFLINE版)</strong>: OFFLINE／保存／Replay ―
+          <a href="../patch/v4.8217/tetrio-patch-Mac-vO4.8217.command" download>Mac</a> ・
+          <a href="../patch/v4.8217/tetrio-patch-Windows-vO4.8217.cmd" download>Windows</a> ・
+          <a href="../patch/v4.8217/tetrio-patch-Linux-vO4.8217.sh" download>Linux</a></li>
+        <li><strong>vR(Replay版)</strong>: 通常の TETR.IO に Replay 表示だけ追加する軽量版 ―
+          <a href="../patch/v4.8217/tetrio-patch-Mac-vR4.8217.command" download>Mac</a> ・
+          <a href="../patch/v4.8217/tetrio-patch-Windows-vR4.8217.cmd" download>Windows</a> ・
+          <a href="../patch/v4.8217/tetrio-patch-Linux-vR4.8217.sh" download>Linux</a></li>
+      </ul>
+      <p>Mac: ダウンロード後、ターミナルで <code>sh ~/Downloads/tetrio-patch-Mac-vO4.8217.command</code> を実行します(ダブルクリックだと実行権限や警告で止まることがあります)。<br>
+      Windows: <code>.cmd</code> をダブルクリック。Linux: <code>sh tetrio-patch-Linux-vO4.8217.sh</code>。</p>
+    </section>
+
+    <section>
+      <h2>手動コピー用</h2>
+      <textarea id="manual" readonly>Loading…</textarea>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <a class="back" href="../">← TETR.IO tools</a>
     <ul>
-      <li><strong>vO(OFFLINE版)</strong>: OFFLINE／保存／Replay ―
-        <a href="../patch/v4.8217/tetrio-patch-Mac-vO4.8217.command" download>Mac</a> ・
-        <a href="../patch/v4.8217/tetrio-patch-Windows-vO4.8217.cmd" download>Windows</a> ・
-        <a href="../patch/v4.8217/tetrio-patch-Linux-vO4.8217.sh" download>Linux</a></li>
-      <li><strong>vR(Replay版)</strong>: 通常の TETR.IO に Replay 表示だけ追加する軽量版 ―
-        <a href="../patch/v4.8217/tetrio-patch-Mac-vR4.8217.command" download>Mac</a> ・
-        <a href="../patch/v4.8217/tetrio-patch-Windows-vR4.8217.cmd" download>Windows</a> ・
-        <a href="../patch/v4.8217/tetrio-patch-Linux-vR4.8217.sh" download>Linux</a></li>
+      <li><a href="https://x.com/New_kei1215" aria-label="X"><span class="fa-stack fa-lg"><i class="fas fa-circle fa-stack-2x"></i><i class="fab fa-twitter fa-stack-1x fa-inverse"></i></span></a></li>
+      <li><a href="https://www.youtube.com/@Y_Kei1215" aria-label="YouTube"><span class="fa-stack fa-lg"><i class="fas fa-circle fa-stack-2x"></i><i class="fab fa-youtube fa-stack-1x fa-inverse"></i></span></a></li>
+      <li><a href="https://kei1215.com/" aria-label="Kei's HomePages"><span class="fa-stack fa-lg"><i class="fas fa-circle fa-stack-2x"></i><i class="fas fa-house fa-stack-1x fa-inverse"></i></span></a></li>
     </ul>
-    <p>Mac: ダウンロード後、ターミナルで <code>sh ~/Downloads/tetrio-patch-Mac-vO4.8217.command</code> を実行します(ダブルクリックだと実行権限や警告で止まることがあります)。<br>
-    Windows: <code>.cmd</code> をダブルクリック。Linux: <code>sh tetrio-patch-Linux-vO4.8217.sh</code>。</p>
-  </section>
-  <section>
-    <h2>手動コピー用</h2>
-    <textarea id="manual" readonly>Loading…</textarea>
-  </section>
+    <div class="copy">Copyright &copy; Kei's HomePages 2025</div>
+  </footer>
+
   <script>
     let bookmarkCode='';
     fetch('./tetrio-offline-standalone-v4.8216.txt').then(response => response.text()).then(code => {

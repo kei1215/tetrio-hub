@@ -2,68 +2,82 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>TETR.IO 盤面回転</title>
-  <style>
-    body { max-width: 760px; margin: 48px auto; padding: 0 20px; color: #eaf2ff; background: #0c111b; font: 16px/1.6 system-ui, sans-serif; }
-    a { color: #8fc8ff; }
-    a.button, button { display: inline-block; padding: 12px 18px; border: 0; border-radius: 8px; color: #07101c; background: #ffb86b; font: 800 1em system-ui, sans-serif; text-decoration: none; cursor: pointer; }
-    button.sub { background: #8fc8ff; }
-    code { color: #ffd7a8; }
-    .note { padding: 14px 16px; border-left: 4px solid #ffb86b; background: #1d1810; }
-    section { margin: 28px 0; padding-top: 8px; border-top: 1px solid #283850; }
-    textarea { width: 100%; min-height: 110px; box-sizing: border-box; color: #dcebff; background: #080c13; border: 1px solid #405979; }
-    table { border-collapse: collapse; width: 100%; }
-    td { padding: 4px 8px; border-bottom: 1px solid #283850; vertical-align: top; }
-  </style>
+  <script src="../assets/theme.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,700;1,400;1,700&family=Open+Sans:ital,wght@0,300;0,400;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/site.css">
+  <script src="https://use.fontawesome.com/releases/v6.3.0/js/all.js" crossorigin="anonymous"></script>
 </head>
 <body>
-  <p><a href="../">← TETR.IO tools</a></p>
-  <h1>TETR.IO 盤面回転</h1>
-  <p class="note">QP OFFLINE とは別のブックマークレットです。公式の <code>https://tetr.io/</code> の SOLO・リプレイで、盤面の<strong>見た目だけ</strong>を回転させます。対戦(QP・リーグ・ルーム)では使わないでください。</p>
+  <main class="container">
+    <h1>TETR.IO 盤面回転</h1>
+    <p class="note">QP OFFLINE とは別のブックマークレットです。公式の <code>https://tetr.io/</code> で、盤面の<strong>見た目だけ</strong>を回します。回転の中心は、いつもプレイ範囲(横10×縦20)の真ん中です。ゲームの判定や、ほかの人の画面には影響しません。</p>
 
-  <h2>登録</h2>
-  <p>下のボタンを<strong>ブックマークバーへドラッグ</strong>してください(このページでクリックしても動きません)。</p>
-  <p><a id="bmA" class="button" href="#">盤面回転</a></p>
-  <p>上が動かないときの代替: <a id="bmB" class="button" href="#">盤面回転(fetch版)</a></p>
-  <p><button id="copy" class="sub" type="button">ブックマークコードをコピー</button> <span id="copy-status" aria-live="polite"></span></p>
+    <h2>登録</h2>
+    <p>下のボタンを<strong>ブックマークバーへドラッグ</strong>してください(このページでクリックしても動きません)。</p>
+    <p><a id="bmA" class="btn" href="#">盤面回転</a></p>
+    <p class="muted">上が動かないときの代替: <a id="bmB" class="btn btn-outline" href="#">盤面回転(fetch版)</a></p>
+    <p><button id="copy" class="btn btn-outline" type="button">ブックマークコードをコピー</button> <span id="copy-status" aria-live="polite"></span></p>
 
-  <section>
-    <h2>使い方(PC)</h2>
-    <ol>
-      <li><code>https://tetr.io/</code> を開き、<strong>メニュー画面のまま</strong>ブックマークをクリックします。</li>
-      <li>コンソールに <code>[spin] waiting for the next frame...</code> と出て、画面が描画された瞬間に左下へ操作パネルが出ます。</li>
-      <li>SOLO(40L・BLITZ・ZEN など)やリプレイを始めると、盤面が回ります。中心は常にプレイ範囲(横10×縦20)の真ん中です。</li>
-    </ol>
-    <p>15秒以内にゲーム画面をつかめなかったときは、コンソールに <code>could not capture the app within 15s</code> と出ます。ページを再読み込みしてからもう一度押してください。</p>
-  </section>
+    <section>
+      <h2>使い方(PC)</h2>
+      <ol>
+        <li><code>https://tetr.io/</code> を開き、ブックマークをクリックします。メニュー画面でも、リプレイやルームの中でも押せます。</li>
+        <li>左下に操作パネルが出ます。</li>
+        <li>SOLO(40L・BLITZ・ZEN など)、リプレイ、ルームで盤面が出ると回り始めます。パネルの「盤面: 2」のような数字が、回している盤面の数です。</li>
+      </ol>
+      <p>15秒たってもパネルが出ないときは、ページを再読み込みしてからもう一度押してください。</p>
+    </section>
 
-  <section>
-    <h2>操作パネル</h2>
-    <table>
-      <tr><td>秒/周</td><td>1回転にかかる秒数(2〜120)</td></tr>
-      <tr><td>固定角度</td><td>動かすとその角度で止まります。「固定角度を解除」で回転に戻ります</td></tr>
-      <tr><td>回転 ON/OFF・逆回転</td><td>回転の停止/再開、向きの反転</td></tr>
-      <tr><td>角度を0に戻す</td><td>まっすぐの向きに戻します</td></tr>
-      <tr><td>中心の目印 ON/OFF</td><td>回転中心の赤い点の表示</td></tr>
-      <tr><td>パネルを閉じる</td><td>パネルだけ消えます(回転は続きます)。止めるときはページを再読み込み</td></tr>
-    </table>
-  </section>
+    <section>
+      <h2>2人以上のとき(リプレイ・ルーム)</h2>
+      <p>パネルのボタンで切り替えます。</p>
+      <table>
+        <tr><td>2人以上: それぞれ回す</td><td>盤面ごとに、自分のプレイ範囲の中心で回ります。盤面の位置は動きません</td></tr>
+        <tr><td>2人以上: まとめて回す</td><td>全員の盤面の中心を真ん中にして、盤面ごと一緒に回ります(180°で左右が入れ替わる)</td></tr>
+      </table>
+    </section>
 
-  <section>
-    <h2>iPhone/iPad(Safari)・Android(Chrome)</h2>
-    <ol>
-      <li>このページを普通のブックマークとして保存し、名前を「盤面回転」にします。</li>
-      <li>「ブックマークコードをコピー」を押し、保存したブックマークの URL を全部消してコードを貼り付けます。</li>
-      <li><code>https://tetr.io/</code> を開き、Safari はブックマーク一覧から、Android Chrome はアドレスバーに「盤面回転」と入力して候補から実行します。</li>
-    </ol>
-  </section>
+    <section>
+      <h2>操作パネル</h2>
+      <table>
+        <tr><td>秒/周</td><td>1回転にかかる秒数(2〜120)</td></tr>
+        <tr><td>固定角度</td><td>動かすとその角度で止まります。「固定角度を解除」で回転に戻ります</td></tr>
+        <tr><td>回転 ON/OFF・逆回転</td><td>回転の停止/再開、向きの反転</td></tr>
+        <tr><td>角度を0に戻す</td><td>まっすぐの向きに戻します</td></tr>
+        <tr><td>中心の目印 ON/OFF</td><td>回転の中心の赤い点の表示</td></tr>
+        <tr><td>パネルを閉じる</td><td>パネルだけ消えます(回転は続きます)。止めるときはページを再読み込み</td></tr>
+      </table>
+    </section>
 
-  <section>
-    <h2>手動コピー用</h2>
-    <textarea id="manual" readonly>Loading…</textarea>
-    <p>本体: <a href="tetrio-spin-console.js">tetrio-spin-console.js</a>(開発者ツールのコンソールに貼っても動きます)</p>
-  </section>
+    <section>
+      <h2>iPhone/iPad(Safari)・Android(Chrome)</h2>
+      <ol>
+        <li>このページを普通のブックマークとして保存し、名前を「盤面回転」にします。</li>
+        <li>「ブックマークコードをコピー」を押し、保存したブックマークの URL を全部消してコードを貼り付けます。</li>
+        <li><code>https://tetr.io/</code> を開き、Safari はブックマーク一覧から、Android Chrome はアドレスバーに「盤面回転」と入力して候補から実行します。</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>手動コピー用</h2>
+      <textarea id="manual" readonly>Loading…</textarea>
+      <p>本体: <a href="tetrio-spin-console.js">tetrio-spin-console.js</a>(開発者ツールのコンソールに貼っても動きます)</p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <a class="back" href="../">← TETR.IO tools</a>
+    <ul>
+      <li><a href="https://x.com/New_kei1215" aria-label="X"><span class="fa-stack fa-lg"><i class="fas fa-circle fa-stack-2x"></i><i class="fab fa-twitter fa-stack-1x fa-inverse"></i></span></a></li>
+      <li><a href="https://www.youtube.com/@Y_Kei1215" aria-label="YouTube"><span class="fa-stack fa-lg"><i class="fas fa-circle fa-stack-2x"></i><i class="fab fa-youtube fa-stack-1x fa-inverse"></i></span></a></li>
+      <li><a href="https://kei1215.com/" aria-label="Kei's HomePages"><span class="fa-stack fa-lg"><i class="fas fa-circle fa-stack-2x"></i><i class="fas fa-house fa-stack-1x fa-inverse"></i></span></a></li>
+    </ul>
+    <div class="copy">Copyright &copy; Kei's HomePages 2025</div>
+  </footer>
 
   <script>
     const url = new URL('tetrio-spin-console.js', location.href).href;

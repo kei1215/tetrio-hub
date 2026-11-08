@@ -7,4 +7,5 @@ TETR.IO 関連をまとめるリポジトリ(GitHub Pages: `/docs`)。
 - `docs/bookmarklets/` : ブックマークレット各種
 - `import-from-old-site.sh` : 旧サイトからのコピー用(旧サイトは読むだけ)
 
-ソロやリプレイでの見た目の変更用です。対戦では使わないでください。
+見た目だけを変えるツールです。ゲームの判定や、ほかの人の画面には影響しません。
+ページの見た目は Kei's HomePages(Start Bootstrap "Clean Blog", MIT)に合わせています。

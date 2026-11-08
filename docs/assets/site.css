@@ -1,0 +1,131 @@
+/* Kei's HomePages(Start Bootstrap "Clean Blog", MIT)の見た目に合わせたスタイル。
+   ナビゲーションと見出し画像(ヘッダー)は使わない。ライト/ダーク対応。 */
+:root {
+  --bg: #fff;
+  --fg: #212529;
+  --muted: #6c757d;
+  --primary: #0085a1;
+  --primary-hover: #00657b;
+  --on-primary: #fff;
+  --border: #dee2e6;
+  --soft: #f8f9fa;
+  --code: #d63384;
+  --note: #0085a1;
+  --warn: #c0392b;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --bg: #15171a;
+  --fg: #e4e6eb;
+  --muted: #9aa0a6;
+  --primary: #3fb8d4;
+  --primary-hover: #74cfe3;
+  --on-primary: #0b1215;
+  --border: #33383e;
+  --soft: #1e2125;
+  --code: #f08cbf;
+  --note: #3fb8d4;
+  --warn: #ff7b6b;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15171a;
+    --fg: #e4e6eb;
+    --muted: #9aa0a6;
+    --primary: #3fb8d4;
+    --primary-hover: #74cfe3;
+    --on-primary: #0b1215;
+    --border: #33383e;
+    --soft: #1e2125;
+    --code: #f08cbf;
+    --note: #3fb8d4;
+    --warn: #ff7b6b;
+    color-scheme: dark;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Lora", "Times New Roman", serif;
+  font-size: 1.25rem;
+  line-height: 1.5;
+  transition: background-color .2s, color .2s;
+}
+h1, h2, h3, h4, h5, h6, .btn, .theme-toggle, .site-footer, table {
+  font-family: "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+}
+h1, h2, h3 { font-weight: 800; line-height: 1.2; margin: 2rem 0 .75rem; }
+h1 { font-size: 2.5rem; }
+h2 { font-size: 1.875rem; }
+h3 { font-size: 1.5rem; }
+p { margin: 1.5rem 0; }
+a { color: var(--fg); text-decoration: underline; text-decoration-color: var(--primary); }
+a:hover, a:focus { color: var(--primary); }
+code { color: var(--code); font-size: .875em; word-break: break-word; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 1.5rem 0; }
+ol, ul { padding-left: 1.5em; }
+li { margin: .4rem 0; }
+
+.container { max-width: 760px; margin: 0 auto; padding: 4rem 1.5rem 2rem; }
+
+/* 記事一覧(トップ) */
+.post-preview > a { color: var(--fg); text-decoration: none; display: block; }
+.post-preview > a:hover, .post-preview > a:focus { color: var(--primary); }
+.post-preview .post-title { font-size: 1.875rem; margin: 1.875rem 0 .625rem; }
+.post-preview .post-subtitle { font-weight: 300; font-size: 1.25rem; margin: 0 0 .625rem; }
+.post-meta { color: var(--muted); font-style: italic; font-size: 1.125rem; margin: 0 0 1rem; }
+
+/* ボタン(Clean Blog の btn-primary) */
+.btn {
+  display: inline-block;
+  padding: 1rem 1.5rem;
+  border: 0;
+  border-radius: 0;
+  background: var(--primary);
+  color: var(--on-primary);
+  font-size: .875rem;
+  font-weight: 800;
+  letter-spacing: .0625em;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+}
+.btn:hover, .btn:focus { background: var(--primary-hover); color: var(--on-primary); }
+.btn-outline { background: transparent; color: var(--primary); box-shadow: inset 0 0 0 2px var(--primary); }
+.btn-outline:hover, .btn-outline:focus { background: var(--primary); color: var(--on-primary); }
+
+.note { padding: 1rem 1.25rem; border-left: 4px solid var(--note); background: var(--soft); font-size: 1.1rem; }
+.note.warn { border-left-color: var(--warn); }
+section { margin: 2.5rem 0; padding-top: .5rem; border-top: 1px solid var(--border); }
+.muted { color: var(--muted); }
+textarea {
+  width: 100%; min-height: 110px; padding: .75rem;
+  color: var(--fg); background: var(--soft); border: 1px solid var(--border);
+  font: .85rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+table { width: 100%; border-collapse: collapse; font-size: 1rem; }
+td { padding: .5rem .5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+td:first-child { white-space: nowrap; font-weight: 700; }
+@media (max-width: 560px) { td:first-child { white-space: normal; } h1 { font-size: 2rem; } }
+
+/* ライト/ダーク切り替え */
+.theme-toggle {
+  position: fixed; top: 1rem; right: 1rem; z-index: 10;
+  padding: .45rem .8rem; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--bg); color: var(--fg); font-size: .8rem; font-weight: 700; cursor: pointer;
+}
+.theme-toggle:hover { border-color: var(--primary); color: var(--primary); }
+
+/* フッター(Kei's HomePages と同じ構成) */
+.site-footer { border-top: 1px solid var(--border); padding: 3rem 1.5rem; text-align: center; }
+.site-footer ul { list-style: none; padding: 0; margin: 0 0 1rem; display: flex; justify-content: center; gap: .75rem; }
+.site-footer a { color: var(--fg); text-decoration: none; }
+.site-footer a:hover, .site-footer a:focus { color: var(--primary); }
+.site-footer .fa-inverse { color: var(--bg); }
+.site-footer .back { display: inline-block; margin-bottom: 1.5rem; font-weight: 700; text-decoration: underline; text-decoration-color: var(--primary); }
+.site-footer .copy { color: var(--muted); font-size: .875rem; font-style: italic; }

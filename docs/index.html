@@ -2,39 +2,55 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>TETR.IO tools</title>
-  <style>
-    body { max-width: 760px; margin: 48px auto; padding: 0 20px; color: #eaf2ff; background: #0c111b; font: 16px/1.6 system-ui, sans-serif; }
-    a { color: #8fc8ff; }
-    .card { display: block; margin: 16px 0; padding: 16px 20px; border: 1px solid #405979; border-radius: 10px; background: #141d2b; text-decoration: none; color: inherit; }
-    .card:hover { border-color: #8fc8ff; }
-    .card h2 { margin: 0 0 4px; color: #8fc8ff; font-size: 1.2em; }
-    .card p { margin: 0; }
-    .note { padding: 14px 16px; border-left: 4px solid #c60; background: #1d1810; }
-  </style>
+  <script src="assets/theme.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,700;1,400;1,700&family=Open+Sans:ital,wght@0,300;0,400;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/site.css">
+  <script src="https://use.fontawesome.com/releases/v6.3.0/js/all.js" crossorigin="anonymous"></script>
 </head>
 <body>
-  <h1>TETR.IO tools</h1>
-  <p class="note">見た目を変える個人用ツールです。ソロ・リプレイ・OFFLINE で使い、対戦では使わないでください。ゲームの更新で動かなくなることがあります。</p>
+  <main class="container">
+    <h1>TETR.IO tools</h1>
+    <p class="note">見た目を変える個人用ツールです。ゲームの判定や、ほかの人の画面には影響しません。ゲームの更新で動かなくなることがあります。</p>
 
-  <a class="card" href="spin/">
-    <h2>盤面回転</h2>
-    <p>公式 tetr.io の SOLO・リプレイで盤面を回すブックマークレット</p>
-  </a>
+    <div class="post-preview">
+      <a href="spin/">
+        <h2 class="post-title">盤面回転</h2>
+        <h3 class="post-subtitle">公式 tetr.io の盤面を、プレイ範囲(横10×縦20)の中心で回すブックマークレット</h3>
+      </a>
+      <p class="post-meta">SOLO・リプレイ・ルームで使えます。2人以上のときは「それぞれ回す/まとめて回す」を選べます。</p>
+    </div>
+    <hr>
+    <div class="post-preview">
+      <a href="bookmarklets/">
+        <h2 class="post-title">QP OFFLINE</h2>
+        <h3 class="post-subtitle">tetr.io 上で、別タブに OFFLINE 版を起動するブックマークレット</h3>
+      </a>
+      <p class="post-meta">QP・ZEN・ローカル/オンラインリプレイ・端末内保存・OFFLINE 盤面回転。デスクトップ版パッチもこちら。</p>
+    </div>
+    <hr>
+    <div class="post-preview">
+      <h2 class="post-title">パッチ</h2>
+      <ul>
+        <li>v4.8217 デスクトップ版:
+          Mac <a href="patch/v4.8217/tetrio-patch-Mac-vO4.8217.command">vO</a> / <a href="patch/v4.8217/tetrio-patch-Mac-vR4.8217.command">vR</a>、
+          Windows <a href="patch/v4.8217/tetrio-patch-Windows-vO4.8217.cmd">vO</a> / <a href="patch/v4.8217/tetrio-patch-Windows-vR4.8217.cmd">vR</a>、
+          Linux <a href="patch/v4.8217/tetrio-patch-Linux-vO4.8217.sh">vO</a> / <a href="patch/v4.8217/tetrio-patch-Linux-vR4.8217.sh">vR</a></li>
+        <li><a href="patch/v4.8233/QP-Mission-Editor-v6.3.html">QP Mission Editor v6.3</a></li>
+      </ul>
+    </div>
+  </main>
 
-  <a class="card" href="bookmarklets/">
-    <h2>QP OFFLINE</h2>
-    <p>tetr.io 上で別タブに OFFLINE 版を起動するブックマークレット(QP・ZEN・リプレイ・OFFLINE 盤面回転)</p>
-  </a>
-
-  <h2>パッチ</h2>
-  <ul>
-    <li>v4.8217:
-      Linux <a href="patch/v4.8217/tetrio-patch-Linux-vO4.8217.sh">vO</a> / <a href="patch/v4.8217/tetrio-patch-Linux-vR4.8217.sh">vR</a>、
-      Mac <a href="patch/v4.8217/tetrio-patch-Mac-vO4.8217.command">vO</a> / <a href="patch/v4.8217/tetrio-patch-Mac-vR4.8217.command">vR</a>、
-      Windows <a href="patch/v4.8217/tetrio-patch-Windows-vO4.8217.cmd">vO</a> / <a href="patch/v4.8217/tetrio-patch-Windows-vR4.8217.cmd">vR</a></li>
-    <li><a href="patch/v4.8233/QP-Mission-Editor-v6.3.html">QP Mission Editor v6.3</a></li>
-  </ul>
+  <footer class="site-footer">
+    <ul>
+      <li><a href="https://x.com/New_kei1215" aria-label="X"><span class="fa-stack fa-lg"><i class="fas fa-circle fa-stack-2x"></i><i class="fab fa-twitter fa-stack-1x fa-inverse"></i></span></a></li>
+      <li><a href="https://www.youtube.com/@Y_Kei1215" aria-label="YouTube"><span class="fa-stack fa-lg"><i class="fas fa-circle fa-stack-2x"></i><i class="fab fa-youtube fa-stack-1x fa-inverse"></i></span></a></li>
+      <li><a href="https://kei1215.com/" aria-label="Kei's HomePages"><span class="fa-stack fa-lg"><i class="fas fa-circle fa-stack-2x"></i><i class="fas fa-house fa-stack-1x fa-inverse"></i></span></a></li>
+    </ul>
+    <div class="copy">Copyright &copy; Kei's HomePages 2025</div>
+  </footer>
 </body>
 </html>
