@@ -131,7 +131,7 @@
     const parseRsd = buf => {
       const v = new DataView(buf);
       let o = 0;
-      const u8 = () => v.getUint8(o++);
+      const u8 = () => v.getUint8(o++);   // 途中で切れていたら RangeError になり、5秒後に読み直す
       const u32 = () => { const x = v.getUint32(o, true); o += 4; return x; };
       const f32 = () => { const x = v.getFloat32(o, true); o += 4; return x; };
       if (String.fromCharCode(u8(), u8(), u8(), u8()) !== 'tRSD') throw new Error('rsd header');
@@ -148,10 +148,18 @@
     };
     const loadSfx = async () => {
       try {
-        const url = performance.getEntriesByType('resource').map(e => e.name)
-          .find(u => /\/sfx\/tetrio\.[^/?]*\.rsd/.test(u));
-        if (!url) throw new Error('効果音の情報が見つかりません');
-        const map = parseRsd(await (await fetch(url)).arrayBuffer());
+        // ゲームが読み込んだ URL が記録に残っていればそれを、なければ決まった場所(/sfx/tetrio.opus.rsd)を読む。
+        // (読み込み記録は 250 件までしか残らないので、tetr.io では消えていることが多い)
+        // 目録の名前一覧はファイルの先頭にあるので、先頭 128KB だけ読む(全体は約 6MB)
+        let url = '/sfx/tetrio.opus.rsd';
+        try {
+          const seen = performance.getEntriesByType('resource').map(e => e.name)
+            .find(u => /\/sfx\/tetrio\.[^/?]*\.rsd/.test(u));
+          if (seen) url = seen;
+        } catch (e) {}
+        const res = await fetch(url, { headers: { Range: 'bytes=0-131071' } });
+        if (!res.ok) throw new Error('効果音の情報を読めません(' + res.status + ')');
+        const map = parseRsd(await res.arrayBuffer());
         if (map.spin == null || map.spinend == null) throw new Error('スピン音が見つかりません');
         S.sfx = { rotate: map.rotate, irs: map.irs, spin: map.spin, spinend: map.spinend };
         S.sfxError = '';
