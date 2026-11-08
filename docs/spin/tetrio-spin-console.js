@@ -54,9 +54,9 @@
     // ---- 回転入れの検出(読むだけ。キー入力・ゲームの動きは一切変えない) ----
     // ・判定: ミノを置いてスピンと判定されると、TETR.IO は盤面(holder)の中に
     //   「T-spin」「MINI S-spin」などの文字を新しく作る。この文字が出たときだけ数える(効果音の音量は関係ない)
-    // ・向き: スピンになった回転のとき、TETR.IO は盤面をその向きに少しだけ傾ける
-    //   (holderstate.dr += 向き/4。右回転 = +、左回転 = -)。この傾き始めの向きを使う
-    // ・180°回転のスピンは除外する。傾いた瞬間の直前に押した回転キーが 180°なら、そのスピンは数えない
+    // ・向き: 置いた時点より前に本人が最後に押した回転キー(左 / 右 / 180°)。キー設定どおりに読む
+    //   キー入力がないとき(観戦中など)だけ、TETR.IO がスピンの回転で盤面に付ける傾き
+    //   (holderstate.dr += 向き/4。右回転 = +、左回転 = -)の向きを使う
     // ・キー設定は localStorage の userConfig.controls(guideline / wasd / custom + ゲームパッド)
     const PRESET = {
       guideline: {
@@ -238,16 +238,15 @@
           if (!h.__spinReady) continue;   // 起動した時点ですでに出ていた文字は数えない
           const label = o.text.replace(/\f[0-9a-z]{1,2}/gi, '').trim();
           const kick = h.__spinKick && now - h.__spinKick.t < 4000 ? h.__spinKick : null;
-          let d = 0, is180 = false;
-          if (kick) { d = kick.dir; is180 = kick.is180; }
-          else {
-            // 盤面の揺れがオフなどで傾きが見えないときは、直前の回転キー
-            const k = lastKey(4000, now);
-            if (k) { d = k.d; is180 = k.d === 0; }
-          }
+          // 向きは、置いた時点より前に本人が最後に押した回転キー(キー設定どおり)で決める。
+          // キー入力がないとき(観戦中など)だけ、ゲームが付けた盤面の傾きの向きを使う
+          let d = 0, is180 = false, by = '';
+          const k = lastKey(10000, now);
+          if (k) { d = k.d; is180 = k.d === 0; by = 'キー'; }
+          else if (kick) { d = kick.dir; by = '傾き'; }
           h.__spinKick = null;
           const turn = onSpin(d, is180);
-          S.last = `${label}(${is180 ? '180°回転' : d < 0 ? '左' : d > 0 ? '右' : '向き不明'})`;
+          S.last = `${label}(${is180 ? '180°回転' : d < 0 ? '左' : d > 0 ? '右' : '向き不明'}${by ? '・' + by : ''})`;
           S.lastTurn = turn;
         }
         h.__spinReady = true;
