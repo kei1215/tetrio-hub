@@ -13,7 +13,8 @@
 </head>
 <body>
   <main class="container">
-    <h1>TETR.IO Standalone OFFLINE v4.8216</h1>
+    <h1>TETR.IO Standalone OFFLINE v4.8235</h1>
+    <p class="note">2026年11月9日の TETR.IO 更新に合わせた v4.8235 です(デスクトップ版 vO 4.8235 が元)。v4.8216 以前のブックマークは今の TETR.IO では起動しないので、登録し直してください。</p>
     <p>下のボタンをブックマークバーへドラッグしてください。<code>https://tetr.io/</code> を開いてボタンを押すと、別タブにOFFLINEを起動します。</p>
     <p><a id="install" class="btn" href="#">Loading bookmarklet...</a></p>
     <p><button id="copy" class="btn btn-outline" type="button">ブックマークコードをコピー</button> <span id="copy-status" aria-live="polite"></span></p>
@@ -85,11 +86,11 @@
 
   <script>
     let bookmarkCode='';
-    fetch('./tetrio-offline-standalone-v4.8216.txt').then(response => response.text()).then(code => {
+    fetch('./tetrio-offline-standalone-v4.8235.txt').then(response => response.text()).then(code => {
       bookmarkCode=code.trim();
       const link = document.getElementById('install');
       link.href = bookmarkCode;
-      link.textContent = 'OFFLINEを起動 v4.8216';
+      link.textContent = 'OFFLINEを起動 v4.8235';
       document.getElementById('manual').value=bookmarkCode;
     }).catch(() => { document.getElementById('install').textContent = 'Bookmarklet failed to load'; });
     document.getElementById('copy').onclick=async()=>{
