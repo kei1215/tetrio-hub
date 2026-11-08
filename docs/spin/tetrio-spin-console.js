@@ -10,15 +10,18 @@
       center: null,       // まとめて回すときの中心(画面座標)
       holders: [],
       v: 1,               // 実際の回転の向き(-1〜1)。dir に向かってなめらかに変わる
-      follow: false,      // true = 回転入力の多い方向に回す
-      hist: []            // 直近の「実際に回った」回転(-1 = 左回転, 1 = 右回転)
+      mode: 'spin',       // 'spin' = スピン判定のときだけ回す / 'always' = ずっと回す
+      step: 90,           // スピン1回で回す角度(度)
+      target: 0,          // スピンで回すときの目標角度(ラジアン)
+      spinDir: 1,         // スピンで回す向き(多い方)
+      hist: []            // 直近のスピン判定の回転方向(-1 = 左回転, 1 = 右回転)
     };
     const HIST = 20;
 
     // ---- 回転の検出(読むだけ。キー入力・音・ゲームの動きは一切変えない) ----
-    // TETR.IO では、回転が成功したとき(壁やブロックに当たって回れなかったときは除く)だけ
-    // 効果音 "rotate" が鳴る(ホールド中の先行回転 IRS は "irs")。
-    // そこで「回転音が鳴った瞬間」を数え、その直前に押された回転キーの向き(左/右)を割り当てる。
+    // TETR.IO は、回転したときにスピン(T-spin など)と判定すると効果音 "spin" を鳴らす
+    // (同時に盤面を少しだけ揺らす)。判定されなかった回転や、回れなかった回転では鳴らない。
+    // そこで「スピン音が鳴った瞬間」を数え、その直前に押された回転キーの向き(左/右)を割り当てる。
     // ・効果音は1つの音声ファイルにまとまっていて、/sfx/tetrio.*.rsd に音ごとの開始位置が書いてある
     // ・AudioBufferSourceNode.start(時刻, 開始位置, 長さ) の開始位置で、どの音かがわかる
     // ・キー設定は localStorage の userConfig.controls(guideline / wasd / custom + ゲームパッド)
@@ -51,16 +54,15 @@
       bindsAt = performance.now();
       return binds;
     };
-    const decide = () => {
-      if (!S.follow) return;
-      let sum = 0;
-      for (const x of S.hist) sum += x;
-      if (sum !== 0) S.dir = sum > 0 ? 1 : -1;   // 同数なら今の向きのまま
-    };
-    const record = d => {
+    // スピン判定が出たら: その向きを記録し、直近で多い方の向きへ step 度だけ回す
+    const onSpin = d => {
+      if (d === 0) return;   // 180°回転でのスピンには反応しない(数えない・回さない)
       S.hist.push(d);
       if (S.hist.length > HIST) S.hist.shift();
-      decide();
+      let sum = 0;
+      for (const x of S.hist) sum += x;
+      S.spinDir = sum > 0 ? 1 : sum < 0 ? -1 : d;   // 同数ならそのスピンの向き
+      if (S.mode === 'spin' && S.on) S.target += S.spinDir * S.step * Math.PI / 180;
     };
 
     // 押された回転キー(-1 = 左, 1 = 右, 0 = 180°)。音と組み合わせるまで少しの間だけ覚えておく
@@ -69,13 +71,14 @@
       pending.push({ d, t: performance.now() });
       if (pending.length > 8) pending.shift();
     };
-    // 回転音が鳴ったら、直前(rotate は 250ms 以内、IRS は 1.5秒以内)の一番新しい回転キーと組み合わせる
-    const onSound = name => {
-      const now = performance.now(), win = name === 'irs' ? 1500 : 250;
+    // スピン音が鳴ったら、直前(400ms 以内)の一番新しい回転キーと組み合わせて向きを決める。
+    // 180°回転のキーと組み合わさったスピンは onSpin で無視する
+    const onSound = () => {
+      const now = performance.now();
       for (let i = pending.length - 1; i >= 0; i--) {
-        if (now - pending[i].t > win) break;
+        if (now - pending[i].t > 400) break;
         const { d } = pending.splice(i, 1)[0];
-        if (d !== 0) record(d);
+        onSpin(d);
         return;
       }
     };
@@ -110,7 +113,7 @@
     };
 
     // 効果音の目録(.rsd)を読む。形式: "tRSD", uint32 版, uint32 版, 以降 [float32 開始位置, uint32 名前の長さ, 名前] の繰り返し
-    S.sfx = null;          // { rotate: 開始位置, irs: 開始位置 }
+    S.sfx = null;          // { spin: スピン音の開始位置 }
     S.sfxError = '';
     const parseRsd = buf => {
       const v = new DataView(buf);
@@ -136,8 +139,8 @@
           .find(u => /\/sfx\/tetrio\.[^/?]*\.rsd/.test(u));
         if (!url) throw new Error('効果音の情報が見つかりません');
         const map = parseRsd(await (await fetch(url)).arrayBuffer());
-        if (map.rotate == null) throw new Error('回転音が見つかりません');
-        S.sfx = { rotate: map.rotate, irs: map.irs };
+        if (map.spin == null) throw new Error('スピン音が見つかりません');
+        S.sfx = { spin: map.spin };
         S.sfxError = '';
       } catch (e) {
         S.sfxError = String(e.message || e);
@@ -159,8 +162,7 @@
       const near = (a, b) => typeof a === 'number' && b != null && Math.abs(a - b) < 1e-3;
       W.__spinAudio.listener = offset => {
         if (!S.sfx) return;
-        if (near(offset, S.sfx.rotate)) onSound('rotate');
-        else if (near(offset, S.sfx.irs)) onSound('irs');
+        if (near(offset, S.sfx.spin)) onSound();
       };
     }
 
@@ -257,15 +259,16 @@
     range('秒/周', 'sec', 2, 120, 1);
     const sa = range('固定角度', 'angle', 0, 360, 1);
     btn('回転 ON/OFF', () => { S.on = !S.on; });
-    const followLabel = () => '向き: ' + (S.follow ? '回転入力に合わせる' : '固定(逆回転ボタン)');
-    const followBtn = btn(followLabel(), b => {
-      S.follow = !S.follow;
-      decide(); // 今までの入力から向きを決め直す
-      b.textContent = followLabel();
+    const modeLabel = () => '回転: ' + (S.mode === 'spin' ? 'スピン判定のときだけ' : 'ずっと回す');
+    btn(modeLabel(), b => {
+      S.mode = S.mode === 'spin' ? 'always' : 'spin';
+      S.target = S.rot;
+      b.textContent = modeLabel();
     });
-    btn('逆回転', () => { S.follow = false; S.dir *= -1; followBtn.textContent = followLabel(); });
+    range('スピン1回の角度', 'step', 15, 180, 15);
+    btn('逆回転(ずっと回すとき)', () => { S.dir *= -1; });
     btn('固定角度を解除', () => { S.angle = null; sa.value = 0; });
-    btn('角度を0に戻す', () => { S.rot = 0; S.angle = null; sa.value = 0; });
+    btn('角度を0に戻す', () => { S.rot = 0; S.target = 0; S.angle = null; sa.value = 0; });
     const groupLabel = () => '2人以上: ' + (S.group === 'together' ? 'まとめて回す' : 'それぞれ回す');
     btn(groupLabel(), b => { S.group = S.group === 'together' ? 'each' : 'together'; S.center = null; b.textContent = groupLabel(); });
     btn('中心の目印 ON/OFF', () => { S.marker = !S.marker; });
@@ -301,8 +304,17 @@
       last = now;
       pollPads();
       // 向きが変わったら、約0.5秒かけてなめらかに逆向きへ
-      S.v += (S.dir - S.v) * Math.min(1, dt * 4);
-      if (S.on) S.rot = (S.rot + S.v * dt * 2 * Math.PI / S.sec) % (2 * Math.PI);
+      if (S.mode === 'always') {
+        // 逆回転にしたとき、約0.5秒かけてなめらかに向きを変える
+        S.v += (S.dir - S.v) * Math.min(1, dt * 4);
+        if (S.on) S.rot = (S.rot + S.v * dt * 2 * Math.PI / S.sec) % (2 * Math.PI);
+        S.target = S.rot;
+      } else {
+        // スピン判定のときだけ: 目標の角度へ、なめらかに追いつく(通常は止まったまま)
+        S.rot += (S.target - S.rot) * Math.min(1, dt * 6);
+        const TAU = 2 * Math.PI, k = Math.floor(S.target / TAU) * TAU;
+        if (k !== 0 && Math.abs(S.target - S.rot) < 1e-3) { S.target -= k; S.rot -= k; }
+      }
       // holder はゲーム開始・リトライ・ルームの入れ替わりで作り直されるので、ときどき探し直す
       if (n % 30 === 0 || S.holders.some(h => h._destroyed || !h.parent)) {
         let found = [];
@@ -328,8 +340,8 @@
 
       const left = S.hist.filter(x => x < 0).length, right = S.hist.length - left;
       status.textContent = (shown.length ? `盤面: ${shown.length}` : '盤面: なし(ゲーム開始を待っています)') +
-        (S.follow ? (S.sfx ? `\n直近${HIST}回 左${left}/右${right} → ${S.dir < 0 ? '左' : '右'}回転`
-                           : `\n回転音の準備中…${S.sfxError ? '(' + S.sfxError + ')' : ''}`) : '');
+        (S.mode === 'spin' ? (S.sfx ? `\nスピン(直近${HIST}回) 左${left}/右${right} → ${S.spinDir < 0 ? '左' : '右'}へ`
+                                    : `\nスピン音の準備中…${S.sfxError ? '(' + S.sfxError + ')' : ''}`) : '');
       let k = 0;
       if (S.marker) {
         if (S.center) place(k++, S.center);
