@@ -67,7 +67,10 @@
   let queue = [];                // ゲームに入れるキー操作
   const held = new Set();
   const patches = [];            // 元に戻す処理
-  let acc = 0, last = 0, topoutAt = 0;
+  let acc = 0, last = 0;
+  // 1手戻す(Ctrl+Z)用: ミノを置くたびに、次のミノが出た時点の状態を積む。undo[0] は止めた場面
+  let undo = [], redo = [], placed = 0;
+  let deadAt = 0;                // 自滅した時刻(0 = していない)
 
   const alive = n => { try { const h = n.hm.H.holder; return h && !h._destroyed && h.parent; } catch (e) { return false; } };
   const shown = () => {
@@ -94,7 +97,8 @@
     const st = n.gsm.stats;
     base = { attack: st.garbage.attack || 0, lines: st.lines || 0, pieces: st.piecesplaced || 0 };
     S.active = n;
-    queue = []; held.clear(); acc = 0; last = performance.now(); topoutAt = 0;
+    queue = []; held.clear(); acc = 0; last = performance.now(); deadAt = 0;
+    undo = [{ state: snap, frame: snapFrame }]; redo = []; placed = st.piecesplaced || 0;
     const esm = n.esm, elm = n.elm, H = n.lm.H, siom = n.siom;
     // 1) ゲームへの入力: リプレイの記録の代わりに、自分のキー操作を流す
     esm.Pull = function () {
@@ -118,6 +122,14 @@
     const inject0 = siom.InjectState;
     siom.InjectState = function (...a) { if (S.active === n) leave(false); return inject0.apply(this, a); };
     patches.push(() => { siom.InjectState = inject0; });
+    // 4') 自滅(ゲームオーバー)の処理は走らせない。走ると、リプレイ画面がもう片方の盤面を消すなどしてしまう。
+    //     代わりに盤面をその場で止め、少ししてから自滅したミノを置く前に戻す
+    const gom = n.gom, over0 = gom.GameOver;
+    gom.GameOver = function (...a) {
+      if (S.active !== n) return over0.apply(this, a);
+      if (!deadAt) deadAt = performance.now();
+    };
+    patches.push(() => { gom.GameOver = over0; });
     // 4) 記録しない・自分のハンドリング(DAS/ARR/SDF)で動かす。どちらも戻すときに元へ戻る
     n.gsm.setoptions.noreplay = true;
     const hd = config().handling;
@@ -140,18 +152,52 @@
     console.log(TAG, restore ? 'restored' : 'left (seek)');
   };
 
-  // 操作中に R(リトライのキー): 止めたときの状態からやり直す
-  const retry = () => {
+  // 保存した状態へ移る(操作モードのまま)
+  const jump = u => {
     const n = S.active;
-    if (!n || !snap) return;
-    leave(true);
-    enter(n);
+    if (!n || !u) return;
+    S.active = null;   // InjectState の見張りに「シークした」と思わせない
+    try { n.siom.InjectState.call(n.siom, clone(u.state)); n.esm.Seek(u.frame); } catch (e) { console.warn(TAG, 'jump failed', e); }
+    S.active = n;
+    n.gsm.setoptions.noreplay = true;
+    const hd = config().handling;
+    if (hd && typeof hd === 'object') Object.assign(n.gsm.handling, hd);
+    placed = n.gsm.stats.piecesplaced || 0;
+    deadAt = 0; acc = 0; queue = [];
+    // 押しっぱなしの移動・ソフトドロップは、戻した直後にもう一度押した扱いにする(DAS がそのまま続く)。
+    // 回転などは押し直さない(Ctrl+Z の Ctrl が左回転のキーでも、戻した後に回らない)
+    for (const k of held) { const a = getBinds().get(k); if (a === 'moveLeft' || a === 'moveRight' || a === 'softDrop') queue.push({ frame: n.esm.frame, type: 'keydown', data: { key: a, subframe: 0 } }); }
+  };
+  // R(リトライのキー): 止めた場面からやり直す
+  const retry = () => {
+    if (!S.active) return;
+    jump(undo[0]); undo = undo.slice(0, 1); redo = [];
+    S.msg = '止めた場面に戻しました';
+  };
+  // Ctrl+Z: 最後に置いたミノを取り消す / Ctrl+Y: 取り消したミノを置き直す
+  const undoOne = () => {
+    if (!S.active) return;
+    if (undo.length > 1) redo.push(undo.pop());
+    jump(undo[undo.length - 1]);
+    S.msg = undo.length > 1 ? `1手戻しました(あと${undo.length - 1}手戻せます)` : '止めた場面です';
+  };
+  const redoOne = () => {
+    if (!S.active || !redo.length) return;
+    const u = redo.pop();
+    undo.push(u); jump(u);
+    S.msg = '1手進めました';
   };
 
   // ---- キー入力 ----
   const onKey = e => {
     const n = S.active;
-    if (!n || typing(e.target) || e.ctrlKey && e.type === 'keydown' && /^[zy]$/i.test(e.key)) return;
+    if (!n || typing(e.target)) return;
+    // Ctrl+Z / Ctrl+Y(Mac は ⌘ でも)
+    if ((e.ctrlKey || e.metaKey) && /^(KEYZ|KEYY)$/.test(keyName(e))) {
+      e.preventDefault(); e.stopImmediatePropagation();
+      if (e.type === 'keydown' && !e.repeat) (keyName(e) === 'KEYZ' && !e.shiftKey ? undoOne : redoOne)();
+      return;
+    }
     const a = actionOf(e);
     if (!a) return;
     // TETR.IO のリプレイ操作(左右キーのシークなど)へ渡さない
@@ -260,7 +306,7 @@
       S.attack = (st.garbage.attack || 0) - base.attack;
       S.lines = (st.lines || 0) - base.lines;
       S.pieces = (st.piecesplaced || 0) - base.pieces;
-      t = `操作中: ${name(S.active)}\n火力 ${S.attack}(相手には送りません)\nライン ${S.lines} / ミノ ${S.pieces}\n再生ボタンで元の場面に戻ります`;
+      t = `操作中: ${name(S.active)}\n火力 ${S.attack}(相手には送りません)\nライン ${S.lines} / ミノ ${S.pieces}\nCtrl+Z 1手戻す / Ctrl+Y 進める / R 最初から\n再生ボタンで元の場面に戻ります`;
     } else if (!list.length) {
       t = games.length ? 'リプレイを開くと使えます' : 'リプレイを開くと使えます\n(このブックマークを押したあとに開いたリプレイが対象。開いていたら開き直してください)';
     } else t = `リプレイ: ${list.length}人\n一時停止すると操作できます`;
@@ -283,11 +329,28 @@
         // 60 フレーム/秒でゲームを進める(一時停止中なので TETR.IO 自身は進めない)
         acc += Math.min(100, now - last) / 1000;
         let steps = 0;
-        while (acc >= 1 / 60 && steps < 6) { acc -= 1 / 60; steps++; n.lm.Update(); }
-        if (!n.gsm.playing) {
-          // 積み上がって終わったら、少し見せてから止めた場面に戻す
-          if (!topoutAt) topoutAt = now;
-          else if (now - topoutAt > 1200) retry();
+        while (!deadAt && acc >= 1 / 60 && steps < 6) {
+          acc -= 1 / 60; steps++;
+          n.lm.Update();
+          const p = n.gsm.stats.piecesplaced || 0;
+          if (p !== placed && !deadAt) {
+            // ミノを置いた: 次のミノが出たこの時点を、1手戻す先として積む
+            placed = p;
+            try { undo.push({ state: n.siom.EjectState(), frame: n.esm.frame }); } catch (e) {}
+            if (undo.length > 300) undo.splice(1, 1);
+            redo = [];
+          }
+        }
+        if (deadAt) {
+          acc = 0;
+          S.msg = '自滅しました。置く前に戻します';
+          // 少し見せてから、自滅したミノを置く前へ戻す
+          if (now - deadAt > 900) {
+            const top = undo[undo.length - 1];
+            if (undo.length > 1 && n.esm.frame - top.frame <= 2) undo.pop();   // 置いた直後に自滅したら、その置いた後の状態は使わない
+            jump(undo[undo.length - 1]);
+            S.msg = '自滅したので、置く前に戻しました';
+          }
         }
       }
       last = now;

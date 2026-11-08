@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TETR.IO リプレイ盤面修正</title>
+  <script src="../assets/theme.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,700;1,400;1,700&family=Open+Sans:ital,wght@0,300;0,400;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/site.css">
+  <script src="https://use.fontawesome.com/releases/v6.3.0/js/all.js" crossorigin="anonymous"></script>
+</head>
+<body>
+  <main class="container">
+    <h1>TETR.IO リプレイ盤面修正</h1>
+    <p class="note">盤面回転・QP OFFLINE とは別のブックマークレットです。公式の <code>https://tetr.io/</code> のリプレイを<strong>一時停止すると、その場面から自分で操作</strong>できます。<strong>再生ボタンを押すと、止めたときの場面に戻ってから</strong>リプレイが続きます。使えるのはリプレイの中だけで、対戦中やルームの盤面には何もしません。</p>
+
+    <h2>登録</h2>
+    <p>下のボタンを<strong>ブックマークバーへドラッグ</strong>してください(このページでクリックしても動きません)。</p>
+    <p><a id="bmA" class="btn" href="#">盤面修正</a></p>
+    <p class="muted">上が動かないときの代替: <a id="bmB" class="btn btn-outline" href="#">盤面修正(fetch版)</a></p>
+    <p><button id="copy" class="btn btn-outline" type="button">ブックマークコードをコピー</button> <span id="copy-status" aria-live="polite"></span></p>
+
+    <section>
+      <h2>使い方(PC)</h2>
+      <ol>
+        <li><code>https://tetr.io/</code> を開き、<strong>リプレイを開く前に</strong>ブックマークをクリックします(左上に「リプレイ盤面修正」のパネルが出ます)。</li>
+        <li>リプレイを開きます。すでに開いていたときは、一度閉じて開き直してください。押したあとに開いたリプレイが対象です。</li>
+        <li>リプレイを<strong>一時停止</strong>します。パネルが「操作中」になり、その場面の盤面・操作中のミノ・HOLD・NEXT のまま、ふだんのキー設定(TETR.IO の設定どおり)で操作できます。DAS・ARR などのハンドリングも自分の設定です。</li>
+        <li><strong>再生ボタン</strong>を押すと、止めた場面に戻ってからリプレイが続きます。シークバーやフレーム送りで移動したときも、元の状態に戻ります。</li>
+      </ol>
+      <ul>
+        <li>操作中は、キー設定で使っているキーを TETR.IO のリプレイ操作に渡しません。左右キーでシークバーが動いたり、スペース(ハードドロップ)で再生が始まったりはしません。再生はマウスで再生ボタンを押してください。</li>
+        <li><strong>リトライのキー(R)</strong>か、パネルの「止めた場面からやり直す」で、止めた場面から何度でもやり直せます。積み上がって終わったときも、少しして止めた場面に戻ります。</li>
+        <li>操作中の<strong>火力はパネルに表示</strong>しますが、<strong>相手には送りません</strong>(相手の盤面は止まったままです)。</li>
+        <li>2人のリプレイでは、パネルの「操作する盤面」で左右を切り替えます。</li>
+        <li>「止めたら操作: OFF」にすると、止めてもふつうのリプレイのままです。</li>
+      </ul>
+      <p><strong>更新は自動です。</strong>30秒ごとに新しい版を確かめ、出ていれば読み込み直します(操作中は待ちます)。</p>
+    </section>
+
+    <section>
+      <h2>fumen で開く</h2>
+      <p>パネルの「fumen で今の盤面を開く」で、今の盤面を<a href="https://fumen.zui.jp/">連続テト譜エディタ(fumen)</a>で開きます(盤面だけ。操作中のミノ・NEXT・HOLD は入りません)。</p>
+    </section>
+
+    <section>
+      <h2>操作パネル</h2>
+      <table>
+        <tr><td>止めたら操作: ON / OFF</td><td>一時停止したときに操作できるようにするか</td></tr>
+        <tr><td>操作する盤面</td><td>2人のリプレイで、どちらの盤面を操作するか(押すと切り替え)</td></tr>
+        <tr><td>止めた場面からやり直す(R)</td><td>操作した分を消して、止めた場面に戻します</td></tr>
+        <tr><td>fumen で今の盤面を開く</td><td>新しいタブで fumen を開きます</td></tr>
+        <tr><td>パネルを閉じる</td><td>左上の小さな「盤面修正」ボタンになります。押すと開きます</td></tr>
+      </table>
+      <p>ゲームパッドでの操作には、まだ対応していません。</p>
+    </section>
+
+    <section>
+      <h2>手動コピー用</h2>
+      <textarea id="manual" readonly>Loading…</textarea>
+      <p>本体: <a href="tetrio-replay-edit.js">tetrio-replay-edit.js</a>(開発者ツールのコンソールに貼っても動きます)</p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <a class="back" href="../">← TETR.IO tools</a>
+    <ul>
+      <li><a href="https://x.com/New_kei1215" aria-label="X"><span class="fa-stack fa-lg"><i class="fas fa-circle fa-stack-2x"></i><i class="fab fa-twitter fa-stack-1x fa-inverse"></i></span></a></li>
+      <li><a href="https://www.youtube.com/@Y_Kei1215" aria-label="YouTube"><span class="fa-stack fa-lg"><i class="fas fa-circle fa-stack-2x"></i><i class="fab fa-youtube fa-stack-1x fa-inverse"></i></span></a></li>
+      <li><a href="https://kei1215.com/" aria-label="Kei's HomePages"><span class="fa-stack fa-lg"><i class="fas fa-circle fa-stack-2x"></i><i class="fas fa-house fa-stack-1x fa-inverse"></i></span></a></li>
+    </ul>
+    <div class="copy">Copyright &copy; Kei's HomePages 2025</div>
+  </footer>
+
+  <script>
+    const url = new URL('tetrio-replay-edit.js', location.href).href;
+    const a = "javascript:(()=>{if(location.hostname!=='tetr.io')return alert('https://tetr.io/ で実行してください');const s=document.createElement('script');s.src='" + url + "?v='+Date.now();s.onerror=()=>alert('load failed');document.head.appendChild(s)})();";
+    const b = "javascript:(()=>{if(location.hostname!=='tetr.io')return alert('https://tetr.io/ で実行してください');fetch('" + url + "?v='+Date.now()).then(r=>r.text()).then(t=>(0,eval)(t)).catch(e=>alert('load failed: '+e))})();";
+    document.getElementById('bmA').href = a;
+    document.getElementById('bmB').href = b;
+    document.getElementById('manual').value = a;
+    for (const id of ['bmA', 'bmB']) document.getElementById(id).addEventListener('click', e => { e.preventDefault(); alert('ブックマークバーへドラッグして登録し、tetr.io で実行してください。'); });
+    document.getElementById('copy').onclick = async () => {
+      const status = document.getElementById('copy-status');
+      try { await navigator.clipboard.writeText(a); status.textContent = 'コピーしました'; }
+      catch (e) { document.getElementById('manual').select(); status.textContent = '自動コピーできませんでした。下の欄からコピーしてください。'; }
+    };
+  </script>
+</body>
+</html>
