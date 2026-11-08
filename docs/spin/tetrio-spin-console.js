@@ -4,7 +4,7 @@
   const SRC = 'https://kei1215.github.io/tetrio-hub/spin/tetrio-spin-console.js';
   // いま実行しているこのファイル自身の URL(script タグで読んだとき)
   const ME = document.currentScript && document.currentScript.src;
-  const KEEP = ['on', 'sec', 'dir', 'angle', 'marker', 'group', 'mode', 'step', 'spinDir', 'rot', 'target', 'panelClosed'];
+  const KEEP = ['on', 'sec', 'dir', 'angle', 'marker', 'group', 'mode', 'step', 'spinDir', 'big', 'alt', 'rot', 'target', 'panelClosed'];
 
   // すでに動いている版があれば片付けてから起動し直す(設定は引き継ぐ)
   // 自動更新で読み込まれたときは updated = true(パネルの開閉もそのまま)。
@@ -45,6 +45,8 @@
       step: 90,           // スピン1回で回す角度(度)
       target: 0,          // スピンで回すときの目標角度(ラジアン)
       spinDir: 1,         // 最後の回転入れの向き
+      big: 180,           // 180°回転の回転入れで回す角度(180 か 360)
+      alt: -1,            // 180°回転の回転入れの向き。毎回反対にする(最初は右)
       panelClosed: false
     };
     for (const k of KEEP) if (k in keep) S[k] = keep[k];
@@ -87,10 +89,22 @@
     };
     // スピン判定が出たら: その向きを記録し、直近で多い方の向きへ step 度だけ回す
     // 回転入れが出たら、その回転入れ(最後の回転)の向きへ step 度だけ回す。重み付けはしない
-    const onSpin = d => {
-      if (d === 0) return;   // 180°回転でのスピン、向きがわからないものには反応しない
-      S.spinDir = d;
-      if (S.mode === 'spin' && S.on) S.target += d * S.step * Math.PI / 180;
+    // 回転入れが出たら回す。重み付けはしない
+    //  ・ふつうの回転入れ: その回転入れ(最後の回転)の向きへ step 度
+    //  ・180°回転の回転入れ: big 度(180 か 360)。向きは毎回 右 → 左 → 右 … と交互
+    // 回した向きと角度を返す(回さないときは 0)
+    const onSpin = (d, is180) => {
+      let turn = 0;
+      if (is180) {
+        S.alt = -S.alt;
+        turn = S.alt * S.big;
+      } else if (d !== 0) {
+        turn = d * S.step;
+      }
+      if (turn === 0) return 0;
+      S.spinDir = Math.sign(turn);
+      if (S.mode === 'spin' && S.on) S.target += turn * Math.PI / 180;
+      return turn;
     };
 
     // 押された回転キー(-1 = 左, 1 = 右, 0 = 180°)を少しの間だけ覚えておく
@@ -224,18 +238,17 @@
           if (!h.__spinReady) continue;   // 起動した時点ですでに出ていた文字は数えない
           const label = o.text.replace(/\f[0-9a-z]{1,2}/gi, '').trim();
           const kick = h.__spinKick && now - h.__spinKick.t < 4000 ? h.__spinKick : null;
-          let d = 0, why = '';
-          if (kick) { d = kick.is180 ? 0 : kick.dir; why = kick.is180 ? '180°' : ''; }
+          let d = 0, is180 = false;
+          if (kick) { d = kick.dir; is180 = kick.is180; }
           else {
-            // 盤面の揺れがオフなどで傾きが見えないときは、直前の回転キーの向き
+            // 盤面の揺れがオフなどで傾きが見えないときは、直前の回転キー
             const k = lastKey(4000, now);
-            d = k ? k.d : 0;
-            why = k ? (k.d === 0 ? '180°' : '') : '向き不明';
+            if (k) { d = k.d; is180 = k.d === 0; }
           }
           h.__spinKick = null;
-          S.last = `${label}(${d < 0 ? '左' : d > 0 ? '右' : why})`;
-          S.lastDir = d;
-          onSpin(d);
+          const turn = onSpin(d, is180);
+          S.last = `${label}(${is180 ? '180°回転' : d < 0 ? '左' : d > 0 ? '右' : '向き不明'})`;
+          S.lastTurn = turn;
         }
         h.__spinReady = true;
       }
@@ -293,6 +306,8 @@
       b.textContent = modeLabel();
     });
     range('スピン1回の角度', 'step', 15, 180, 15);
+    const bigLabel = () => '180°回転の回転入れ: ' + S.big + '°(交互)';
+    btn(bigLabel(), b => { S.big = S.big === 180 ? 360 : 180; b.textContent = bigLabel(); });
     btn('逆回転(ずっと回すとき)', () => { S.dir *= -1; });
     btn('固定角度を解除', () => { S.angle = null; sa.value = 0; });
     btn('角度を0に戻す', () => { S.rot = 0; S.target = 0; S.angle = null; sa.value = 0; });
@@ -367,7 +382,7 @@
       }
 
       status.textContent = (shown.length ? `盤面: ${shown.length}` : '盤面: なし(ゲーム開始を待っています)') +
-        (S.mode === 'spin' ? '\n回転入れ: ' + (S.last ? `${S.last} → ${S.lastDir < 0 ? '左へ' : S.lastDir > 0 ? '右へ' : '回さない'}` : 'まだなし') : '');
+        (S.mode === 'spin' ? '\n回転入れ: ' + (S.last ? `${S.last} → ${S.lastTurn ? (S.lastTurn < 0 ? '左へ' : '右へ') + Math.abs(S.lastTurn) + '°' : '回さない'}` : 'まだなし') : '');
       let k = 0;
       if (S.marker) {
         if (S.center) place(k++, S.center);
