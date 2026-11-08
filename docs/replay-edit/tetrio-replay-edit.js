@@ -35,6 +35,7 @@
     wasd: { moveLeft: ['A', 'KEYA', 'NUMPAD4'], moveRight: ['D', 'KEYD', 'NUMPAD6'], softDrop: ['W', 'KEYW', 'NUMPAD8'], hardDrop: ['S', 'KEYS', 'NUMPAD5'], rotateCCW: ['ARROWLEFT', 'LEFT', 'NUMPAD7'], rotateCW: ['ARROWRIGHT', 'RIGHT', 'NUMPAD9'], rotate180: ['ARROWUP', 'UP', 'NUMPAD2'], hold: ['SHIFT', 'SHIFTLEFT', 'NUMPADENTER'], retry: ['R', 'KEYR'] }
   };
   const ACTIONS = ['moveLeft', 'moveRight', 'softDrop', 'hardDrop', 'rotateCCW', 'rotateCW', 'rotate180', 'hold', 'retry'];
+  const typing = t => t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
   const config = () => { try { return JSON.parse(localStorage.getItem('userConfig') || '{}'); } catch (e) { return {}; } };
   let binds = null, bindsAt = 0;
   const getBinds = () => {
@@ -78,6 +79,11 @@
   const name = n => String(n.gsm.setoptions.username || '?').toUpperCase();
   const clone = o => structuredClone(o);
 
+  const unfocus = () => {
+    const a = document.activeElement;
+    if (a && a !== document.body && !typing(a) && a.blur) a.blur();
+  };
+
   // ---- 操作モード ----
   const enter = n => {
     if (S.active) return;
@@ -116,6 +122,8 @@
     n.gsm.setoptions.noreplay = true;
     const hd = config().handling;
     if (hd && typeof hd === 'object') Object.assign(n.gsm.handling, hd);
+    // 再生ボタンなどにフォーカスが残っていると、スペース(ハードドロップ)でそのボタンが押されてしまうので外す
+    unfocus();
     S.msg = '';
     console.log(TAG, 'play', name(n), 'frame', snapFrame);
   };
@@ -141,7 +149,6 @@
   };
 
   // ---- キー入力 ----
-  const typing = t => t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
   const onKey = e => {
     const n = S.active;
     if (!n || typing(e.target) || e.ctrlKey && e.type === 'keydown' && /^[zy]$/i.test(e.key)) return;
@@ -150,7 +157,9 @@
     // TETR.IO のリプレイ操作(左右キーのシークなど)へ渡さない
     e.preventDefault();
     e.stopImmediatePropagation();
+    unfocus();
     const k = keyName(e);
+    if (e.type === 'keypress') return;
     if (e.type === 'keydown') {
       if (held.has(k)) return;
       held.add(k);
@@ -164,6 +173,7 @@
   };
   addEventListener('keydown', onKey, true);
   addEventListener('keyup', onKey, true);
+  addEventListener('keypress', onKey, true);
   const onBlur = () => {
     const n = S.active;
     if (!n) return held.clear();
@@ -208,6 +218,7 @@
     for (let i = 42; i < s.length; i += 47) r += '?' + s.slice(i, i + 47);
     return 'v115@' + r;
   };
+  S.fumen = n => fumenOf(n || S.active || shown()[0]);
 
   // ---- パネル ----
   const css = 'position:fixed;z-index:2147483646;font:12px/1.4 system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.82);border:1px solid #0085a1;border-radius:6px;';
@@ -291,6 +302,7 @@
     cancelAnimationFrame(raf);
     removeEventListener('keydown', onKey, true);
     removeEventListener('keyup', onKey, true);
+    removeEventListener('keypress', onKey, true);
     removeEventListener('blur', onBlur);
     clearInterval(W.__rpeUpd);
     panel.remove(); mini.remove();
