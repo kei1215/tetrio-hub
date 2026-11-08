@@ -14,14 +14,16 @@
       step: 90,           // スピン1回で回す角度(度)
       target: 0,          // スピンで回すときの目標角度(ラジアン)
       spinDir: 1,         // スピンで回す向き(多い方)
-      hist: []            // 直近のスピン判定の回転方向(-1 = 左回転, 1 = 右回転)
+      hist: []            // 直近の回転入れ(置いたときのスピン判定)の向き(-1 = 左回転, 1 = 右回転)
     };
     const HIST = 20;
 
     // ---- 回転の検出(読むだけ。キー入力・音・ゲームの動きは一切変えない) ----
-    // TETR.IO は、回転したときにスピン(T-spin など)と判定すると効果音 "spin" を鳴らす
-    // (同時に盤面を少しだけ揺らす)。判定されなかった回転や、回れなかった回転では鳴らない。
-    // そこで「スピン音が鳴った瞬間」を数え、その直前に押された回転キーの向き(左/右)を割り当てる。
+    // TETR.IO のスピン判定は2段階:
+    //  1) 回転した瞬間にスピンの形になると "spin" を鳴らす(この時点ではまだ候補。動かすと取り消される)
+    //  2) ミノを置いたとき、スピンの印が残っていれば "spinend" を鳴らし「T-SPIN」と表示する(= 回転入れの判定)
+    // ふつうの回転は "rotate"(先行回転は "irs")。
+    // そこで "spin" のときに直前の回転キーの向きを候補として覚え、"spinend" が鳴ったときだけ数えて回す。
     // ・効果音は1つの音声ファイルにまとまっていて、/sfx/tetrio.*.rsd に音ごとの開始位置が書いてある
     // ・AudioBufferSourceNode.start(時刻, 開始位置, 長さ) の開始位置で、どの音かがわかる
     // ・キー設定は localStorage の userConfig.controls(guideline / wasd / custom + ゲームパッド)
@@ -71,15 +73,26 @@
       pending.push({ d, t: performance.now() });
       if (pending.length > 8) pending.shift();
     };
-    // スピン音が鳴ったら、直前(400ms 以内)の一番新しい回転キーと組み合わせて向きを決める。
-    // 180°回転のキーと組み合わさったスピンは onSpin で無視する
-    const onSound = () => {
-      const now = performance.now();
-      for (let i = pending.length - 1; i >= 0; i--) {
-        if (now - pending[i].t > 400) break;
-        const { d } = pending.splice(i, 1)[0];
-        onSpin(d);
+    // 候補の向き(-1 = 左, 1 = 右, 0 = 180°, null = 候補なし)
+    let candidate = null;
+    const onSound = name => {
+      if (name === 'rotate' || name === 'irs') { candidate = null; return; }   // 新しい回転で候補は消える
+      if (name === 'spin') {
+        // 直前(400ms 以内)の一番新しい回転キーの向きを、スピン候補として覚えるだけ
+        candidate = null;
+        const now = performance.now();
+        for (let i = pending.length - 1; i >= 0; i--) {
+          if (now - pending[i].t > 400) break;
+          candidate = pending.splice(i, 1)[0].d;
+          break;
+        }
         return;
+      }
+      if (name === 'spinend') {
+        // 置いたときにスピン判定 = 回転入れ。候補の向きで数えて回す(180°は onSpin で無視)
+        const d = candidate;
+        candidate = null;
+        if (d != null) onSpin(d);
       }
     };
 
@@ -113,7 +126,7 @@
     };
 
     // 効果音の目録(.rsd)を読む。形式: "tRSD", uint32 版, uint32 版, 以降 [float32 開始位置, uint32 名前の長さ, 名前] の繰り返し
-    S.sfx = null;          // { spin: スピン音の開始位置 }
+    S.sfx = null;          // { rotate, irs, spin, spinend: 各効果音の開始位置 }
     S.sfxError = '';
     const parseRsd = buf => {
       const v = new DataView(buf);
@@ -139,8 +152,8 @@
           .find(u => /\/sfx\/tetrio\.[^/?]*\.rsd/.test(u));
         if (!url) throw new Error('効果音の情報が見つかりません');
         const map = parseRsd(await (await fetch(url)).arrayBuffer());
-        if (map.spin == null) throw new Error('スピン音が見つかりません');
-        S.sfx = { spin: map.spin };
+        if (map.spin == null || map.spinend == null) throw new Error('スピン音が見つかりません');
+        S.sfx = { rotate: map.rotate, irs: map.irs, spin: map.spin, spinend: map.spinend };
         S.sfxError = '';
       } catch (e) {
         S.sfxError = String(e.message || e);
@@ -162,7 +175,9 @@
       const near = (a, b) => typeof a === 'number' && b != null && Math.abs(a - b) < 1e-3;
       W.__spinAudio.listener = offset => {
         if (!S.sfx) return;
-        if (near(offset, S.sfx.spin)) onSound();
+        for (const name of ['rotate', 'irs', 'spin', 'spinend']) {
+          if (near(offset, S.sfx[name])) { onSound(name); break; }
+        }
       };
     }
 
