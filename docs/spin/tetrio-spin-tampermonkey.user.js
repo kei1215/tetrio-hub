@@ -17,19 +17,26 @@
       path: [3, 2]
     };
     const g = p => p.reduce((o, i) => o.children[i], W.__stage);
-    const center = b => {
-      const l = b.getLocalBounds();
-      return {
-        x: b.x + (l.x + l.width / 2 - b.pivot.x) * b.scale.x,
-        y: b.y + (l.y + l.height / 2 - b.pivot.y) * b.scale.y
-      };
+    // ゲーム内の座標(renderer.screen 単位)と、ページ上の座標(CSS px)の変換
+    const view = () => W.__renderer && W.__renderer.view;
+    const toClient = p => {
+      const v = view();
+      if (!v || !v.getBoundingClientRect) return p;
+      const r = v.getBoundingClientRect(), s = W.__renderer.screen;
+      return { x: r.left + p.x * r.width / s.width, y: r.top + p.y * r.height / s.height };
+    };
+    const fromClient = (x, y) => {
+      const v = view();
+      if (!v || !v.getBoundingClientRect) return { x, y };
+      const r = v.getBoundingClientRect(), s = W.__renderer.screen;
+      return { x: (x - r.left) * s.width / r.width, y: (y - r.top) * s.height / r.height };
     };
     const attach = c => {
       if (c.__w) return;
       c.__w = 1;
       const o = c.updateTransform;
       c.updateTransform = function () {
-        if (!S.on || !S.ready || !S.cur) return o.call(this);
+        if (!S.on || !S.ready || !S.cur || S.measuring) return o.call(this);
         const cx = S.cur.cx, cy = S.cur.cy;
         const px = this.pivot.x, py = this.pivot.y;
         const x = this.position.x, y = this.position.y, r = this.rotation;
@@ -78,16 +85,36 @@
       return b;
     };
     range('秒/周', 'sec', 2, 120, 1);
-    range('X補正', 'ox', -400, 400, 1);
-    range('Y補正', 'oy', -400, 400, 1);
+    const sx = range('X補正', 'ox', -400, 400, 1);
+    const sy = range('Y補正', 'oy', -400, 400, 1);
     range('固定角度', 'angle', 0, 360, 1);
     btn('回転 ON/OFF', () => { S.on = !S.on; });
     btn('逆回転', () => { S.dir *= -1; });
     btn('固定角度を解除', () => { S.angle = null; });
-    btn('中心: 自動/手動', () => {
-      if (S.auto && S.base) { S.cx = S.base.cx; S.cy = S.base.cy; }
-      S.auto = !S.auto;
+    btn('中心をクリックで指定', () => {
+      if (document.getElementById('__spinpick')) return;
+      const ov = document.createElement('div');
+      ov.id = '__spinpick';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:2147483645;cursor:crosshair;background:#0003;color:#fff;font:bold 18px sans-serif;display:flex;align-items:flex-start;justify-content:center;padding-top:40px;text-shadow:0 0 4px #000';
+      ov.textContent = '回転の中心にしたい場所をクリック(Esc で中止)';
+      const done = () => { ov.remove(); document.removeEventListener('keydown', esc, true); };
+      const esc = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(); } };
+      ov.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        try {
+          // 表示中(回転込み)の変換の逆変換で、クリック位置を盤面側の座標に直す
+          const p = g(S.path).worldTransform.applyInverse(fromClient(e.clientX, e.clientY));
+          S.cx = p.x; S.cy = p.y; S.auto = false;
+          S.ox = S.oy = 0; sx.value = sy.value = 0;
+          S.base = { cx: p.x, cy: p.y };
+        } catch (err) { console.warn('[spin] center pick failed', err); }
+        done();
+      });
+      document.addEventListener('keydown', esc, true);
+      document.body.append(ov);
     });
+    btn('中心を自動に戻す', () => { S.auto = true; S.base = null; });
     btn('中心の目印 ON/OFF', () => { S.marker = !S.marker; });
     btn('パネルを閉じる', () => panel.remove());
     document.body.append(panel);
@@ -109,12 +136,13 @@
         attach(g(S.path));
         if (!S.base || Math.floor(n / 10) * 10 === n) {
           if (S.auto) {
-            const pts = g(S.path).children.filter(c => c.width > 0).map(center);
-          if (!pts.length) throw new Error('no board');
-            S.base = {
-              cx: pts.reduce((a, p) => a + p.x, 0) / pts.length,
-              cy: pts.reduce((a, p) => a + p.y, 0) / pts.length
-            };
+            // 部品ごとの中心の平均ではなく、全体を囲む枠の中心を使う
+            // (HOLD と NEXT が左右にあるので、盤面の中心に近くなる)
+            S.measuring = true;
+            let l;
+            try { l = g(S.path).getLocalBounds(); } finally { S.measuring = false; }
+            if (!(l.width > 0 && l.height > 0)) throw new Error('no board');
+            S.base = { cx: l.x + l.width / 2, cy: l.y + l.height / 2 };
           } else {
             S.base = { cx: S.cx, cy: S.cy };
           }
@@ -127,8 +155,9 @@
       n++;
       mk.style.display = S.marker && S.screen ? 'block' : 'none';
       if (S.screen) {
-        mk.style.left = S.screen.x + 'px';
-        mk.style.top = S.screen.y + 'px';
+        const p = toClient(S.screen);
+        mk.style.left = p.x + 'px';
+        mk.style.top = p.y + 'px';
       }
       S.id = requestAnimationFrame(loop);
     };
