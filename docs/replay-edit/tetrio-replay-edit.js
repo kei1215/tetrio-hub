@@ -99,6 +99,7 @@
       snap = n.siom.EjectState();
     } catch (e) { S.msg = '状態を保存できませんでした'; return; }
     snapFrame = n.esm.frame;
+    S.snapFrame = snapFrame;   // スピンカウンターが「止めたフレームまではリプレイの分」を数えるのに使う
     const st = n.gsm.stats;
     base = { attack: st.garbage.attack || 0, lines: st.lines || 0, pieces: st.piecesplaced || 0 };
     S.active = n;

@@ -66,6 +66,11 @@
   // 1フレームごと(ゲームがフレームを進める直前)に呼ばれる
   const observe = (n, rec) => {
     const st = n.gsm, f = n.esm.frame;
+    if (!rec.tlChecked && st.started !== false) {
+      rec.tlChecked = true;
+      const rep = replayOf(n);
+      if (rep && headless(n)) timelines.set(rep, rec);
+    }
     const now = read(st);
     // 戻った(リプレイのシーク・盤面修正で元に戻した・新しいゲーム): その先の記録を消して、今を基準にする
     if (f < rec.frame || !rec.last || now.pieces < rec.last.pieces) {
@@ -98,9 +103,38 @@
     rec.last = now; rec.frame = f;
     rec.type = st.falling && st.falling.type;
   };
-  const tally = rec => {
+  // ---- リプレイ全体の一覧 ----
+  // TETR.IO はリプレイを開くと、シーク用の保存を作るために、裏の(画面に出ない)ゲームでリプレイを最初から最後まで計算する。
+  // その裏のゲームも同じように見て、「何フレーム目に何を置いたか」の一覧を作っておく(リプレイのデータごと)。
+  // 画面のリプレイは、この一覧のうち今のフレームまでの分を数える。どこへ飛ばしても正しい数になる
+  const timelines = W.__scTimelines || (W.__scTimelines = new WeakMap());
+  // 内部オブジェクトに .esm(フレームを進める係)が入った瞬間にフックを付ける(裏のゲームは作られてすぐ計算が始まるため)
+  const esmTrap = Object.getOwnPropertyDescriptor(Object.prototype, 'esm');
+  if (esmTrap && esmTrap.set && esmTrap.set.__sc) delete Object.prototype.esm;   // 前の版の受け口は外す
+  const esmSet = function (v) {
+    Object.defineProperty(this, 'esm', { value: v, writable: true, configurable: true, enumerable: true });
+    try { if (this && this.W && this.T && 'Wh' in this && this.gsm) watch(this); } catch (e) {}
+  };
+  esmSet.__sc = true;
+  Object.defineProperty(Object.prototype, 'esm', { configurable: true, enumerable: false, get() { return undefined; }, set: esmSet });
+  const headless = n => { try { return !!(n.iom && n.iom.IsHeadless && n.iom.IsHeadless()); } catch (e) { return false; } };
+  const replayOf = n => { try { return n.esm && n.esm.replay; } catch (e) { return null; } };
+  // 画面の盤面について、数える対象のできごと
+  const eventsFor = n => {
+    const own = watch(n);
+    const rep = replayOf(n);
+    const tl = rep && !headless(n) && timelines.get(rep);
+    if (!tl || tl === own) return own.events;
+    // リプレイ盤面修正で操作中: 止めたフレームまではリプレイの一覧、その先は自分で置いた分
+    const rpe = W.__rpe, practice = rpe && rpe.active === n;
+    const limit = practice ? rpe.snapFrame : n.esm.frame;
+    const list = tl.events.filter(e => e.frame <= limit);
+    return practice ? list.concat(own.events.filter(e => e.frame > limit)) : list;
+  };
+
+  const tally = events => {
     const c = { spin: 0, spinMini: 0, byLines: [0, 0, 0, 0, 0], byPiece: {}, t: 0, tspin: 0, tmini: 0, quad: 0 };
-    for (const e of rec.events) {
+    for (const e of events) {
       if (e.agg) {
         c.spin += e.spins; c.spinMini += e.mini; c.quad += e.quad;
         e.byLines.forEach((v, i) => { c.byLines[i] += v; });
@@ -167,7 +201,7 @@
       html = '<div style="opacity:.8">ゲームが始まると数えます<br>(このブックマークを押したあとに始まったゲーム・開いたリプレイが対象)</div>';
     } else {
       html = list.map(n => {
-        const c = tally(watch(n));
+        const c = tally(eventsFor(n));
         const rows = [];
         rows.push(`<div style="font-weight:700">${esc(name(n))}</div>`);
         rows.push(`<div>SPIN <b style="font-size:15px">${c.spin}</b>${c.spinMini ? ` <span style="opacity:.75">(MINI ${c.spinMini})</span>` : ''}</div>`);
@@ -203,6 +237,7 @@
     panel.remove(); mini.remove();
     // フックは外す。記録(n.__sc.events)は残すので、押し直しても数え直さない
     for (const n of games) { try { n.__sc && n.__sc.restore(); } catch (e) {} }
+    if (Object.getOwnPropertyDescriptor(Object.prototype, 'esm')?.set === esmSet) delete Object.prototype.esm;
     W.__scTeardown = null;
     return { byLines: S.byLines, byPiece: S.byPiece, panelClosed: upd ? S.panelClosed : false };
   };
