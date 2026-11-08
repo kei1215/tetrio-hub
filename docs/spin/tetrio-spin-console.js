@@ -157,7 +157,8 @@
       walk(W.__stage, 0);
       return out;
     };
-    const visible = h => !h._destroyed && h.parent && h.worldVisible;
+    // 表示中の盤面だけ(QP などでは、大きさ 0 の見えない盤面がたくさんある)
+    const visible = h => !h._destroyed && h.parent && h.worldVisible && h.scale && Math.abs(h.scale.x) > 0.01;
     const angleNow = () => (S.angle != null ? S.angle * Math.PI / 180 : S.rot);
     const active = () => S.on || S.angle != null;
 
