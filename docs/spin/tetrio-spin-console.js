@@ -5,13 +5,15 @@
     if (W.__spinUI) return;
     W.__spinUI = true;
     const S = W.__spin = {
-      on: true, sec: 60, dir: 1, angle: null, marker: true, rot: 0, screen: null, holders: []
+      on: true, sec: 60, dir: 1, angle: null, marker: true, rot: 0,
+      group: 'each',      // 'each' = 盤面ごとに自分の中心で回す / 'together' = 全員の中心でまとめて回す
+      center: null,       // まとめて回すときの中心(画面座標)
+      holders: []
     };
 
-    // 盤面の holder を探す。
-    // TETR.IO は盤面ごとに holder(Container)を作り、gSceneBG / gSceneFG に入れる。
-    // holder の pivot は (マス幅×横/2, マス幅×縦/2) = 横10×縦20 のプレイ範囲の中心に
-    // ゲーム側で設定されているので、pivot はそのまま使い、回転だけ足す。
+    // 盤面の holder を探す(ソロ・リプレイ・ルームのどれでも、盤面ごとに1つある)。
+    // TETR.IO は holder を gSceneBG / gSceneFG に入れ、pivot を
+    // (マス幅×横/2, マス幅×縦/2) = 横10×縦20 のプレイ範囲の中心に設定している。
     const findHolders = () => {
       const out = [];
       const walk = (o, depth) => {
@@ -27,19 +29,33 @@
       walk(W.__stage, 0);
       return out;
     };
+    const visible = h => !h._destroyed && h.parent && h.worldVisible;
+    const angleNow = () => (S.angle != null ? S.angle * Math.PI / 180 : S.rot);
+    const active = () => S.on || S.angle != null;
 
     const attach = h => {
       if (h.__spin) return;
       h.__spin = 1;
       const o = h.updateTransform;
       h.updateTransform = function () {
-        if (!S.on && S.angle == null) return o.call(this);
-        const r = this.rotation;
-        // ゲーム本来の回転(通常 0)に、こちらの回転を足すだけ。pivot と位置は触らない
-        this.rotation = r + (S.angle != null ? S.angle * Math.PI / 180 : S.rot);
+        if (!active() || !this.parent) return o.call(this);
+        const th = angleNow();
+        const r = this.rotation, x = this.position.x, y = this.position.y;
+        // 盤面の中心(pivot)はゲームの設定のまま。回転だけ足す
+        this.rotation = r + th;
+        const G = S.group === 'together' ? S.center : null;
+        if (G) {
+          // まとめて回す: 盤面の中心そのものも、全員の中心 G のまわりで同じ角度だけ回す
+          const pw = this.parent.worldTransform;
+          const C = pw.apply(this.position);
+          const dx = C.x - G.x, dy = C.y - G.y, c = Math.cos(th), s = Math.sin(th);
+          const P = pw.applyInverse({ x: G.x + dx * c - dy * s, y: G.y + dx * s + dy * c });
+          this.position.set(P.x, P.y);
+        }
         o.call(this);
+        this.position.set(x, y);
         this.rotation = r;
-        if (this === S.holders[0]) S.screen = this.worldTransform.apply(this.pivot);
+        this.__spinCenter = this.worldTransform.apply(this.pivot);
       };
     };
 
@@ -51,10 +67,8 @@
       return { x: r.left + p.x * r.width / s.width, y: r.top + p.y * r.height / s.height };
     };
 
-    const old = document.getElementById('__spinpanel');
-    if (old) old.remove();
-    const oldMk = document.getElementById('__spinmk');
-    if (oldMk) oldMk.remove();
+    for (const id of ['__spinpanel']) { const e = document.getElementById(id); if (e) e.remove(); }
+    document.querySelectorAll('.__spinmk').forEach(e => e.remove());
 
     const panel = document.createElement('div');
     panel.id = '__spinpanel';
@@ -93,14 +107,31 @@
     btn('逆回転', () => { S.dir *= -1; });
     btn('固定角度を解除', () => { S.angle = null; sa.value = 0; });
     btn('角度を0に戻す', () => { S.rot = 0; S.angle = null; sa.value = 0; });
+    const groupLabel = () => '2人以上: ' + (S.group === 'together' ? 'まとめて回す' : 'それぞれ回す');
+    btn(groupLabel(), b => { S.group = S.group === 'together' ? 'each' : 'together'; S.center = null; b.textContent = groupLabel(); });
     btn('中心の目印 ON/OFF', () => { S.marker = !S.marker; });
     btn('パネルを閉じる', () => panel.remove());
     document.body.append(panel);
 
-    const mk = document.createElement('div');
-    mk.id = '__spinmk';
-    mk.style.cssText = 'position:fixed;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:7px;background:red;z-index:2147483646;pointer-events:none';
-    document.body.append(mk);
+    const marks = [];
+    const mark = i => {
+      if (!marks[i]) {
+        const m = document.createElement('div');
+        m.className = '__spinmk';
+        m.style.cssText = 'position:fixed;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:7px;background:red;z-index:2147483646;pointer-events:none;display:none';
+        document.body.append(m);
+        marks[i] = m;
+      }
+      return marks[i];
+    };
+    const place = (i, p) => {
+      const m = mark(i);
+      if (!p) { m.style.display = 'none'; return; }
+      const c = toClient(p);
+      m.style.display = 'block';
+      m.style.left = c.x + 'px';
+      m.style.top = c.y + 'px';
+    };
 
     let last = performance.now();
     let n = 0;
@@ -110,20 +141,36 @@
       const dt = Math.min((now - last) / 1000, 0.1);
       last = now;
       if (S.on) S.rot = (S.rot + S.dir * dt * 2 * Math.PI / S.sec) % (2 * Math.PI);
-      // holder はゲーム開始・リトライのたびに作り直されるので、ときどき探し直す
+      // holder はゲーム開始・リトライ・ルームの入れ替わりで作り直されるので、ときどき探し直す
       if (n % 30 === 0 || S.holders.some(h => h._destroyed || !h.parent)) {
-        try { S.holders = findHolders(); } catch (e) { S.holders = []; }
+        let found = [];
+        try { found = findHolders(); } catch (e) {}
+        if (found.length !== S.holders.length || found.some((h, i) => h !== S.holders[i])) S.center = null;
+        S.holders = found;
         S.holders.forEach(attach);
-        if (!S.holders.length) S.screen = null;
       }
       n++;
-      status.textContent = S.holders.length ? `盤面: ${S.holders.length}` : '盤面: なし(ゲーム開始を待っています)';
-      mk.style.display = S.marker && S.screen ? 'block' : 'none';
-      if (S.screen) {
-        const p = toClient(S.screen);
-        mk.style.left = p.x + 'px';
-        mk.style.top = p.y + 'px';
+      const shown = S.holders.filter(visible);
+
+      // まとめて回すときの中心 = 表示中の盤面の中心(回転前)の平均。
+      // 被弾時の揺れで中心が揺れないよう、ゆっくり追いかける
+      if (S.group === 'together' && shown.length >= 2) {
+        let x = 0, y = 0;
+        for (const h of shown) { const c = h.parent.worldTransform.apply(h.position); x += c.x; y += c.y; }
+        const t = { x: x / shown.length, y: y / shown.length };
+        if (!S.center) S.center = t;
+        else { S.center.x += (t.x - S.center.x) * 0.08; S.center.y += (t.y - S.center.y) * 0.08; }
+      } else {
+        S.center = null;
       }
+
+      status.textContent = shown.length ? `盤面: ${shown.length}` : '盤面: なし(ゲーム開始を待っています)';
+      let k = 0;
+      if (S.marker) {
+        if (S.center) place(k++, S.center);
+        else for (const h of shown) if (h.__spinCenter) place(k++, h.__spinCenter);
+      }
+      for (; k < marks.length; k++) place(k, null);
       W.__spinRaf = requestAnimationFrame(loop);
     };
     loop();
