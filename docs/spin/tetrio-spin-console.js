@@ -11,21 +11,27 @@
       holders: [],
       v: 1,               // 実際の回転の向き(-1〜1)。dir に向かってなめらかに変わる
       follow: false,      // true = 回転入力の多い方向に回す
-      hist: []            // 直近の回転入力(-1 = 左回転, 1 = 右回転)
+      hist: []            // 直近の「実際に回った」回転(-1 = 左回転, 1 = 右回転)
     };
     const HIST = 20;
 
-    // ---- 回転入力の読み取り(読むだけ。キーを止めたり書き換えたりはしない) ----
-    // TETR.IO のキー設定は localStorage の userConfig.controls にある。
-    // style が guideline / wasd のときは既定の割り当て(+ゲームパッド)、custom のときは custom の割り当て。
+    // ---- 回転の検出(読むだけ。キー入力・音・ゲームの動きは一切変えない) ----
+    // TETR.IO では、回転が成功したとき(壁やブロックに当たって回れなかったときは除く)だけ
+    // 効果音 "rotate" が鳴る(ホールド中の先行回転 IRS は "irs")。
+    // そこで「回転音が鳴った瞬間」を数え、その直前に押された回転キーの向き(左/右)を割り当てる。
+    // ・効果音は1つの音声ファイルにまとまっていて、/sfx/tetrio.*.rsd に音ごとの開始位置が書いてある
+    // ・AudioBufferSourceNode.start(時刻, 開始位置, 長さ) の開始位置で、どの音かがわかる
+    // ・キー設定は localStorage の userConfig.controls(guideline / wasd / custom + ゲームパッド)
     const PRESET = {
       guideline: {
         ccw: ['CONTROL', 'CONTROLLEFT', 'Z', 'KEYZ', 'NUMPAD3', 'NUMPAD7', 'BUTTON_0'],
-        cw: ['ARROWUP', 'UP', 'X', 'KEYX', 'NUMPAD1', 'NUMPAD5', 'NUMPAD9', 'BUTTON_1']
+        cw: ['ARROWUP', 'UP', 'X', 'KEYX', 'NUMPAD1', 'NUMPAD5', 'NUMPAD9', 'BUTTON_1'],
+        r180: ['A', 'KEYA', 'BUTTON_3']
       },
       wasd: {
         ccw: ['ARROWLEFT', 'LEFT', 'NUMPAD7', 'BUTTON_0'],
-        cw: ['ARROWRIGHT', 'RIGHT', 'NUMPAD9', 'BUTTON_1']
+        cw: ['ARROWRIGHT', 'RIGHT', 'NUMPAD9', 'BUTTON_1'],
+        r180: ['ARROWUP', 'UP', 'NUMPAD2', 'BUTTON_3']
       }
     };
     let binds = null, bindsAt = 0;
@@ -36,10 +42,12 @@
         const c = JSON.parse(localStorage.getItem('userConfig') || '{}').controls || {};
         if (c.style === 'wasd') b = PRESET.wasd;
         else if (c.style === 'custom' && c.custom) {
-          b = { ccw: (c.custom.rotateCCW || []).map(String), cw: (c.custom.rotateCW || []).map(String) };
+          const k = n => (c.custom[n] || []).map(String);
+          b = { ccw: k('rotateCCW'), cw: k('rotateCW'), r180: k('rotate180') };
         }
       } catch (e) {}
-      binds = { ccw: new Set(b.ccw.map(k => k.toUpperCase())), cw: new Set(b.cw.map(k => k.toUpperCase())) };
+      const set = a => new Set(a.map(k => k.toUpperCase()));
+      binds = { ccw: set(b.ccw), cw: set(b.cw), r180: set(b.r180) };
       bindsAt = performance.now();
       return binds;
     };
@@ -54,14 +62,33 @@
       if (S.hist.length > HIST) S.hist.shift();
       decide();
     };
+
+    // 押された回転キー(-1 = 左, 1 = 右, 0 = 180°)。音と組み合わせるまで少しの間だけ覚えておく
+    const pending = [];
+    const press = d => {
+      pending.push({ d, t: performance.now() });
+      if (pending.length > 8) pending.shift();
+    };
+    // 回転音が鳴ったら、直前(rotate は 250ms 以内、IRS は 1.5秒以内)の一番新しい回転キーと組み合わせる
+    const onSound = name => {
+      const now = performance.now(), win = name === 'irs' ? 1500 : 250;
+      for (let i = pending.length - 1; i >= 0; i--) {
+        if (now - pending[i].t > win) break;
+        const { d } = pending.splice(i, 1)[0];
+        if (d !== 0) record(d);
+        return;
+      }
+    };
+
     const typing = t => t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
     if (W.__spinKey) removeEventListener('keydown', W.__spinKey, true);
     W.__spinKey = e => {
       if (e.repeat || typing(e.target)) return;
       const b = getBinds();
       const ks = [String(e.code || '').toUpperCase(), String(e.key || '').toUpperCase()];
-      if (ks.some(k => b.ccw.has(k))) record(-1);
-      else if (ks.some(k => b.cw.has(k))) record(1);
+      if (ks.some(k => b.ccw.has(k))) press(-1);
+      else if (ks.some(k => b.cw.has(k))) press(1);
+      else if (ks.some(k => b.r180.has(k))) press(0);
     };
     addEventListener('keydown', W.__spinKey, true);
     const padPrev = new Map();
@@ -75,11 +102,67 @@
           padPrev.set(k, down);
           if (!down || was) return;
           const name = 'BUTTON_' + i;
-          if (b.ccw.has(name)) record(-1);
-          else if (b.cw.has(name)) record(1);
+          if (b.ccw.has(name)) press(-1);
+          else if (b.cw.has(name)) press(1);
+          else if (b.r180.has(name)) press(0);
         });
       }
     };
+
+    // 効果音の目録(.rsd)を読む。形式: "tRSD", uint32 版, uint32 版, 以降 [float32 開始位置, uint32 名前の長さ, 名前] の繰り返し
+    S.sfx = null;          // { rotate: 開始位置, irs: 開始位置 }
+    S.sfxError = '';
+    const parseRsd = buf => {
+      const v = new DataView(buf);
+      let o = 0;
+      const u8 = () => v.getUint8(o++);
+      const u32 = () => { const x = v.getUint32(o, true); o += 4; return x; };
+      const f32 = () => { const x = v.getFloat32(o, true); o += 4; return x; };
+      if (String.fromCharCode(u8(), u8(), u8(), u8()) !== 'tRSD') throw new Error('rsd header');
+      u32(); u32();
+      const out = {};
+      for (;;) {
+        const off = f32(), len = u32();
+        let name = '';
+        for (let i = 0; i < len; i++) name += String.fromCharCode(u8());
+        if (len === 0) break;
+        out[name] = off;
+      }
+      return out;
+    };
+    const loadSfx = async () => {
+      try {
+        const url = performance.getEntriesByType('resource').map(e => e.name)
+          .find(u => /\/sfx\/tetrio\.[^/?]*\.rsd/.test(u));
+        if (!url) throw new Error('効果音の情報が見つかりません');
+        const map = parseRsd(await (await fetch(url)).arrayBuffer());
+        if (map.rotate == null) throw new Error('回転音が見つかりません');
+        S.sfx = { rotate: map.rotate, irs: map.irs };
+        S.sfxError = '';
+      } catch (e) {
+        S.sfxError = String(e.message || e);
+        setTimeout(loadSfx, 5000);
+      }
+    };
+    loadSfx();
+    // 音が鳴る瞬間を見る(元の start をそのまま呼び、引数も戻り値も変えない)
+    if (W.AudioBufferSourceNode && !W.__spinAudio) {
+      const proto = AudioBufferSourceNode.prototype, orig = proto.start;
+      W.__spinAudio = { orig, listener: null };
+      proto.start = function (when, offset) {
+        const r = orig.apply(this, arguments);
+        try { if (W.__spinAudio.listener) W.__spinAudio.listener(offset); } catch (e) {}
+        return r;
+      };
+    }
+    if (W.__spinAudio) {
+      const near = (a, b) => typeof a === 'number' && b != null && Math.abs(a - b) < 1e-3;
+      W.__spinAudio.listener = offset => {
+        if (!S.sfx) return;
+        if (near(offset, S.sfx.rotate)) onSound('rotate');
+        else if (near(offset, S.sfx.irs)) onSound('irs');
+      };
+    }
 
     // 盤面の holder を探す(ソロ・リプレイ・ルームのどれでも、盤面ごとに1つある)。
     // TETR.IO は holder を gSceneBG / gSceneFG に入れ、pivot を
@@ -245,7 +328,8 @@
 
       const left = S.hist.filter(x => x < 0).length, right = S.hist.length - left;
       status.textContent = (shown.length ? `盤面: ${shown.length}` : '盤面: なし(ゲーム開始を待っています)') +
-        (S.follow ? `\n直近${HIST}回 左${left}/右${right} → ${S.dir < 0 ? '左' : '右'}回転` : '');
+        (S.follow ? (S.sfx ? `\n直近${HIST}回 左${left}/右${right} → ${S.dir < 0 ? '左' : '右'}回転`
+                           : `\n回転音の準備中…${S.sfxError ? '(' + S.sfxError + ')' : ''}`) : '');
       let k = 0;
       if (S.marker) {
         if (S.center) place(k++, S.center);
