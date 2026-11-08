@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TETR.IO スピンカウンター</title>
+  <script src="../assets/theme.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,700;1,400;1,700&family=Open+Sans:ital,wght@0,300;0,400;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../assets/site.css">
+  <script src="https://use.fontawesome.com/releases/v6.3.0/js/all.js" crossorigin="anonymous"></script>
+</head>
+<body>
+  <main class="container">
+    <h1>TETR.IO スピンカウンター</h1>
+    <p class="note">ほかのツールとは別のブックマークレットです。公式の <code>https://tetr.io/</code> で、盤面ごとに<strong>スピン・T-spin・QUAD の回数</strong>を数えて表示します。<strong>表示だけ</strong>で、ゲームの判定や、ほかの人の画面には影響しません。</p>
+
+    <h2>登録</h2>
+    <p>下のボタンを<strong>ブックマークバーへドラッグ</strong>してください(このページでクリックしても動きません)。</p>
+    <p><a id="bmA" class="btn" href="#">スピンカウンター</a></p>
+    <p class="muted">上が動かないときの代替: <a id="bmB" class="btn btn-outline" href="#">スピンカウンター(fetch版)</a></p>
+    <p><button id="copy" class="btn btn-outline" type="button">ブックマークコードをコピー</button> <span id="copy-status" aria-live="polite"></span></p>
+
+    <section>
+      <h2>使い方(PC)</h2>
+      <ol>
+        <li><code>https://tetr.io/</code> を開き、<strong>ゲームを始める前(リプレイを開く前)に</strong>ブックマークをクリックします。右上に「スピンカウンター」のパネルが出ます。</li>
+        <li>ゲームを始めると数え始めます。SOLO・QP・TL・ルーム・観戦・リプレイで使えます。押したあとに始まったゲーム・開いたリプレイが対象です。</li>
+      </ol>
+      <table>
+        <tr><td>SPIN</td><td>スピンの回数(T 以外のミノ・MINI も含む)。かっこ内は MINI の数</td></tr>
+        <tr><td>SPIN の列ごと</td><td>スピンで消したライン数ごとの内訳(0列 / 1列 / 2列 / 3列)。パネルのボタンで表示/非表示</td></tr>
+        <tr><td>ミノごと</td><td>スピンをミノの種類ごとに(T・S・Z・L・J・I・O)。パネルのボタンで表示/非表示</td></tr>
+        <tr><td>T-SPIN</td><td><strong>T-spin の回数(MINI 含む) / 置いた T ミノの数</strong>と、その割合。MINI の数も出します</td></tr>
+        <tr><td>QUAD</td><td>4ライン消しの回数</td></tr>
+      </table>
+      <ul>
+        <li>2人以上のときは、画面の左の盤面から順に並びます。</li>
+        <li>リプレイで前に戻すと、その先の分は数え直します。先へ大きく飛ばしたときは、回数だけまとめて足します(そのあいだの T ミノの数は入りません)。</li>
+        <li>リプレイ盤面修正で操作した分は、再生して元に戻すと消えます。</li>
+        <li>ブックマークを押し直しても、数えた回数は消えません。パネルを閉じると右上の小さな「カウンター」ボタンになり、押すと開きます。</li>
+      </ul>
+      <p><strong>更新は自動です。</strong>30秒ごとに新しい版を確かめ、出ていれば読み込み直します。</p>
+      <p class="muted">数え方: ゲームが1フレーム進むたびに、TETR.IO 自身の集計(スピンの回数・消去の種類・置いたミノの数)の増え方を読んでいます。</p>
+    </section>
+
+    <section>
+      <h2>手動コピー用</h2>
+      <textarea id="manual" readonly>Loading…</textarea>
+      <p>本体: <a href="tetrio-spin-counter.js">tetrio-spin-counter.js</a>(開発者ツールのコンソールに貼っても動きます)</p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <a class="back" href="../">← TETR.IO tools</a>
+    <ul>
+      <li><a href="https://x.com/New_kei1215" aria-label="X"><span class="fa-stack fa-lg"><i class="fas fa-circle fa-stack-2x"></i><i class="fab fa-twitter fa-stack-1x fa-inverse"></i></span></a></li>
+      <li><a href="https://www.youtube.com/@Y_Kei1215" aria-label="YouTube"><span class="fa-stack fa-lg"><i class="fas fa-circle fa-stack-2x"></i><i class="fab fa-youtube fa-stack-1x fa-inverse"></i></span></a></li>
+      <li><a href="https://kei1215.com/" aria-label="Kei's HomePages"><span class="fa-stack fa-lg"><i class="fas fa-circle fa-stack-2x"></i><i class="fas fa-house fa-stack-1x fa-inverse"></i></span></a></li>
+    </ul>
+    <div class="copy">Copyright &copy; Kei's HomePages 2025</div>
+  </footer>
+
+  <script>
+    const url = new URL('tetrio-spin-counter.js', location.href).href;
+    const a = "javascript:(()=>{if(location.hostname!=='tetr.io')return alert('https://tetr.io/ で実行してください');const s=document.createElement('script');s.src='" + url + "?v='+Date.now();s.onerror=()=>alert('load failed');document.head.appendChild(s)})();";
+    const b = "javascript:(()=>{if(location.hostname!=='tetr.io')return alert('https://tetr.io/ で実行してください');fetch('" + url + "?v='+Date.now()).then(r=>r.text()).then(t=>(0,eval)(t)).catch(e=>alert('load failed: '+e))})();";
+    document.getElementById('bmA').href = a;
+    document.getElementById('bmB').href = b;
+    document.getElementById('manual').value = a;
+    for (const id of ['bmA', 'bmB']) document.getElementById(id).addEventListener('click', e => { e.preventDefault(); alert('ブックマークバーへドラッグして登録し、tetr.io で実行してください。'); });
+    document.getElementById('copy').onclick = async () => {
+      const status = document.getElementById('copy-status');
+      try { await navigator.clipboard.writeText(a); status.textContent = 'コピーしました'; }
+      catch (e) { document.getElementById('manual').select(); status.textContent = '自動コピーできませんでした。下の欄からコピーしてください。'; }
+    };
+  </script>
+</body>
+</html>

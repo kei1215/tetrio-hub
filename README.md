@@ -3,6 +3,7 @@
 TETR.IO 関連をまとめるリポジトリ(GitHub Pages: `/docs`)。
 
 - `docs/spin/` : 盤面回転のスクリプト
+- `docs/counter/` : スピンカウンター(SPIN・T-SPIN・QUAD の回数。表示だけ)
 - `docs/replay-edit/` : リプレイ盤面修正(リプレイを止めるとその場面から操作できる。再生で元に戻る)
 - `docs/patch/` : オフラインパッチ(Linux / Mac / Windows)
 - `docs/bookmarklets/` : ブックマークレット各種
