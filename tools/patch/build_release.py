@@ -21,6 +21,9 @@ What it does (nothing is installed; it only writes the output folder):
      client), inlines extra-effects-schema.js at /*QP_EXTRA_SCHEMA*/, and loads
      revive-extra-effects.js from O/offline/index.html. The standalone mission
      editor is written as QP-Mission-Editor-v<EDITOR>.html.
+  7. With --ai-src DIR (tools/patch/ai-src): replaces / adds the vA-only AI files
+     under A/offline/ (same relative paths, e.g. engine/bot-ai.js, ai-loader.js).
+     Only the vA zip carries A/offline; vR / vO are left untouched by it.
 
 Usage:
   python3 build_release.py OLD_RELEASE_DIR NEW_RELEASE_DIR --old 8233 --new 8238 --hub DOCS_DIR \
@@ -28,6 +31,7 @@ Usage:
   From v4.8239 on (the v4.8233 base is gone), rebuild incrementally from the last build:
   python3 build_release.py release-v4.8239-ARO release-v4.8240-ARO --old 8239 --new 8240 --hub DOCS_DIR \\
       --offline-src tools/patch/offline-src --incremental --notes '- ...'
+  AI changes (vA only): add --ai-src tools/patch/ai-src
 """
 import argparse, base64, hashlib, io, json, os, re, shutil, stat, sys, zipfile
 from pathlib import Path
@@ -224,6 +228,21 @@ def load_offline_src(folder):
     return files
 
 
+def load_ai_src(folder):
+    """A/offline overrides for the vA zip: {relative path: bytes}."""
+    if folder is None:
+        return {}
+    files = {}
+    for f in sorted(folder.rglob('*')):
+        rel = f.relative_to(folder).as_posix()
+        if not f.is_file() or any(part.startswith('.') for part in rel.split('/')) or rel.endswith('.md'):
+            continue
+        files[rel] = f.read_bytes()
+    if not files:
+        raise SystemExit('no files in --ai-src ' + str(folder))
+    return files
+
+
 def patch_offline_index(text):
     if EXTRA_TAG in text:
         return text
@@ -282,8 +301,9 @@ def add_update_config(text):
     return (APP_SRC / 'update-config.js').read_text(encoding='utf-8') + text
 
 
-def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=False, offline=None, incremental=False, notes=''):
+def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=False, offline=None, incremental=False, notes='', ai=None):
     offline = offline or {}
+    ai = ai or {}
     out = io.BytesIO()
     with zipfile.ZipFile(old_zip) as zin, zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as zout:
         names = sorted(n for n in zin.namelist() if not n.endswith('/'))
@@ -294,11 +314,21 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
         if has_offline and offline:
             added = sorted('O/offline/' + n for n in offline if 'O/offline/' + n not in names)
             template = zin.getinfo('O/offline/revive-missions.js')
+        has_ai = 'A/offline/ai-loader.js' in names
+        if has_ai and ai:
+            ai_added = sorted('A/offline/' + n for n in ai if 'A/offline/' + n not in names)
+            ai_template = zin.getinfo('A/offline/engine/bot-ai.js')
+            added = sorted(added + ai_added)
+        elif ai and kind == 'A':
+            raise SystemExit('vA zip without A/offline/ai-loader.js: ' + old_zip.name)
         for name in sorted(names + added):
-            info = template if name in added else zin.getinfo(name)
+            info = (ai_template if name.startswith('A/offline/') else template) if name in added else zin.getinfo(name)
             data = b'' if name in added else zin.read(name)
             base = name[len('O/offline/'):] if name.startswith('O/offline/') else None
-            if has_offline and base in offline:
+            ai_base = name[len('A/offline/'):] if name.startswith('A/offline/') else None
+            if has_ai and ai_base in ai:
+                data = ai[ai_base]
+            elif has_offline and base in offline:
                 data = offline[base]
                 if base == 'reverse-hyper-browser.js':
                     data = replace_once(data.decode('utf-8'), OLD_MUSIC, NEW_MUSIC, name).encode('utf-8')
@@ -401,9 +431,11 @@ def main():
     ap.add_argument('--offline-src', type=Path, help='folder with changed O/offline/* files (tools/patch/offline-src)')
     ap.add_argument('--incremental', action='store_true', help='OLD is already a build of this script (v4.8239+): only re-overlay O/offline, keep transform.js and client.js')
     ap.add_argument('--notes', default='', help='changelog lines for --incremental')
+    ap.add_argument('--ai-src', type=Path, help='folder with changed vA-only A/offline/* files (tools/patch/ai-src)')
     ap.add_argument('--manifest', type=Path, help='write the in-app updater manifest (docs/patch/latest.json)')
     a = ap.parse_args()
     offline = load_offline_src(a.offline_src)
+    ai = load_ai_src(a.ai_src)
     if a.new_dir.exists():
         raise SystemExit('output folder already exists: ' + str(a.new_dir))
     edit_src = (a.hub / 'replay-edit/tetrio-replay-edit.js').read_text(encoding='utf-8')
@@ -414,7 +446,7 @@ def main():
         old_zip = a.old_dir / f'QP-Patch-v{kind}4.{a.old}-Source.zip'
         new_zip = a.new_dir / f'QP-Patch-v{kind}4.{a.new}-Source.zip'
         old_sha = sha256(old_zip.read_bytes())
-        payload = build_zip(old_zip, new_zip, kind, a.old, a.new, edit_src, counter_src, a.port, offline, a.incremental, a.notes)
+        payload = build_zip(old_zip, new_zip, kind, a.old, a.new, edit_src, counter_src, a.port, offline, a.incremental, a.notes, ai if kind == 'A' else None)
         sums[new_zip.name] = sha256(payload)
         for osname, ext, flavor in OS_FILES:
             old_file = a.old_dir / f'tetrio-patch-{osname}-v{kind}4.{a.old}{ext}'
