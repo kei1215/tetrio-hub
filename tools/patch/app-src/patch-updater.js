@@ -6,8 +6,22 @@
    refuses to patch a running app and relaunches TETR.IO when it is done).
    macOS, Windows and Linux; nothing runs without the player's click. */
 (()=>{
- const {app,ipcMain,net}=require('electron');
- const fs=require('fs'),path=require('path'),os=require('os'),crypto=require('crypto'),{spawn}=require('child_process');
+ const {app,ipcMain}=require('electron');
+ const fs=require('fs'),path=require('path'),os=require('os'),crypto=require('crypto'),https=require('https'),{spawn}=require('child_process');
+ // Node's https, not Electron net.fetch: the TETR.IO app filters its own sessions and
+ // net.fetch failed there (net::ERR_UNEXPECTED). https only; follows GitHub's redirects.
+ function get(url,redirects=5,headers={}){
+  return new Promise((resolve,reject)=>{
+   let target;try{target=new URL(url)}catch{return reject(Error('Invalid address'))}
+   if(target.protocol!=='https:')return reject(Error('https only'));
+   const request=https.get(target,{headers:{'User-Agent':'tetrio-patch-updater','Cache-Control':'no-cache',...headers},timeout:30000},response=>{
+    const code=response.statusCode||0;
+    if(code>=300&&code<400&&response.headers.location){response.resume();if(redirects<=0)return reject(Error('Too many redirects'));return resolve(get(new URL(response.headers.location,target).href,redirects-1))}
+    const chunks=[];response.on('data',chunk=>chunks.push(chunk));response.on('end',()=>resolve({status:code,ok:code>=200&&code<300,body:Buffer.concat(chunks)}));response.on('error',reject);
+   });
+   request.on('timeout',()=>request.destroy(Error('通信がタイムアウトしました')));request.on('error',reject);
+  });
+ }
  const MANIFEST='https://kei1215.github.io/tetrio-hub/patch/latest.json';
  const DOWNLOAD_BASE='https://github.com/kei1215/tetrio-hub/releases/download/';
  const RESOURCE='TETRIO-Resources-1.0.zip';
@@ -22,16 +36,17 @@
  const readState=()=>{try{return JSON.parse(fs.readFileSync(statePath(),'utf8'))}catch{return {}}};
  const writeState=value=>{try{fs.mkdirSync(path.dirname(statePath()),{recursive:true});fs.writeFileSync(statePath(),JSON.stringify(value))}catch{}};
  async function manifest(){
-  const response=await net.fetch(MANIFEST+'?t='+Date.now(),{cache:'no-store'});
+  const response=await get(MANIFEST+'?t='+Date.now());
   if(!response.ok)throw Error('更新情報を取得できません('+response.status+')');
-  const m=await response.json();
+  let m;try{m=JSON.parse(response.body.toString('utf8'))}catch{throw Error('更新情報が正しくありません')}
   if(!/^4\.\d{4}$/.test(String(m?.version))||typeof m.files!=='object')throw Error('更新情報が正しくありません');
   return m;
  }
  const updateNumber=version=>Number(String(version).split('.')[1]);
  function resourceFolder(){
   const downloads=(()=>{try{return app.getPath('downloads')}catch{return path.join(os.homedir(),'Downloads')}})();
-  const dirs=[...new Set([downloads,path.join(downloads,'all-tetrio-patch'),path.join(os.homedir(),'Downloads'),path.join(os.homedir(),'Downloads','all-tetrio-patch')])];
+  // all-tetrio-patch first: launchers are kept there, next to the resource pack.
+  const dirs=[...new Set([path.join(downloads,'all-tetrio-patch'),downloads,path.join(os.homedir(),'Downloads','all-tetrio-patch'),path.join(os.homedir(),'Downloads')])];
   return {dirs,found:dirs.find(dir=>{try{return fs.statSync(path.join(dir,RESOURCE)).isFile()}catch{return false}})||null,downloads};
  }
  const tail=file=>{try{return fs.readFileSync(file,'utf8').split(/\r?\n/).filter(Boolean).slice(-4).join('\n')}catch{return ''}};
@@ -62,12 +77,25 @@
    const folder=record.kind==='R'?(where.found||where.downloads):where.found;
    if(!folder)throw Error(RESOURCE+' が「ダウンロード」(または ダウンロード/all-tetrio-patch)に見つかりません');
    running=true;
-   const response=await net.fetch(base+name,{cache:'no-store'});
-   if(!response.ok)throw Error('ダウンロードに失敗しました('+response.status+')');
-   const data=Buffer.from(await response.arrayBuffer());
+   // Direct release download first; when it fails (GitHub sometimes answers 5xx there),
+   // fetch the same asset through the GitHub API (same file, checked by the same SHA-256).
+   let response=await get(base+name).catch(error=>({ok:false,status:String(error.message||error)}));
+   if(!response.ok){
+    const first=response.status;
+    const tag='patch-v'+m.version;
+    const info=await get('https://api.github.com/repos/kei1215/tetrio-hub/releases/tags/'+tag,5,{Accept:'application/vnd.github+json'});
+    let asset=null;try{asset=JSON.parse(info.body.toString('utf8')).assets?.find(a=>a.name===name)}catch{}
+    if(!info.ok||!asset?.id)throw Error('ダウンロードに失敗しました('+first+' / API '+info.status+')');
+    response=await get('https://api.github.com/repos/kei1215/tetrio-hub/releases/assets/'+Number(asset.id),5,{Accept:'application/octet-stream'});
+    if(!response.ok)throw Error('ダウンロードに失敗しました('+first+' / API '+response.status+')');
+   }
+   const data=response.body;
    if(crypto.createHash('sha256').update(data).digest('hex')!==entry.sha256)throw Error('ダウンロードしたファイルの確認(SHA-256)に失敗しました');
    const launcher=path.join(folder,name);
    fs.writeFileSync(launcher,data,{mode:0o755});
+   // Remove only the launcher this updater downloaded last time (never other files).
+   const previous=readState().launcher;
+   if(previous&&previous!==launcher&&/^tetrio-patch-(Mac|Windows|Linux)-v[ARO]4\.\d{4}\.(command|cmd|sh)$/.test(path.basename(previous)))try{fs.unlinkSync(previous)}catch{}
    // The waiter is a file, so its command line never matches the installer's own
    // "is TETR.IO running?" check.
    const work=fs.mkdtempSync(path.join(os.tmpdir(),'tetrio-patch-update-'));

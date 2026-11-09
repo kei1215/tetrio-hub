@@ -1,42 +1,42 @@
 {
- "version": "4.8241",
- "base": "https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.8241/",
+ "version": "4.8242",
+ "base": "https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.8242/",
  "files": {
-  "tetrio-patch-Linux-vA4.8241.sh": {
-   "sha256": "7887b8789733d2a0ecdc791d30e97a19d65a2b78a3be0398005cf77c87504580",
-   "size": 58750476
+  "tetrio-patch-Linux-vA4.8242.sh": {
+   "sha256": "3d0a2c8439f38096ae6161fbc998c6661476f60e3868fce71e4440b9d8dfd6a1",
+   "size": 58752008
   },
-  "tetrio-patch-Linux-vO4.8241.sh": {
-   "sha256": "f37f6a5ad680b0ec8d9b8518640052b00e3d026503a62359bfc432f2d3510888",
-   "size": 58591009
+  "tetrio-patch-Linux-vO4.8242.sh": {
+   "sha256": "03f1675f0f86de8a8eac0d81545db0b331e857d474c36e83c71399aa05f4183d",
+   "size": 58592544
   },
-  "tetrio-patch-Linux-vR4.8241.sh": {
-   "sha256": "906edd93e585737a4a6d04a950d5b01c1c701c941f255816696fea5772d8dea7",
-   "size": 5997154
+  "tetrio-patch-Linux-vR4.8242.sh": {
+   "sha256": "0a7a9e8ca98e94d31aaf6ea805ae8a3daaa4ac9d5ad0e7059c59029ef1504b0e",
+   "size": 5998686
   },
-  "tetrio-patch-Mac-vA4.8241.command": {
-   "sha256": "824bc52ae2af383529cf0bd6db988b646e370a39deaa03f938b30a02c696ffd3",
-   "size": 58750470
+  "tetrio-patch-Mac-vA4.8242.command": {
+   "sha256": "9dc28387b309f4159de9d5fc10fa020d7e03506d9c82709aad4ab7088a94124c",
+   "size": 58752002
   },
-  "tetrio-patch-Mac-vO4.8241.command": {
-   "sha256": "048ee317f06ea04ebbe4856549c491a5a56ed3804a4d1062bb557d28281460f7",
-   "size": 58591003
+  "tetrio-patch-Mac-vO4.8242.command": {
+   "sha256": "5d62718588beb8c7eabc9595f42e0aeebdd246e979fc5b53faf948eeb01cf1e7",
+   "size": 58592538
   },
-  "tetrio-patch-Mac-vR4.8241.command": {
-   "sha256": "e6a78ca63fa0886ce27274558416aaf64f5b045a88feb79c5ccf3d88f2a37c8e",
-   "size": 5997148
+  "tetrio-patch-Mac-vR4.8242.command": {
+   "sha256": "b0b17c3a73ffae96522e9715ee0e3cb060ed09d9201417e2728a8a5c25cbffb9",
+   "size": 5998680
   },
-  "tetrio-patch-Windows-vA4.8241.cmd": {
-   "sha256": "4ed2d26b5eb5ce3ce6aaf1f1b62cf5a2ddbc387e8cf7c98b9a2853f43e59b201",
-   "size": 58272628
+  "tetrio-patch-Windows-vA4.8242.cmd": {
+   "sha256": "215c97dee07238daa19f982e56552e0bf611f6269acd817e06f8f93896ec3ce3",
+   "size": 58274148
   },
-  "tetrio-patch-Windows-vO4.8241.cmd": {
-   "sha256": "1283b7514137fe07483197cc14d7defdf5d0fc9a3b2b7a543d504920188a715e",
-   "size": 58114458
+  "tetrio-patch-Windows-vO4.8242.cmd": {
+   "sha256": "e0244270d7054f815f786f2d8e9227ea30cc2eb1cf490615cceb77cbdd55a122",
+   "size": 58115980
   },
-  "tetrio-patch-Windows-vR4.8241.cmd": {
-   "sha256": "b0c26fb34959e54b0e997494cfa51ceb092ec55ea65cdd053ed281f6c4e5346d",
-   "size": 5948251
+  "tetrio-patch-Windows-vR4.8242.cmd": {
+   "sha256": "19e543ac79799f902a3bd8e95182cd54e074f7b7eb081dbbea0490e5addcbf4a",
+   "size": 5949771
   }
  }
 }

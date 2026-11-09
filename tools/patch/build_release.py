@@ -236,11 +236,9 @@ EDITOR_WINDOW_SRC = Path(__file__).with_name('app-src') / 'editor-window.js'
 
 def add_editor_window(text):
     """Append the mission-editor window handler to O/local-main.js (once)."""
-    if EDITOR_WINDOW_MARK in text:
-        return text
     if 'ipcMain' not in text:
         raise SystemExit('O/local-main.js: ipcMain not found')
-    return text.rstrip('\n') + '\n' + EDITOR_WINDOW_SRC.read_text(encoding='utf-8')
+    return replace_appended(text, EDITOR_WINDOW_MARK, EDITOR_WINDOW_SRC)
 
 
 
@@ -250,11 +248,19 @@ APP_SRC = Path(__file__).with_name('app-src')
 TAIL_RETURN = "+')(document,window);\\n/* qp-replay-edit-v1 */';"
 
 
+def replace_appended(text, mark, source):
+    """Append SOURCE (which starts with a /* MARK ... */ comment) at the end of TEXT,
+    replacing the block a previous build appended (it always runs to the end of the file)."""
+    block = source.read_text(encoding='utf-8')
+    start = text.find('\n/* ' + mark)
+    if start >= 0:
+        text = text[:start]
+    return text.rstrip('\n') + '\n' + block.lstrip('\n')
+
+
 def add_updater(text):
-    """Append the patch updater (main process) to O/music-main.js, present in every kind."""
-    if UPDATER_MARK in text:
-        return text
-    return text.rstrip('\n') + '\n' + (APP_SRC / 'patch-updater.js').read_text(encoding='utf-8')
+    """Append (or refresh) the patch updater (main process) in O/music-main.js, present in every kind."""
+    return replace_appended(text, UPDATER_MARK, APP_SRC / 'patch-updater.js')
 
 
 def add_update_config(text):
@@ -351,8 +357,10 @@ def build_launcher(old_file, new_file, flavor, old, new, old_sha, payload):
     header = raw[:i].decode('ascii')
     if header.count(old_sha) != 1:
         raise SystemExit('payload sha not found in header of ' + old_file.name)
-    header = header.replace(old_sha, sha256(payload)).replace('4.' + old, '4.' + new).replace('4' + old, '4' + new)
-    if old in header:
+    new_sha = sha256(payload)
+    header = header.replace(old_sha, new_sha).replace('4.' + old, '4.' + new).replace('4' + old, '4' + new)
+    # The new payload SHA-256 may contain the old number by chance; check the rest only.
+    if old in header.replace(new_sha, ''):
         raise SystemExit('old version left in header of ' + old_file.name)
     b64 = base64.b64encode(payload).decode('ascii')
     prefix = '' if flavor == 'cmd' else '# '

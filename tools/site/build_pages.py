@@ -11,7 +11,7 @@ import re, sys
 from pathlib import Path
 
 DOCS = Path(sys.argv[1])
-PATCH = '4.8241'
+PATCH = '4.8242'
 OFFLINE = '4.8241'
 REL = f'https://github.com/kei1215/tetrio-hub/releases/download/patch-v{PATCH}/'
 
@@ -125,7 +125,7 @@ def page_patch():
     <p class="small text-muted mt-2 mb-0"><strong>O形式・A形式</strong>には TETRIO-Resources-1.0.zip(TETR.IO の素材。Discord で配布)が必要です。起動ファイルと同じフォルダ、その一つ上、または「ダウンロード」フォルダに置いてください。R形式は不要です。</p>
   </section>'''
     body += '\n' + card('A形式の Discord 認証', '    <p class="mb-0">A形式(AI 版)を選ぶと、Discord のログイン画面を開きます。指定の Discord サーバーでロールを持っていることを確かめたあと、ダウンロードできます。</p>')
-    body += '\n' + card('パッチの更新(PATCH UPDATE)', '''    <p>v4.8241 から、CONFIG の一番下「QP PATCH TOOLS」の <strong>PATCH UPDATE</strong>(オフライン画面では Tab パネルの「パッチを更新」)で、新しいパッチに入れ替えられます。押すと、今の OS と今の種類(A・R・O)のパッチを取ってきて、TETR.IO を終了して入れ替え、自動で起動し直します。最新のときは何もしません。</p>
+    body += '\n' + card('パッチの更新(PATCH UPDATE)', '''    <p>v4.8242 から、CONFIG の一番下「QP PATCH TOOLS」の <strong>PATCH UPDATE</strong>(オフライン画面では Tab パネルの「パッチを更新」)で、新しいパッチに入れ替えられます。押すと、今の OS と今の種類(A・R・O)のパッチを取ってきて、TETR.IO を終了して入れ替え、自動で起動し直します。最新のときは何もしません。</p>
     <p class="small text-muted mb-0">O・A は、TETRIO-Resources-1.0.zip が「ダウンロード」(または ダウンロード/all-tetrio-patch)にあることが必要です。</p>''')
     body += '\n' + card('リバイブミッションの追加効果(v4.8238〜)', '''    <p>ミッションエディタ v6.5 の「追加効果」タブで設定します。複数を同時に使えます。</p>
     <ul class="small mb-0">
