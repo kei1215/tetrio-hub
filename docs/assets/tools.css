@@ -28,3 +28,9 @@ footer.tools-footer { padding: 2rem 0 3rem; }
   :root[data-theme="dark"] #mainNav { background: #1d2029; }
   :root[data-theme="dark"] #mainNav .navbar-brand, :root[data-theme="dark"] #mainNav .nav-link, :root[data-theme="dark"] #mainNav .navbar-toggler { color: #e6e8ee; }
 }
+/* ダークモード: ナビバーの下線(明るい灰色)が白く浮かないようにする。固定表示のナビバーも暗い色に */
+:root[data-theme="dark"] #mainNav { border-bottom-color: #2c3140; }
+:root[data-theme="dark"] #mainNav.is-fixed { background-color: rgba(29, 32, 41, .94); border-bottom-color: #2c3140; }
+:root[data-theme="dark"] #mainNav.is-fixed .navbar-brand,
+:root[data-theme="dark"] #mainNav.is-fixed .navbar-nav > li.nav-item > a,
+:root[data-theme="dark"] #mainNav.is-fixed .nav-link { color: #e6e8ee; }
