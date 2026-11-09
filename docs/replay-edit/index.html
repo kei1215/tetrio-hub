@@ -1,29 +1,51 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TETR.IO リプレイ盤面修正</title>
-  <script src="../assets/theme.js"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,700;1,400;1,700&family=Open+Sans:ital,wght@0,300;0,400;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../assets/site.css">
-  <script src="https://use.fontawesome.com/releases/v6.3.0/js/all.js" crossorigin="anonymous"></script>
-</head>
-<body>
-  <main class="container">
-    <h1>TETR.IO リプレイ盤面修正</h1>
-    <p class="note">盤面回転・QP OFFLINE とは別のブックマークレットです(スピンカウンターも、このブックマークで一緒に出ます)。公式の <code>https://tetr.io/</code> のリプレイを<strong>一時停止すると、その場面から自分で操作</strong>できます。<strong>再生ボタンを押すと、止めたときの場面に戻ってから</strong>リプレイが続きます。使えるのはリプレイの中だけで、対戦中やルームの盤面には何もしません。</p>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+        <title>TETR.IO リプレイ盤面修正</title>
+        <script src="../assets/tools.js"></script>
+        <link href="https://fonts.googleapis.com/css?family=Lora:400,700,400italic,700italic" rel="stylesheet" type="text/css" />
+        <link href="https://fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,700italic,800italic,400,300,600,700,800" rel="stylesheet" type="text/css" />
+        <link rel="stylesheet" href="../assets/clean-blog.css" />
+        <link rel="stylesheet" href="../assets/tools.css" />
+    </head>
+    <body>
+        <nav class="navbar navbar-expand-lg navbar-light" id="mainNav">
+            <div class="container px-4 px-lg-5">
+                <a class="navbar-brand" href="../">TETR.IO tools</a>
+                <button class="navbar-toggler" type="button" aria-controls="navbarResponsive" aria-expanded="false" aria-label="メニュー">Menu ☰</button>
+                <div class="collapse navbar-collapse" id="navbarResponsive">
+                    <ul class="navbar-nav ms-auto py-4 py-lg-0">
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../">Home</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../spin/">盤面回転</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../replay-edit/">盤面修正</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../bookmarklets/">QP OFFLINE・パッチ</a></li>
+                        <li class="nav-item"><button class="nav-link px-lg-3 py-3 py-lg-4" id="themeToggle" type="button">☾ ダーク</button></li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+        <header class="tools-band"></header>
+<main class="container px-4 px-lg-5 tools-main">
+  <section class="my-5">
+    <p class="text-uppercase text-primary fw-bold mb-2">Bookmarklet</p>
+    <h1 class="display-5 fw-bold">リプレイ盤面修正</h1>
+    <p class="lead">盤面回転・QP OFFLINE とは別のブックマークレットです(スピンカウンターも、このブックマークで一緒に出ます)。公式の <code>https://tetr.io/</code> のリプレイを<strong>一時停止すると、その場面から自分で操作</strong>できます。<strong>再生ボタンを押すと、止めたときの場面に戻ってから</strong>リプレイが続きます。使えるのはリプレイの中だけで、対戦中やルームの盤面には何もしません。</p>
+  </section>
+  <section class="card shadow-sm mb-4"><div class="card-body p-4">
+    <h2 class="h4">登録</h2>
 
-    <h2>登録</h2>
+
+    
     <p>下のボタンを<strong>ブックマークバーへドラッグ</strong>してください(このページでクリックしても動きません)。</p>
-    <p><a id="bmA" class="btn" href="#">盤面修正</a></p>
-    <p class="muted">上が動かないときの代替: <a id="bmB" class="btn btn-outline" href="#">盤面修正(fetch版)</a></p>
-    <p><button id="copy" class="btn btn-outline" type="button">ブックマークコードをコピー</button> <span id="copy-status" aria-live="polite"></span></p>
+    <p><a id="bmA" class="btn btn-primary" href="#">盤面修正</a></p>
+    <p class="small text-muted">上が動かないときの代替: <a id="bmB" class="btn btn-outline-primary" href="#">盤面修正(fetch版)</a></p>
+    <p><button id="copy" class="btn btn-outline-primary" type="button">ブックマークコードをコピー</button> <span id="copy-status" aria-live="polite"></span></p>
+  </div></section>
+  <section class="card shadow-sm mb-4"><div class="card-body p-4">
+    <h2 class="h4">使い方(PC)</h2>
 
-    <section>
-      <h2>使い方(PC)</h2>
       <ol>
         <li><code>https://tetr.io/</code> を開き、<strong>リプレイを開く前に</strong>ブックマークをクリックします(左上に「リプレイ盤面修正」のパネルが出ます)。</li>
         <li>リプレイを開きます。すでに開いていたときは、一度閉じて開き直してください。押したあとに開いたリプレイが対象です。</li>
@@ -41,22 +63,22 @@
         <li>操作中のままリプレイを閉じても大丈夫です(止めた場面に戻してから閉じます)。</li>
       </ul>
       <p><strong>更新は自動です。</strong>30秒ごとに新しい版を確かめ、出ていれば読み込み直します(操作中は待ちます)。</p>
-    </section>
+  </div></section>
+  <section class="card shadow-sm mb-4"><div class="card-body p-4">
+    <h2 class="h4">fumen に書き出す</h2>
 
-    <section>
-      <h2>fumen に書き出す</h2>
       <p>パネルのボタンで、<a href="https://fumen.zui.jp/">連続テト譜エディタ(fumen)</a>を新しいタブで開きます。</p>
       <ul>
         <li><strong>操作中</strong>:「fumen に書き出す」。1ページ目が止めた場面、2ページ目からは<strong>ミノを1つ置くごとの地形</strong>です(1ミノ1ページ)。<strong>ラインを消したミノ</strong>は、まず置いた所(そろったラインが残った地形)を1ページ出し、次のページで消えた後の地形を出します。Ctrl+Z で取り消したミノは入りません。</li>
         <li><strong>操作していないとき</strong>:「fumen で今の盤面を開く」。今の盤面を1ページで開きます。</li>
       </ul>
       <p>入るのは地形だけで、操作中のミノ・NEXT・HOLD は入りません。</p>
-    </section>
+  </div></section>
+  <section class="card shadow-sm mb-4"><div class="card-body p-4">
+    <h2 class="h4">スピンカウンター</h2>
 
-    <section>
-      <h2>スピンカウンター</h2>
       <p>同じブックマークで、右上に「スピンカウンター」のパネルも出ます(盤面修正のパネルの「スピンカウンター: ON/OFF」で表示/非表示)。盤面ごとに数え、<strong>表示だけ</strong>でゲームには何もしません。リプレイだけでなく、SOLO・QP・TL・ルーム・観戦でも数えます(ブックマークを押したあとに始まったゲームが対象)。</p>
-      <table>
+      <table class="table table-sm">
         <tr><td>SPIN</td><td>スピンの回数(T 以外のミノ・MINI も含む)。かっこ内は MINI の数</td></tr>
         <tr><td>SPIN の列ごと</td><td>スピンで消したライン数ごとの内訳(0列 / 1列 / 2列 / 3列)。カウンターのパネルのボタンで表示/非表示</td></tr>
         <tr><td>ミノごと</td><td>スピンをミノの種類ごとに(T・S・Z・L・J・I・O)。ボタンで表示/非表示</td></tr>
@@ -68,11 +90,11 @@
         <li>止めて操作した分は、再生して元に戻すと消えます。</li>
         <li>ブックマークを押し直しても、数えた回数は消えません。</li>
       </ul>
-    </section>
+  </div></section>
+  <section class="card shadow-sm mb-4"><div class="card-body p-4">
+    <h2 class="h4">操作パネル</h2>
 
-    <section>
-      <h2>操作パネル</h2>
-      <table>
+      <table class="table table-sm">
         <tr><td>止めたら操作: ON / OFF</td><td>一時停止したときに操作できるようにするか</td></tr>
         <tr><td>操作する盤面</td><td>2人のリプレイで、どちらの盤面を操作するか(押すと切り替え)</td></tr>
         <tr><td>2人の左右を入れ替え</td><td>2人のリプレイで、左右のプレイヤーの位置を入れ替えます(見た目だけ)</td></tr>
@@ -83,24 +105,20 @@
         <tr><td>パネルを閉じる</td><td>左上の小さな「盤面修正」ボタンになります。押すと開きます</td></tr>
       </table>
       <p>ゲームパッドでの操作には、まだ対応していません。</p>
-    </section>
+  </div></section>
+  <section class="card shadow-sm mb-4"><div class="card-body p-4">
+    <h2 class="h4">手動コピー用</h2>
 
-    <section>
-      <h2>手動コピー用</h2>
-      <textarea id="manual" readonly>Loading…</textarea>
+      <textarea id="manual" class="code-box" readonly>Loading…</textarea>
       <p>本体: <a href="tetrio-replay-edit.js">tetrio-replay-edit.js</a>(開発者ツールのコンソールに貼っても動きます)</p>
-    </section>
-  </main>
+  </div></section>
+</main>
+        <footer class="border-top tools-footer">
+            <div class="container px-4 px-lg-5">
+                <div class="small text-center text-muted fst-italic">Copyright &copy; Kei's HomePages 2025</div>
+            </div>
+        </footer>
 
-  <footer class="site-footer">
-    <a class="back" href="../">← TETR.IO tools</a>
-    <ul>
-      <li><a href="https://x.com/New_kei1215" aria-label="X"><span class="fa-stack fa-lg"><i class="fas fa-circle fa-stack-2x"></i><i class="fab fa-twitter fa-stack-1x fa-inverse"></i></span></a></li>
-      <li><a href="https://www.youtube.com/@Y_Kei1215" aria-label="YouTube"><span class="fa-stack fa-lg"><i class="fas fa-circle fa-stack-2x"></i><i class="fab fa-youtube fa-stack-1x fa-inverse"></i></span></a></li>
-      <li><a href="https://kei1215.com/" aria-label="Kei's HomePages"><span class="fa-stack fa-lg"><i class="fas fa-circle fa-stack-2x"></i><i class="fas fa-house fa-stack-1x fa-inverse"></i></span></a></li>
-    </ul>
-    <div class="copy">Copyright &copy; Kei's HomePages 2025</div>
-  </footer>
 
   <script>
     const url = new URL('tetrio-replay-edit.js', location.href).href;
@@ -116,5 +134,5 @@
       catch (e) { document.getElementById('manual').select(); status.textContent = '自動コピーできませんでした。下の欄からコピーしてください。'; }
     };
   </script>
-</body>
+    </body>
 </html>

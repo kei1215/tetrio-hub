@@ -58,6 +58,9 @@
     auto: keep.auto ?? true,     // 一時停止したら自動で操作できるようにする
     noGravity: keep.noGravity ?? false,
     swap: keep.swap ?? false,
+    sideName: keep.sideName ?? null,   // 操作する盤面のプレイヤー名(ラウンドが変わっても同じ人を操作する)
+    swapAuto: keep.swapAuto ?? false,  // 操作する盤面を左に持ってくるために自動で入れ替えたか
+    swapKey: keep.swapKey ?? null,     // そのときの2人(同じ2人のリプレイの間は並びを保つ)
     counter: keep.counter ?? true,   // スピンカウンター(SPIN・T-SPIN・QUAD)も出す    // 2人のリプレイで、左右のプレイヤーの位置を入れ替える(見た目だけ)   // 操作中の重力をなくす(ハードドロップ・ソフトドロップでだけ落ちる)
     side: keep.side ?? 0,        // 操作する盤面(左から何番目か)
     panelClosed: updated ? !!keep.panelClosed : false,
@@ -93,8 +96,27 @@
   };
 
   // ---- 操作モード ----
+  // 操作する盤面を選ぶ: 決めたプレイヤーがいればその人、いなければ左から S.side 番目
+  const pick = list => {
+    if (!list.length) return null;
+    if (S.sideName) { const f = list.find(g => name(g) === S.sideName); if (f) return f; }
+    return list[S.side % list.length];
+  };
+  const pairKey = list => list.map(name).sort().join('|');
+  // 操作する盤面が右にあれば、左右を入れ替えて左へ持ってくる(同じ2人のリプレイの間はこの並びを保つ)
+  const bringLeft = n => {
+    const list = shown();
+    const pair = games.filter(g => list.includes(g));
+    if (pair.length !== 2 || !pair.includes(n)) return;
+    const other = pair.find(g => g !== n);
+    if (!n.__rpeOrig || !other.__rpeOrig) return;
+    S.swap = n.__rpeOrig.ox > other.__rpeOrig.ox;
+    S.swapAuto = true; S.swapKey = pairKey(list);
+  };
   const enter = n => {
     if (S.active) return;
+    S.sideName = name(n);
+    bringLeft(n);
     try {
       snap = n.siom.EjectState();
     } catch (e) { S.msg = '状態を保存できませんでした'; return; }
@@ -354,8 +376,13 @@
   status.style.whiteSpace = 'pre-line';
   const btn = (label, fn) => { const b = document.createElement('button'); b.textContent = label; b.style.cssText = 'font:inherit;color:#fff;background:#0085a1;border:0;border-radius:4px;padding:4px 6px;cursor:pointer;text-align:left'; b.onclick = e => { e.stopPropagation(); fn(b); b.blur(); }; return b; };
   const bAuto = btn('', () => { S.auto = !S.auto; if (!S.auto) leave(true); draw(); });
-  const bSide = btn('', () => { S.side++; if (S.active) leave(true); draw(); });
-  const bSwap = btn('', () => { S.swap = !S.swap; draw(); });
+  const bSide = btn('', () => {
+    const list = shown(), cur = pick(list);
+    if (S.active) leave(true);
+    if (list.length > 1) { const next = list[(list.indexOf(cur) + 1) % list.length]; S.sideName = name(next); S.side = list.indexOf(next); }
+    draw();
+  });
+  const bSwap = btn('', () => { S.swap = !S.swap; S.swapAuto = false; draw(); });
   const bCounter = btn('', () => { S.counter = !S.counter; S.counter ? startCounter() : stopCounter(); draw(); });
   const bGrav = btn('', () => { S.noGravity = !S.noGravity; draw(); });
   const bReset = btn('止めた場面からやり直す(R)', () => retry());
@@ -364,7 +391,7 @@
     if (S.active) code = fumenOfEdit();
     else {
       const list = shown();
-      const n = list[S.side % Math.max(1, list.length)];
+      const n = pick(list);
       if (!n) { S.msg = 'リプレイの盤面がありません'; return; }
       code = fumenOf(n);
     }
@@ -379,17 +406,32 @@
   mini.onclick = () => setClosed(false);
   document.body.append(panel, mini);
   const setClosed = c => { S.panelClosed = c; panel.style.display = c ? 'none' : 'grid'; mini.style.display = c ? 'block' : 'none'; };
-  // パッチ版: TETRA CHANNEL を開いた瞬間か、リプレイを読み込んだ瞬間から動き始める(それまでパネルは出さない)。
+  // パッチ版: 「入室条件」= TETRA CHANNEL を開いている、またはリプレイを読み込んでいる。
+  // 満たした瞬間に動き始め、どちらも満たさなくなったとき・HOME に戻ったときに止める(操作中なら止めた場面に戻す)。
   // ゲームをつかまえる受け口は起動時から置いてあるので、読み込んだリプレイのゲームも取りこぼさない
-  const tetraOpen = () => {
-    const menus = document.getElementById('menus');
-    return /^tetra/.test((menus && menus.getAttribute('data-menu-type')) || '') || !!document.querySelector('#menus [data-menuview^="tetra"]:not(.hidden)');
+  const menuType = () => { const m = document.getElementById('menus'); return (m && m.getAttribute('data-menu-type')) || ''; };
+  const tetraOpen = () => /^tetra/.test(menuType()) || !!document.querySelector('#menus [data-menuview^="tetra"]:not(.hidden)');
+  const atHome = () => menuType() === 'home' && !!document.querySelector('#menus [data-menuview="home"]:not(.hidden)');
+  const replayOnScreen = () => {
+    const r = document.getElementById('replay');
+    if (r && !r.classList.contains('hidden')) return true;
+    return games.some(n => { try { return n.esm && n.esm.IsReplay() && alive(n) && n.hm.H.holder.worldVisible; } catch (e) { return false; } });
   };
-  const replayLoaded = () => games.some(n => { try { return n.esm && n.esm.IsReplay(); } catch (e) { return false; } });
+  let fresh = games.length;   // これより後につかまえたリプレイ = 今読み込んだリプレイ
+  const replayJustLoaded = () => games.slice(fresh).some(n => { try { return n.esm && n.esm.IsReplay(); } catch (e) { return false; } });
   let started = !W.__qpEmbedded || !!W.__qpEditStarted;
   const checkStart = () => {
-    if (started) return true;
-    if (!tetraOpen() && !replayLoaded()) return false;
+    if (!W.__qpEmbedded) return true;
+    if (started) {
+      if (atHome() || (!tetraOpen() && !replayOnScreen())) {
+        started = false; W.__qpEditStarted = false;
+        leave(true);
+        panel.style.display = 'none'; mini.style.display = 'none';
+        fresh = games.length;
+      }
+      return started;
+    }
+    if (atHome() || (!tetraOpen() && !replayJustLoaded() && !replayOnScreen())) { fresh = games.length; return false; }
     started = true; W.__qpEditStarted = true;
     setClosed(S.panelClosed);
     return true;
@@ -404,7 +446,7 @@
     bSwap.textContent = '2人の左右を入れ替え: ' + (S.swap ? 'ON' : 'OFF');
     bCounter.textContent = 'スピンカウンター: ' + (S.counter ? 'ON' : 'OFF');
     bFumen.textContent = S.active ? `fumen に書き出す(止めた場面 + ${undo.length - 1}ミノ)` : 'fumen で今の盤面を開く';
-    const tgt = list.length ? list[S.side % list.length] : null;
+    const tgt = pick(list);
     bSide.textContent = '操作する盤面: ' + (tgt ? name(tgt) : '-') + (list.length > 1 ? '(押すと切り替え)' : '');
     let t;
     if (S.active) {
@@ -477,8 +519,10 @@
         if (nr && nr.classList.contains('active')) nr.classList.remove('active');
       }
       if (S.active && (!alive(S.active) || !list.includes(S.active))) leave(false);
+      // 別の2人のリプレイになったら、自動の入れ替えを元に戻す
+      if (S.swapAuto && list.length === 2 && pairKey(list) !== S.swapKey) { S.swap = false; S.swapAuto = false; S.swapKey = null; }
       if (!S.active && S.auto && list.length) {
-        const n = list[S.side % list.length];
+        const n = pick(list);
         if (paused(n) && n.gsm.started && n.gsm.playing) enter(n);
       }
       const n = S.active;
@@ -529,7 +573,7 @@
     panel.remove(); mini.remove();
     W.__rpeTeardown = null;
     unswapAll();
-    return { auto: S.auto, side: S.side, noGravity: S.noGravity, swap: S.swap, counter: S.counter, panelClosed: upd ? S.panelClosed : false };
+    return { auto: S.auto, side: S.side, noGravity: S.noGravity, swap: S.swap, sideName: S.sideName, swapAuto: S.swapAuto, swapKey: S.swapKey, counter: S.counter, panelClosed: upd ? S.panelClosed : false };
   };
 
   // ---- 自動更新(操作中は待つ) ----

@@ -1,29 +1,51 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TETR.IO 盤面回転</title>
-  <script src="../assets/theme.js"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,700;1,400;1,700&family=Open+Sans:ital,wght@0,300;0,400;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../assets/site.css">
-  <script src="https://use.fontawesome.com/releases/v6.3.0/js/all.js" crossorigin="anonymous"></script>
-</head>
-<body>
-  <main class="container">
-    <h1>TETR.IO 盤面回転</h1>
-    <p class="note">QP OFFLINE とは別のブックマークレットです。公式の <code>https://tetr.io/</code> で、盤面の<strong>見た目だけ</strong>を回します。回転の中心は、いつもプレイ範囲(横10×縦20)の真ん中です。ゲームの判定や、ほかの人の画面には影響しません。</p>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+        <title>TETR.IO 盤面回転</title>
+        <script src="../assets/tools.js"></script>
+        <link href="https://fonts.googleapis.com/css?family=Lora:400,700,400italic,700italic" rel="stylesheet" type="text/css" />
+        <link href="https://fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,700italic,800italic,400,300,600,700,800" rel="stylesheet" type="text/css" />
+        <link rel="stylesheet" href="../assets/clean-blog.css" />
+        <link rel="stylesheet" href="../assets/tools.css" />
+    </head>
+    <body>
+        <nav class="navbar navbar-expand-lg navbar-light" id="mainNav">
+            <div class="container px-4 px-lg-5">
+                <a class="navbar-brand" href="../">TETR.IO tools</a>
+                <button class="navbar-toggler" type="button" aria-controls="navbarResponsive" aria-expanded="false" aria-label="メニュー">Menu ☰</button>
+                <div class="collapse navbar-collapse" id="navbarResponsive">
+                    <ul class="navbar-nav ms-auto py-4 py-lg-0">
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../">Home</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../spin/">盤面回転</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../replay-edit/">盤面修正</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../bookmarklets/">QP OFFLINE・パッチ</a></li>
+                        <li class="nav-item"><button class="nav-link px-lg-3 py-3 py-lg-4" id="themeToggle" type="button">☾ ダーク</button></li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+        <header class="tools-band"></header>
+<main class="container px-4 px-lg-5 tools-main">
+  <section class="my-5">
+    <p class="text-uppercase text-primary fw-bold mb-2">Bookmarklet</p>
+    <h1 class="display-5 fw-bold">盤面回転</h1>
+    <p class="lead">QP OFFLINE とは別のブックマークレットです。公式の <code>https://tetr.io/</code> で、盤面の<strong>見た目だけ</strong>を回します。回転の中心は、いつもプレイ範囲(横10×縦20)の真ん中です。ゲームの判定や、ほかの人の画面には影響しません。</p>
+  </section>
+  <section class="card shadow-sm mb-4"><div class="card-body p-4">
+    <h2 class="h4">登録</h2>
 
-    <h2>登録</h2>
+
+    
     <p>下のボタンを<strong>ブックマークバーへドラッグ</strong>してください(このページでクリックしても動きません)。</p>
-    <p><a id="bmA" class="btn" href="#">盤面回転</a></p>
-    <p class="muted">上が動かないときの代替: <a id="bmB" class="btn btn-outline" href="#">盤面回転(fetch版)</a></p>
-    <p><button id="copy" class="btn btn-outline" type="button">ブックマークコードをコピー</button> <span id="copy-status" aria-live="polite"></span></p>
+    <p><a id="bmA" class="btn btn-primary" href="#">盤面回転</a></p>
+    <p class="small text-muted">上が動かないときの代替: <a id="bmB" class="btn btn-outline-primary" href="#">盤面回転(fetch版)</a></p>
+    <p><button id="copy" class="btn btn-outline-primary" type="button">ブックマークコードをコピー</button> <span id="copy-status" aria-live="polite"></span></p>
+  </div></section>
+  <section class="card shadow-sm mb-4"><div class="card-body p-4">
+    <h2 class="h4">使い方(PC)</h2>
 
-    <section>
-      <h2>使い方(PC)</h2>
       <ol>
         <li><code>https://tetr.io/</code> を開き、ブックマークをクリックします。メニュー画面でも、リプレイやルームの中でも押せます。</li>
         <li>左下に操作パネルが出ます。</li>
@@ -31,30 +53,30 @@
       </ol>
       <p>15秒たってもパネルが出ないときは、ページを再読み込みしてからもう一度押してください。</p>
       <p><strong>更新は自動です。</strong>動いている間、30秒ごとに新しい版が出ていないか確かめ、出ていれば設定をそのままに読み込み直して再実行します(パネルに「最新版に更新しました」と出ます)。ブックマークを押し直しても、最新版で起動し直してパネルが開きます。</p>
-    </section>
+  </div></section>
+  <section class="card shadow-sm mb-4"><div class="card-body p-4">
+    <h2 class="h4">2人以上のとき(リプレイ・ルーム)</h2>
 
-    <section>
-      <h2>2人以上のとき(リプレイ・ルーム)</h2>
       <p>パネルのボタンで切り替えます。</p>
-      <table>
+      <table class="table table-sm">
         <tr><td>2人以上: それぞれ回す</td><td>盤面ごとに、自分のプレイ範囲の中心で回ります。盤面の位置は動きません</td></tr>
         <tr><td>2人以上: まとめて回す</td><td>全員の盤面の中心を真ん中にして、盤面ごと一緒に回ります(180°で左右が入れ替わる)</td></tr>
       </table>
-    </section>
+  </div></section>
+  <section class="card shadow-sm mb-4"><div class="card-body p-4">
+    <h2 class="h4">回転入れのときだけ回す(最初の設定)</h2>
 
-    <section>
-      <h2>回転入れのときだけ回す(最初の設定)</h2>
       <ul>
         <li>ミノを置いたときに、ゲームが<strong>回転入れ(スピン)と判定したとき</strong>だけ、盤面を「スピン1回の角度」(最初は 90°)だけ回します。盤面に「T-spin」「MINI S-spin」などと出るときで、T 以外のミノや MINI も対象です。ふつうの回転や、スピンの形にしてから動かして置いた場合は回りません。</li>
         <li>回す向きは、<strong>ミノを置く前に最後に押した回転キー</strong>で決めます(TETR.IO のキー設定どおり)。左回転キーなら左、右回転キーなら右へ回ります(それまでの回数による重み付けはしません)。</li>
         <li><strong>180°回転の回転入れ</strong>では、盤面を <strong>180°</strong>(パネルで <strong>360°</strong> に切り替え可)回します。向きは毎回<strong>交互</strong>(右 → 左 → 右 …)です。180°回転かどうかは、直前に押した 180°回転のキーで見分けます(観戦中はキー入力がないので、ふつうの回転入れとして扱います)。</li>
       </ul>
       <p>判定は、ゲームが盤面に出す「◯-spin」の表示で読み取ります。向きは本人のキー入力で決め、キー入力がないとき(観戦中など)だけ、スピンになった回転のときにゲームが盤面を少し傾ける向きを使います。パネルには「T-spin(右・キー)」のように、どちらで決めたかも出ます。効果音の音量は関係ありません。読むだけで、ゲームの入力・判定は変えません。</p>
-    </section>
+  </div></section>
+  <section class="card shadow-sm mb-4"><div class="card-body p-4">
+    <h2 class="h4">操作パネル</h2>
 
-    <section>
-      <h2>操作パネル</h2>
-      <table>
+      <table class="table table-sm">
         <tr><td>回転: スピン判定のときだけ / ずっと回す</td><td>押すたびに切り替わります。「ずっと回す」は、一定の速さで回り続けます</td></tr>
         <tr><td>スピン1回の角度</td><td>ふつうの回転入れ1回で回す角度(15°〜180°)</td></tr>
         <tr><td>180°回転の回転入れ: 180° / 360°</td><td>180°回転で入れたときに回す角度。押すたびに切り替わります。向きは毎回交互</td></tr>
@@ -66,33 +88,29 @@
         <tr><td>中心の目印 ON/OFF</td><td>回転の中心の赤い点の表示</td></tr>
         <tr><td>パネルを閉じる</td><td>パネルが左下の小さな「盤面回転」ボタンになります(回転は続きます)。ボタンを押すと開きます。止めるときはページを再読み込み</td></tr>
       </table>
-    </section>
+  </div></section>
+  <section class="card shadow-sm mb-4"><div class="card-body p-4">
+    <h2 class="h4">iPhone/iPad(Safari)・Android(Chrome)</h2>
 
-    <section>
-      <h2>iPhone/iPad(Safari)・Android(Chrome)</h2>
       <ol>
         <li>このページを普通のブックマークとして保存し、名前を「盤面回転」にします。</li>
         <li>「ブックマークコードをコピー」を押し、保存したブックマークの URL を全部消してコードを貼り付けます。</li>
         <li><code>https://tetr.io/</code> を開き、Safari はブックマーク一覧から、Android Chrome はアドレスバーに「盤面回転」と入力して候補から実行します。</li>
       </ol>
-    </section>
+  </div></section>
+  <section class="card shadow-sm mb-4"><div class="card-body p-4">
+    <h2 class="h4">手動コピー用</h2>
 
-    <section>
-      <h2>手動コピー用</h2>
-      <textarea id="manual" readonly>Loading…</textarea>
+      <textarea id="manual" class="code-box" readonly>Loading…</textarea>
       <p>本体: <a href="tetrio-spin-console.js">tetrio-spin-console.js</a>(開発者ツールのコンソールに貼っても動きます)</p>
-    </section>
-  </main>
+  </div></section>
+</main>
+        <footer class="border-top tools-footer">
+            <div class="container px-4 px-lg-5">
+                <div class="small text-center text-muted fst-italic">Copyright &copy; Kei's HomePages 2025</div>
+            </div>
+        </footer>
 
-  <footer class="site-footer">
-    <a class="back" href="../">← TETR.IO tools</a>
-    <ul>
-      <li><a href="https://x.com/New_kei1215" aria-label="X"><span class="fa-stack fa-lg"><i class="fas fa-circle fa-stack-2x"></i><i class="fab fa-twitter fa-stack-1x fa-inverse"></i></span></a></li>
-      <li><a href="https://www.youtube.com/@Y_Kei1215" aria-label="YouTube"><span class="fa-stack fa-lg"><i class="fas fa-circle fa-stack-2x"></i><i class="fab fa-youtube fa-stack-1x fa-inverse"></i></span></a></li>
-      <li><a href="https://kei1215.com/" aria-label="Kei's HomePages"><span class="fa-stack fa-lg"><i class="fas fa-circle fa-stack-2x"></i><i class="fas fa-house fa-stack-1x fa-inverse"></i></span></a></li>
-    </ul>
-    <div class="copy">Copyright &copy; Kei's HomePages 2025</div>
-  </footer>
 
   <script>
     const url = new URL('tetrio-spin-console.js', location.href).href;
@@ -108,5 +126,5 @@
       catch (e) { document.getElementById('manual').select(); status.textContent = '自動コピーできませんでした。下の欄からコピーしてください。'; }
     };
   </script>
-</body>
+    </body>
 </html>

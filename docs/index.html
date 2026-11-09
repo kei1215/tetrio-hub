@@ -1,64 +1,67 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TETR.IO tools</title>
-  <script src="assets/theme.js"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,700;1,400;1,700&family=Open+Sans:ital,wght@0,300;0,400;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/site.css">
-  <script src="https://use.fontawesome.com/releases/v6.3.0/js/all.js" crossorigin="anonymous"></script>
-</head>
-<body>
-  <main class="container">
-    <h1>TETR.IO tools</h1>
-    <p class="note">個人用ツールです。対戦中のゲームの判定や、ほかの人の画面には影響しません(リプレイ盤面修正はリプレイの中だけで動きます)。ゲームの更新で動かなくなることがあります。</p>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+        <title>TETR.IO tools</title>
+        <script src="assets/tools.js"></script>
+        <link href="https://fonts.googleapis.com/css?family=Lora:400,700,400italic,700italic" rel="stylesheet" type="text/css" />
+        <link href="https://fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,700italic,800italic,400,300,600,700,800" rel="stylesheet" type="text/css" />
+        <link rel="stylesheet" href="assets/clean-blog.css" />
+        <link rel="stylesheet" href="assets/tools.css" />
+    </head>
+    <body>
+        <nav class="navbar navbar-expand-lg navbar-light" id="mainNav">
+            <div class="container px-4 px-lg-5">
+                <a class="navbar-brand" href="">TETR.IO tools</a>
+                <button class="navbar-toggler" type="button" aria-controls="navbarResponsive" aria-expanded="false" aria-label="メニュー">Menu ☰</button>
+                <div class="collapse navbar-collapse" id="navbarResponsive">
+                    <ul class="navbar-nav ms-auto py-4 py-lg-0">
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="">Home</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="spin/">盤面回転</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="replay-edit/">盤面修正</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="bookmarklets/">QP OFFLINE・パッチ</a></li>
+                        <li class="nav-item"><button class="nav-link px-lg-3 py-3 py-lg-4" id="themeToggle" type="button">☾ ダーク</button></li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+        <header class="tools-band"></header>
+<main class="container px-4 px-lg-5 tools-main">
+  <section class="my-5">
+    <p class="text-uppercase text-primary fw-bold mb-2">TETR.IO tools</p>
+    <h1 class="display-5 fw-bold">TETR.IO tools</h1>
+    <p class="lead">公式の TETR.IO で使う、個人用のブックマークレットとデスクトップ版パッチです。</p>
+    <div class="alert alert-info">対戦中のゲームの判定や、ほかの人の画面には影響しません(盤面修正はリプレイの中だけで動きます)。ゲームの更新で動かなくなることがあります。</div>
+  </section>
+  <section class="mb-4"><div class="row g-3">
+      <div class="col-md-6"><div class="card h-100 shadow-sm"><div class="card-body p-4">
+        <h2 class="h5"><a href="spin/">盤面回転</a></h2>
+        <p class="mb-2">回転入れの判定が出たときだけ、その向きへ盤面を回すブックマークレット(中心はプレイ範囲の真ん中)。</p>
+        <p class="small text-muted mb-0">SOLO・リプレイ・ルームで使えます。2人以上は「それぞれ回す/まとめて回す」を選べます。</p>
+      </div></div></div>
+      <div class="col-md-6"><div class="card h-100 shadow-sm"><div class="card-body p-4">
+        <h2 class="h5"><a href="replay-edit/">リプレイ盤面修正</a></h2>
+        <p class="mb-2">リプレイを止めると、その場面から自分で操作できるブックマークレット(再生すると元に戻る)。</p>
+        <p class="small text-muted mb-0">火力は表示だけで相手に送りません。fumen 書き出し・2人の左右入れ替え・スピンカウンター付き。</p>
+      </div></div></div>
+      <div class="col-md-6"><div class="card h-100 shadow-sm"><div class="card-body p-4">
+        <h2 class="h5"><a href="bookmarklets/">QP OFFLINE</a></h2>
+        <p class="mb-2">TETR.IO 上で、別タブに OFFLINE 版を起動するブックマークレット(30日キャッシュ版)。</p>
+        <p class="small text-muted mb-0">QP・ZEN・ローカルリプレイ・端末内保存。</p>
+      </div></div></div>
+      <div class="col-md-6"><div class="card h-100 shadow-sm"><div class="card-body p-4">
+        <h2 class="h5"><a href="bookmarklets/#desktop">デスクトップ版パッチ</a></h2>
+        <p class="mb-2">Mac・Windows・Linux の TETR.IO に入れるパッチ v4.8237(O形式・R形式・A形式)。</p>
+        <p class="small text-muted mb-0">ミッションエディタ・機能基準書もこちら。</p>
+      </div></div></div>
+  </div></section>
+</main>
+        <footer class="border-top tools-footer">
+            <div class="container px-4 px-lg-5">
+                <div class="small text-center text-muted fst-italic">Copyright &copy; Kei's HomePages 2025</div>
+            </div>
+        </footer>
 
-    <div class="post-preview">
-      <a href="spin/">
-        <h2 class="post-title">盤面回転</h2>
-        <h3 class="post-subtitle">回転入れの判定が出たときだけ、その向きへ盤面を回すブックマークレット(中心はプレイ範囲の真ん中)</h3>
-      </a>
-      <p class="post-meta">SOLO・リプレイ・ルームで使えます。2人以上のときは「それぞれ回す/まとめて回す」を選べます。</p>
-    </div>
-    <hr>
-    <div class="post-preview">
-      <a href="replay-edit/">
-        <h2 class="post-title">リプレイ盤面修正</h2>
-        <h3 class="post-subtitle">リプレイを止めると、その場面から自分で操作できるブックマークレット(再生すると元に戻る)</h3>
-      </a>
-      <p class="post-meta">火力は表示だけで相手には送りません。fumen 書き出し・2人の左右入れ替え・スピンカウンター(SPIN・T-SPIN・QUAD)付き。</p>
-    </div>
-    <hr>
-    <div class="post-preview">
-      <a href="bookmarklets/">
-        <h2 class="post-title">QP OFFLINE</h2>
-        <h3 class="post-subtitle">tetr.io 上で、別タブに OFFLINE 版を起動するブックマークレット</h3>
-      </a>
-      <p class="post-meta">QP・ZEN・ローカル/オンラインリプレイ・端末内保存・OFFLINE 盤面回転。デスクトップ版パッチもこちら。</p>
-    </div>
-    <hr>
-    <div class="post-preview">
-      <h2 class="post-title">パッチ</h2>
-      <ul>
-        <li>v4.8236 デスクトップ版(<a href="bookmarklets/#desktop">説明</a>。AI 版 vA は <a href="bookmarklets/auth.html">Discord ログインで取得</a>):
-          Mac <a href="https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.8236/tetrio-patch-Mac-vR4.8236.command">vR</a> / <a href="https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.8236/tetrio-patch-Mac-vO4.8236.command">vO</a>、
-          Windows <a href="https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.8236/tetrio-patch-Windows-vR4.8236.cmd">vR</a> / <a href="https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.8236/tetrio-patch-Windows-vO4.8236.cmd">vO</a>、
-          Linux <a href="https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.8236/tetrio-patch-Linux-vR4.8236.sh">vR</a> / <a href="https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.8236/tetrio-patch-Linux-vO4.8236.sh">vO</a></li>
-        <li><a href="patch/v4.8234/QP-Mission-Editor-v6.4.html">QP Mission Editor v6.4</a>(<a href="patch/v4.8233/QP-Mission-Editor-v6.3.html">v6.3</a>)</li>
-      </ul>
-    </div>
-  </main>
-
-  <footer class="site-footer">
-    <ul>
-      <li><a href="https://x.com/New_kei1215" aria-label="X"><span class="fa-stack fa-lg"><i class="fas fa-circle fa-stack-2x"></i><i class="fab fa-twitter fa-stack-1x fa-inverse"></i></span></a></li>
-      <li><a href="https://www.youtube.com/@Y_Kei1215" aria-label="YouTube"><span class="fa-stack fa-lg"><i class="fas fa-circle fa-stack-2x"></i><i class="fab fa-youtube fa-stack-1x fa-inverse"></i></span></a></li>
-      <li><a href="https://kei1215.com/" aria-label="Kei's HomePages"><span class="fa-stack fa-lg"><i class="fas fa-circle fa-stack-2x"></i><i class="fas fa-house fa-stack-1x fa-inverse"></i></span></a></li>
-    </ul>
-    <div class="copy">Copyright &copy; Kei's HomePages 2025</div>
-  </footer>
-</body>
+    </body>
 </html>

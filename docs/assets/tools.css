@@ -1,0 +1,30 @@
+/* TETR.IO tools: kei1215.com (Clean Blog v6.0.9 + Bootstrap 5.2.3, assets/clean-blog.css) の見た目に合わせた上書き */
+#mainNav .navbar-brand { letter-spacing: .02em; }
+#mainNav .nav-link.active { text-decoration: underline; text-underline-offset: .35em; }
+.tools-band { margin-bottom: 3rem; padding-bottom: 5rem; background-color: #6c757d; }
+main.tools-main { max-width: 980px; }
+main.tools-main code { word-break: break-all; }
+main.tools-main textarea.code-box { width: 100%; min-height: 6rem; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+main.tools-main .table td:first-child { white-space: nowrap; font-weight: 600; }
+footer.tools-footer { padding: 2rem 0 3rem; }
+#themeToggle { border: 0; background: transparent; }
+
+/* ダークモード(ナビバーのボタンで切り替え。保存: localStorage 'tetrio-hub-theme') */
+:root[data-theme="dark"] body { background: #14161c; color: #e6e8ee; }
+:root[data-theme="dark"] .card { background: #1d2029; color: #e6e8ee; border-color: #2c3140; }
+:root[data-theme="dark"] .text-muted { color: #9aa3b5 !important; }
+:root[data-theme="dark"] .alert-info { background: #13303a; color: #bfe9f4; border-color: #1f4b58; }
+:root[data-theme="dark"] .table { color: #e6e8ee; border-color: #2c3140; }
+:root[data-theme="dark"] code { color: #ff8fc3; }
+:root[data-theme="dark"] a:not(.btn):not(.nav-link):not(.navbar-brand) { color: #6fd3ee; }
+:root[data-theme="dark"] .btn-outline-dark { color: #e6e8ee; border-color: #e6e8ee; }
+:root[data-theme="dark"] .btn-outline-secondary { color: #c4cad6; border-color: #8a93a6; }
+:root[data-theme="dark"] .border-top { border-color: #2c3140 !important; }
+:root[data-theme="dark"] textarea.code-box { background: #0f1116; color: #e6e8ee; border-color: #2c3140; }
+@media (min-width: 992px) {
+  :root[data-theme="dark"] #mainNav { background: transparent; }
+}
+@media (max-width: 991.98px) {
+  :root[data-theme="dark"] #mainNav { background: #1d2029; }
+  :root[data-theme="dark"] #mainNav .navbar-brand, :root[data-theme="dark"] #mainNav .nav-link, :root[data-theme="dark"] #mainNav .navbar-toggler { color: #e6e8ee; }
+}

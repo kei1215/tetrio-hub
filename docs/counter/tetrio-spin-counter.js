@@ -196,10 +196,12 @@
   let lastHtml = '';
   const esc = t => String(t).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
   const draw = force => {
-    if (!visible) {
-      if (!shownYet()) return;
-      visible = true; setClosed(S.panelClosed);
+    // パッチ版: 盤面修正が止まったら(HOME に戻ったときなど)隠し、また動き始めたら出す
+    if (shownYet() !== visible) {
+      visible = shownYet();
+      if (visible) setClosed(S.panelClosed); else { panel.style.display = 'none'; mini.style.display = 'none'; }
     }
+    if (!visible) return;
     bLines.textContent = 'SPIN の列ごと: ' + (S.byLines ? 'ON' : 'OFF');
     bPiece.textContent = 'ミノごと: ' + (S.byPiece ? 'ON' : 'OFF');
     const list = shown();
