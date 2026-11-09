@@ -16,9 +16,15 @@ What it does (nothing is installed; it only writes the output folder):
   4. Bumps package.json "update" and prepends a QP-CHANGELOG entry.
   5. Re-zips deterministically and rebuilds the 9 launchers
      (Mac .command / Linux .sh / Windows .cmd) with the new payload and SHA256.
+  6. With --offline-src DIR (tools/patch/offline-src): replaces / adds the
+     O/offline/* files found there (in the vO and vA zips, which carry the offline
+     client), inlines extra-effects-schema.js at /*QP_EXTRA_SCHEMA*/, and loads
+     revive-extra-effects.js from O/offline/index.html. The standalone mission
+     editor is written as QP-Mission-Editor-v<EDITOR>.html.
 
 Usage:
-  python3 build_release.py OLD_RELEASE_DIR NEW_RELEASE_DIR --old 8233 --new 8234 --hub DOCS_DIR
+  python3 build_release.py OLD_RELEASE_DIR NEW_RELEASE_DIR --old 8233 --new 8238 --hub DOCS_DIR \
+      --port-2026-11-09 --offline-src tools/patch/offline-src
 """
 import argparse, base64, hashlib, io, json, os, re, shutil, stat, sys, zipfile
 from pathlib import Path
@@ -136,16 +142,59 @@ def patch_transform(src, edit_src, counter_src, port=False):
     return runner + src
 
 
-def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=False):
+EDITOR_VERSION = '6.5'
+SCHEMA_MARK = '/*QP_EXTRA_SCHEMA*/'
+EXTRA_TAG = '<script src="/revive-extra-effects.js"></script>'
+MISSIONS_TAG = '<script src="/revive-missions.js"></script>'
+
+
+def load_offline_src(folder):
+    """O/offline overrides: {file name: bytes}. The schema file itself is not shipped."""
+    if folder is None:
+        return {}
+    schema = (folder / 'extra-effects-schema.js').read_text(encoding='utf-8')
+    files = {}
+    for f in sorted(folder.iterdir()):
+        if f.name == 'extra-effects-schema.js' or not f.is_file() or f.name.startswith('.'):
+            continue
+        text = f.read_text(encoding='utf-8')
+        if SCHEMA_MARK in text:
+            if text.count(SCHEMA_MARK) != 1:
+                raise SystemExit('schema marker in ' + f.name)
+            text = text.replace(SCHEMA_MARK, schema)
+        files[f.name] = text.encode('utf-8')
+    return files
+
+
+def patch_offline_index(text):
+    if EXTRA_TAG in text:
+        return text
+    return replace_once(text, MISSIONS_TAG, EXTRA_TAG + MISSIONS_TAG, 'O/offline/index.html revive-missions tag')
+
+
+def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=False, offline=None):
+    offline = offline or {}
     out = io.BytesIO()
     with zipfile.ZipFile(old_zip) as zin, zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as zout:
         names = sorted(n for n in zin.namelist() if not n.endswith('/'))
         if len(names) != len(set(names)):
             raise SystemExit('duplicate entries in ' + old_zip.name)
-        for name in names:
-            info = zin.getinfo(name)
-            data = zin.read(name)
-            if name == 'O/transform.js':
+        has_offline = 'O/offline/index.html' in names
+        added = []
+        if has_offline and offline:
+            added = sorted('O/offline/' + n for n in offline if 'O/offline/' + n not in names)
+            template = zin.getinfo('O/offline/revive-missions.js')
+        for name in sorted(names + added):
+            info = template if name in added else zin.getinfo(name)
+            data = b'' if name in added else zin.read(name)
+            base = name[len('O/offline/'):] if name.startswith('O/offline/') else None
+            if has_offline and base in offline:
+                data = offline[base]
+                if base == 'reverse-hyper-browser.js':
+                    data = replace_once(data.decode('utf-8'), OLD_MUSIC, NEW_MUSIC, name).encode('utf-8')
+            elif has_offline and offline and name == 'O/offline/index.html':
+                data = patch_offline_index(data.decode('utf-8')).encode('utf-8')
+            elif name == 'O/transform.js':
                 data = patch_transform(data.decode('utf-8'), edit_src, counter_src, port).encode('utf-8')
             elif name == 'O/offline/reverse-hyper-browser.js':
                 data = replace_once(data.decode('utf-8'), OLD_MUSIC, NEW_MUSIC, name).encode('utf-8')
@@ -156,8 +205,13 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                 pkg['update'] = int(new)
                 data = json.dumps(pkg).encode('utf-8')
             elif name == 'QP-CHANGELOG.txt':
-                entry = (f'v4.{new} replay board edit' + (' / TETR.IO 2026-11-09 client' if port else '') + '\n'
+                entry = (f'v4.{new} replay board edit' + (' / TETR.IO 2026-11-09 client' if port else '')
+                         + (' / revive mission extra effects' if offline else '') + '\n'
                          + ('- 2026-11-09 の TETR.IO 更新(内部の名前の付け替え)に合わせて書き換え位置を更新。\n' if port else '')
+                         + ('- リバイブミッションに追加効果(複数同時可):消せない段の追加・削除、強制ゴミ(即時上昇・地形変更・ゴミ予測バー、\n'
+                            '  地形指定なし/シード由来のパターン・形・テンプレート、ボム)、盤面の高さ、直列率、Spinルール、ミノの増減、I5。\n'
+                            '  盤面の高さ・直列率・Spin・ミノは「ミッション終了時/復活し終えた時/ラン中」から戻すタイミングを選べる。\n'
+                            f'- ミッションエディタ v{EDITOR_VERSION}(v5.3 の設定項目を維持)に「追加効果」タブを追加。\n' if offline else '')
                          + 
                          '- CONFIG > QP PATCH TOOLS に REPLAY BOARD EDIT (ON/OFF) を追加。ON のとき、リプレイを止めるとその場面から操作でき、\n'
                          '  スピンカウンター(SPIN・T-SPIN・QUAD)も表示する。リプレイ演出・シークバー非表示・次の自動再生は切る。\n'
@@ -210,7 +264,9 @@ def main():
     ap.add_argument('--new', required=True)
     ap.add_argument('--hub', required=True, type=Path, help='tetrio-hub/docs')
     ap.add_argument('--port-2026-11-09', dest='port', action='store_true', help='adapt anchors to the TETR.IO client of 2026-11-09')
+    ap.add_argument('--offline-src', type=Path, help='folder with changed O/offline/* files (tools/patch/offline-src)')
     a = ap.parse_args()
+    offline = load_offline_src(a.offline_src)
     if a.new_dir.exists():
         raise SystemExit('output folder already exists: ' + str(a.new_dir))
     edit_src = (a.hub / 'replay-edit/tetrio-replay-edit.js').read_text(encoding='utf-8')
@@ -221,7 +277,7 @@ def main():
         old_zip = a.old_dir / f'QP-Patch-v{kind}4.{a.old}-Source.zip'
         new_zip = a.new_dir / f'QP-Patch-v{kind}4.{a.new}-Source.zip'
         old_sha = sha256(old_zip.read_bytes())
-        payload = build_zip(old_zip, new_zip, kind, a.old, a.new, edit_src, counter_src, a.port)
+        payload = build_zip(old_zip, new_zip, kind, a.old, a.new, edit_src, counter_src, a.port, offline)
         sums[new_zip.name] = sha256(payload)
         for osname, ext, flavor in OS_FILES:
             old_file = a.old_dir / f'tetrio-patch-{osname}-v{kind}4.{a.old}{ext}'
@@ -229,7 +285,11 @@ def main():
             build_launcher(old_file, new_file, flavor, a.old, a.new, old_sha, payload)
             sums[new_file.name] = sha256(new_file.read_bytes())
         print(kind, 'ok', len(payload))
-    for extra in ('QP-Mission-Editor-v6.4.html',):
+    if offline:
+        extra = f'QP-Mission-Editor-v{EDITOR_VERSION}.html'
+        (a.new_dir / extra).write_bytes(offline['mission-editor.html'])
+        sums[extra] = sha256(offline['mission-editor.html'])
+    for extra in () if offline else ('QP-Mission-Editor-v6.4.html',):
         if (a.old_dir / extra).exists():
             shutil.copy2(a.old_dir / extra, a.new_dir / extra)
             sums[extra] = sha256((a.new_dir / extra).read_bytes())
