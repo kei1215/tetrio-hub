@@ -46,7 +46,7 @@
           if (def && Array.isArray(def.data)) {
             const y0 = Math.ceil(piece.y);
             const log = n.__rpeLockLog || (n.__rpeLockLog = new Map());
-            log.set(num, { board: g.board.map(row => row.slice()), cells: def.data.map(([dx, dy]) => [piece.x + dx - def.dx, y0 + dy - def.dy]) });
+            log.set(num, { board: g.board.map(row => row.slice()), type: String(piece.type || 'x'), cells: def.data.map(([dx, dy]) => [piece.x + dx - def.dx, y0 + dy - def.dy]) });
             for (const k of log.keys()) if (k < num - 21 || k > num) log.delete(k);
           }
         } catch (e) { }
@@ -449,12 +449,72 @@
         const e = log.get(k);
         g = align(g, e.board);
         const pre = e.board.map(row => row.slice());
-        for (const [x, y] of e.cells) if (pre[y] && x >= 0 && x < W10) { pre[y][x] = 'x'; g[y][x] = k; }
+        for (const [x, y] of e.cells) if (pre[y] && x >= 0 && x < W10) { pre[y][x] = e.type || 'x'; g[y][x] = k; }
         g = clearRows(g, pre);
       }
       return align(g, stop);
     };
     if (undo[0]) tags = startTags();
+    // 7ミノごと: 1巡(ゲームの最初から数えた 7 個)を置いた形を1ページにする。巡の中で消したラインは
+    // そのページでは埋まった段のまま残し(後回しの段)、fumen が次のページへ進むときに消える
+    if (pageMode === 'seven' && undo[0]) {
+      const stop = undo[0].state.game.board, from = Math.floor(Math.max(0, P0 - 1) / 7) * 7 + 1, log = S.active && S.active.__rpeLockLog;
+      const steps = [];
+      let start = stop, startNum = P0;
+      let haveLog = !!log && P0 >= from && P0 % 7 !== 0;
+      if (haveLog) for (let k = from; k <= P0; k++) if (!log.has(k)) haveLog = false;
+      if (haveLog) {
+        start = log.get(from).board; startNum = from - 1;
+        for (let k = from; k <= P0; k++) {
+          const e = log.get(k), pre = e.board.map(row => row.slice());
+          for (const [x, y] of e.cells) if (pre[y] && x >= 0 && x < W10) pre[y][x] = e.type || 'x';
+          steps.push({ num: k, prev: e.board, pre });
+        }
+      }
+      for (let i = 1; i <= last; i++) steps.push({ num: numOf(i), prev: undo[i - 1].state.game.board, pre: undo[i].pre || undo[i].state.game.board });
+      const rowOf = (row, tag) => ({ cells: row.slice(0, W10), tags: row.slice(0, W10).map(c => filled(c) ? tag : null), dead: false });
+      let D = start.map(row => rowOf(row, 0));
+      const live = () => D.filter(r => !r.dead);
+      const sameAs = (rows, board) => rows.length === board.length && rows.every((r, y) => r.cells.every((c, x) => filled(c) === filled(board[y][x])));
+      const render = num => {
+        const out = D.map(r => r.cells.map((c, x) => {
+          if (!filled(c) || grayMode === 'none') return c;
+          const t = r.tags[x], lo = grayMode === 'piece' ? num : Math.floor((num - 1) / 7) * 7 + 1;
+          return typeof t === 'number' && num > 0 && t >= lo && t <= num ? c : 'gb';
+        }));
+        return out;
+      };
+      const pages7 = [{ board: render(startNum) }];
+      steps.forEach((st, idx) => {
+        // せり上がり: 今の地形(後回しの段を除く)が k 段上にずれていたら、下に段を足して上を詰める
+        let L = live();
+        if (!sameAs(L, st.prev)) {
+          let fixed = false;
+          for (let k = 1; k <= 20 && !fixed; k++) {
+            const cand = L.slice(k).concat(st.prev.slice(st.prev.length - k).map(row => rowOf(row, -1)));
+            if (sameAs(cand, st.prev)) {
+              let drop = k;   // 上の空き段から k 段消す(後回しの段は残す)
+              D = D.filter(r => { if (drop > 0 && !r.dead && r.cells.every(c => !filled(c))) { drop--; return false; } return true; });
+              D = D.concat(st.prev.slice(st.prev.length - k).map(row => rowOf(row, -1)));
+              fixed = true;
+            }
+          }
+          if (!fixed) D = st.prev.map(row => rowOf(row, -1));   // 追えなくなったら今の地形から(色は分からない)
+          L = live();
+        }
+        // 置いたマス
+        st.pre.forEach((row, y) => row.forEach((c, x) => { if (filled(c) && !filled(st.prev[y] && st.prev[y][x]) && L[y]) { L[y].cells[x] = c; L[y].tags[x] = st.num; } }));
+        // 消えた段は後回し(埋まった段のまま残す)。今の地形の高さを保つため上に空き段を足す
+        let cleared = 0;
+        st.pre.forEach((row, y) => { if (row.every(c => filled(c) && c !== 'gbd') && L[y]) { L[y].dead = true; cleared++; } });
+        for (let c = 0; c < cleared; c++) D.unshift(rowOf(new Array(W10).fill(null), null));
+        if (st.num % 7 === 0 || idx === steps.length - 1) {
+          pages7.push({ board: render(st.num) });
+          D = live();   // fumen は次のページで、埋まった段を消す
+        }
+      });
+      return fumenOfBoards(pages7);
+    }
     if (undo[0]) pages.push({ board: paint(undo[0].state.game.board, P0, tags) });
     for (let i = 1; i <= last; i++) {
       const u = undo[i], prevBoard = undo[i - 1].state.game.board, num = numOf(i);
@@ -562,7 +622,7 @@
     bSwap.textContent = '2人の左右を入れ替え: ' + (S.swap ? 'ON' : 'OFF');
     bCounter.textContent = 'スピンカウンター: ' + (S.counter ? 'ON' : 'OFF');
     bFumen.textContent = S.active ? `fumen に書き出す(止めた場面 + ${undo.length - 1}ミノ)` : 'fumen で今の盤面を開く';
-    bFumenPage.textContent = 'fumen のページ: ' + (S.fumenPage === 'seven' ? '7ミノごと' : '1ミノごと');
+    bFumenPage.textContent = 'fumen のページ: ' + (S.fumenPage === 'seven' ? '1巡(7ミノ)ごと・消したラインは次のページで消す' : '1ミノごと');
     bFumenGray.textContent = 'fumen の色: ' + ({ none: 'そのまま', cycle: '1巡(7ミノ)で置いたミノ以外グレー', piece: '最後に置いたミノ以外グレー' })[S.fumenGray];
     const tgt = pick(list);
     bSide.textContent = '操作する盤面: ' + (tgt ? name(tgt) : '-') + (list.length > 1 ? '(押すと切り替え)' : '');

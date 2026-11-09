@@ -49,7 +49,8 @@
   const dirs=[...new Set([path.join(downloads,'all-tetrio-patch'),downloads,path.join(os.homedir(),'Downloads','all-tetrio-patch'),path.join(os.homedir(),'Downloads')])];
   return {dirs,found:dirs.find(dir=>{try{return fs.statSync(path.join(dir,RESOURCE)).isFile()}catch{return false}})||null,downloads};
  }
- const tail=file=>{try{return fs.readFileSync(file,'utf8').split(/\r?\n/).filter(Boolean).slice(-4).join('\n')}catch{return ''}};
+ // The log is UTF-8 (a BOM from PowerShell is dropped); older Windows logs were UTF-16.
+ const tail=file=>{try{const b=fs.readFileSync(file);const text=b[0]===0xff&&b[1]===0xfe?b.slice(2).toString('utf16le'):b.toString('utf8').replace(/^\ufeff/,'');return text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean).slice(-4).join('\n')}catch{return ''}};
  ipcMain.handle('qp-patch-update-check',async event=>{
   try{
    if(!allowed(event))throw Error('Unsupported page');
@@ -100,25 +101,39 @@
    // "is TETR.IO running?" check.
    const work=fs.mkdtempSync(path.join(os.tmpdir(),'tetrio-patch-update-'));
    const log=path.join(work,'update.log');
-   const env={...process.env,QP_PID:String(process.pid),QP_LAUNCHER:launcher,QP_LOG:log};
+   // The app to start again if the update fails (on success the installer starts it).
+   const appBundle=OS_NAME==='Mac'?path.resolve(process.execPath,'..','..','..'):'';
+   const env={...process.env,QP_PID:String(process.pid),QP_LAUNCHER:launcher,QP_LOG:log,QP_APP_EXEC:process.execPath,QP_APP_BUNDLE:appBundle};
    let child;
    if(OS_NAME==='Windows'){
     const script=path.join(work,'update.ps1');
+    // ASCII only (Windows PowerShell 5.1 reads a BOM-less script as ANSI). The launcher is
+    // started with the call operator, which quotes paths with spaces / non-ASCII correctly.
     fs.writeFileSync(script,[
+     '$ErrorActionPreference="Continue"',
      '$p=[int]$env:QP_PID',
      'while(Get-Process -Id $p -ErrorAction SilentlyContinue){Start-Sleep -Milliseconds 500}',
-     '$i=0;while((Get-Process -Name "TETR.IO","tetrio","tetrio-desktop" -ErrorAction SilentlyContinue) -and $i -lt 120){Start-Sleep -Milliseconds 500;$i++}',
-     '& cmd.exe /d /c "`"$env:QP_LAUNCHER`"" *> $env:QP_LOG'
-    ].join('\r\n'),'utf8');
+     '$i=0;while((Get-Process -Name "TETR.IO","tetrio","tetrio-desktop" -ErrorAction SilentlyContinue) -and $i -lt 360){Start-Sleep -Milliseconds 500;$i++}',
+     '"waited " + ($i/2) + "s for TETR.IO to exit" | Out-File -FilePath $env:QP_LOG -Encoding utf8',
+     '$code=1',
+     'try{ & $env:QP_LAUNCHER 2>&1 | Out-File -FilePath $env:QP_LOG -Encoding utf8 -Append; $code=$LASTEXITCODE }catch{ ($_ | Out-String) | Out-File -FilePath $env:QP_LOG -Encoding utf8 -Append }',
+     '"exit=" + $code | Out-File -FilePath $env:QP_LOG -Encoding utf8 -Append',
+     'if($code -ne 0 -and $env:QP_APP_EXEC){ Start-Process -FilePath $env:QP_APP_EXEC }'
+    ].join('\r\n'),'ascii');
     child=spawn('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden','-File',script],{detached:true,stdio:'ignore',windowsHide:true,env});
    }else{
     const script=path.join(work,'update.sh');
     const busy=OS_NAME==='Mac'?'/usr/bin/pgrep -f "[/]TETR.IO.app/Contents/MacOS/" >/dev/null 2>&1':'{ pgrep -x tetrio-desktop >/dev/null 2>&1 || pgrep -x tetrio >/dev/null 2>&1; }';
+    const relaunch=OS_NAME==='Mac'?'[ -n "$QP_APP_BUNDLE" ] && /usr/bin/open -a "$QP_APP_BUNDLE"':'[ -n "$QP_APP_EXEC" ] && nohup "$QP_APP_EXEC" >/dev/null 2>&1 &';
     fs.writeFileSync(script,[
      '#!/bin/sh',
      'while kill -0 "$QP_PID" 2>/dev/null; do sleep 0.5; done',
-     'i=0; while '+busy+' && [ $i -lt 120 ]; do sleep 0.5; i=$((i+1)); done',
-     '/bin/sh "$QP_LAUNCHER" > "$QP_LOG" 2>&1'
+     'i=0; while '+busy+' && [ $i -lt 360 ]; do sleep 0.5; i=$((i+1)); done',
+     '/bin/sh "$QP_LAUNCHER" > "$QP_LOG" 2>&1',
+     'code=$?',
+     'echo "exit=$code" >> "$QP_LOG"',
+     '# On failure start TETR.IO again so CONFIG > PATCH UPDATE can show why.',
+     'if [ "$code" -ne 0 ]; then '+relaunch+'; fi'
     ].join('\n')+'\n',{mode:0o755});
     child=spawn('/bin/sh',[script],{detached:true,stdio:'ignore',env});
    }
