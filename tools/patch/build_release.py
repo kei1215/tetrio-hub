@@ -6,7 +6,7 @@ What it does (nothing is installed; it only writes the output folder):
   2. Rewrites O/transform.js:
        - embeds the replay board edit (docs/replay-edit) and the spin counter
          (docs/counter) and runs them only when CONFIG > REPLAY BOARD EDIT is ON
-         (localStorage 'qp-replay-edit-v1' == '1', online client, tools not paused);
+         (localStorage 'qp-replay-edit-v1' == '1', online client; it also runs while QP TOOLS are paused);
        - while it is ON, the patch's replay presentation (installReplayUI: QP replay
          background, hidden seek bar, Z/X/C presentation keys, TL intro/score effects,
          final FT screen) is skipped. The replay edit also turns off the native
@@ -122,7 +122,7 @@ def patch_transform(src, edit_src, counter_src, port=False):
         f"const QP_SPIN_COUNTER_SRC={json.dumps(counter_src, ensure_ascii=False)};\n"
         "function qpReplayEditRunner(){\n"
         " return ';(function(window,document){try{if(window.location.protocol!==\"https:\")return;var ls=window.localStorage;"
-        "if(!ls||ls.getItem(\"qp-replay-edit-v1\")!==\"1\"||ls.getItem(\"qp-patch-online-tools-paused-v1\")===\"1\")return;"
+        "if(!ls||ls.getItem(\"qp-replay-edit-v1\")!==\"1\")return;"
         "window.__qpEmbedded=true;window.__scEmbedded=function(){'+QP_SPIN_COUNTER_SRC+'\\n};"
         "var run=function(){'+QP_REPLAY_EDIT_SRC+'\\n};"
         "if(document.readyState===\"loading\")document.addEventListener(\"DOMContentLoaded\",run,{once:true});else run();"

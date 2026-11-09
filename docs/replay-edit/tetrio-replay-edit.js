@@ -379,7 +379,22 @@
   mini.onclick = () => setClosed(false);
   document.body.append(panel, mini);
   const setClosed = c => { S.panelClosed = c; panel.style.display = c ? 'none' : 'grid'; mini.style.display = c ? 'block' : 'none'; };
-  setClosed(S.panelClosed);
+  // パッチ版: TETRA CHANNEL を開いた瞬間か、リプレイを読み込んだ瞬間から動き始める(それまでパネルは出さない)。
+  // ゲームをつかまえる受け口は起動時から置いてあるので、読み込んだリプレイのゲームも取りこぼさない
+  const tetraOpen = () => {
+    const menus = document.getElementById('menus');
+    return /^tetra/.test((menus && menus.getAttribute('data-menu-type')) || '') || !!document.querySelector('#menus [data-menuview^="tetra"]:not(.hidden)');
+  };
+  const replayLoaded = () => games.some(n => { try { return n.esm && n.esm.IsReplay(); } catch (e) { return false; } });
+  let started = !W.__qpEmbedded || !!W.__qpEditStarted;
+  const checkStart = () => {
+    if (started) return true;
+    if (!tetraOpen() && !replayLoaded()) return false;
+    started = true; W.__qpEditStarted = true;
+    setClosed(S.panelClosed);
+    return true;
+  };
+  if (started) setClosed(S.panelClosed); else { panel.style.display = 'none'; mini.style.display = 'none'; }
   if (updated) S.msg = '最新版に更新しました';
 
   const draw = () => {
@@ -453,6 +468,7 @@
   const loop = now => {
     raf = requestAnimationFrame(loop);
     try {
+      if (!checkStart()) { last = now; return; }
       const list = shown();
       applySwap(list);
       // パッチ版: 盤面修正を ON にしている間は、次のラウンドへの自動再生を切る

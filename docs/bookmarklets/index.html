@@ -42,30 +42,31 @@
     </section>
 
     <section id="desktop">
-      <h2>デスクトップ版(Mac／Windows／Linux)のパッチ v4.8235</h2>
-      <p>ブラウザではなく、TETR.IO デスクトップアプリに入れる版です。実行前に TETR.IO を終了してください。ファイルは <a href="https://github.com/kei1215/tetrio-hub/releases/tag/patch-v4.8235">GitHub のリリース</a>に置いています(<a href="https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.8235/SHA256SUMS.txt">SHA256SUMS</a>)。</p>
+      <h2>デスクトップ版(Mac／Windows／Linux)のパッチ v4.8236</h2>
+      <p>ブラウザではなく、TETR.IO デスクトップアプリに入れる版です。実行前に TETR.IO を終了してください。ファイルは <a href="https://github.com/kei1215/tetrio-hub/releases/tag/patch-v4.8236">GitHub のリリース</a>に置いています(<a href="https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.8236/SHA256SUMS.txt">SHA256SUMS</a>)。</p>
       <ul>
         <li><strong>vA(AI版)</strong>: OFFLINE／保存／Replay に加えて AI ― <a href="auth.html">Discord でログインして取得</a>(指定の Discord サーバーのロールが必要)</li>
         <li><strong>vO(OFFLINE版)</strong>: OFFLINE／保存／Replay ―
-          <a href="https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.8235/tetrio-patch-Mac-vO4.8235.command">Mac</a> ・
-          <a href="https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.8235/tetrio-patch-Windows-vO4.8235.cmd">Windows</a> ・
-          <a href="https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.8235/tetrio-patch-Linux-vO4.8235.sh">Linux</a></li>
+          <a href="https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.8236/tetrio-patch-Mac-vO4.8236.command">Mac</a> ・
+          <a href="https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.8236/tetrio-patch-Windows-vO4.8236.cmd">Windows</a> ・
+          <a href="https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.8236/tetrio-patch-Linux-vO4.8236.sh">Linux</a></li>
         <li><strong>vR(Replay版)</strong>: 通常の TETR.IO に Replay 表示だけ追加する軽量版 ―
-          <a href="https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.8235/tetrio-patch-Mac-vR4.8235.command">Mac</a> ・
-          <a href="https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.8235/tetrio-patch-Windows-vR4.8235.cmd">Windows</a> ・
-          <a href="https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.8235/tetrio-patch-Linux-vR4.8235.sh">Linux</a></li>
+          <a href="https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.8236/tetrio-patch-Mac-vR4.8236.command">Mac</a> ・
+          <a href="https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.8236/tetrio-patch-Windows-vR4.8236.cmd">Windows</a> ・
+          <a href="https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.8236/tetrio-patch-Linux-vR4.8236.sh">Linux</a></li>
       </ul>
-      <p>Mac: ダウンロード後、ターミナルで <code>sh ~/Downloads/tetrio-patch-Mac-vR4.8235.command</code> のように実行します(ダブルクリックだと実行権限や警告で止まることがあります)。<br>
-      Windows: <code>.cmd</code> をダブルクリック。Linux: <code>sh tetrio-patch-Linux-vR4.8235.sh</code>。<br>
+      <p>Mac: ダウンロード後、ターミナルで <code>sh ~/Downloads/tetrio-patch-Mac-vR4.8236.command</code> のように実行します(ダブルクリックだと実行権限や警告で止まることがあります)。<br>
+      Windows: <code>.cmd</code> をダブルクリック。Linux: <code>sh tetrio-patch-Linux-vR4.8236.sh</code>。<br>
       本体を変えずに確認だけしたいときは、最後に <code>--dry-run</code> を付けます。</p>
       <p class="note"><strong>vA・vO には、別に TETRIO-Resources-1.0.zip(TETR.IO の素材)が必要です。</strong>起動ファイルと同じフォルダ、その一つ上、または「ダウンロード」フォルダに置いてください。TETRIO-Resources-1.0.zip は Discord で配布しています(このサイトにはありません)。vR は不要です。</p>
       <h3>v4.8234〜 の新機能: REPLAY BOARD EDIT</h3>
       <p>CONFIG の一番下「QP PATCH TOOLS」に <strong>REPLAY BOARD EDIT: ON/OFF</strong> を追加しました(最初は OFF)。ON にすると、ブラウザ版の<a href="../replay-edit/">リプレイ盤面修正</a>と同じく、リプレイを止めるとその場面から操作でき、スピンカウンターも出ます。パッチ版はゲームを最初からつかまえるので、「リプレイを開く前に押す」必要はありません。</p>
       <ul>
         <li>ON の間は、パッチのリプレイ演出(リプレイ背景の変更・シークバーを隠す・Z/X/C の演出切り替え・TL の導入やスコア演出・最後の結果画面)と、次のラウンドの自動再生を切ります。プレイヤーの名前はそのまま出ます。</li>
-        <li>QP TOOLS を PAUSED にしているときは動きません。</li>
+        <li>QP TOOLS を PAUSED にしていても動きます。</li>
+        <li>動き始めるのは、TETRA CHANNEL を開いたとき、またはリプレイを読み込んだときです(それまでパネルは出ません)。</li>
       </ul>
-      <p class="note">v4.8235 は、2026年11月9日の TETR.IO の更新(内部の名前の付け替え)に合わせた版です。v4.8233・v4.8234 は今の TETR.IO ではリプレイ演出・オフライン機能・CONFIG の停止/削除の項目が出ないので、v4.8235 を入れ直してください。</p>
+      <p class="note">v4.8235 以降は、2026年11月9日の TETR.IO の更新(内部の名前の付け替え)に合わせた版です。v4.8233・v4.8234 は今の TETR.IO ではリプレイ演出・オフライン機能・CONFIG の停止/削除の項目が出ないので、v4.8235 を入れ直してください。</p>
     </section>
 
     <section>

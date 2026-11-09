@@ -188,11 +188,18 @@
   mini.onclick = () => setClosed(false);
   document.body.append(panel, mini);
   const setClosed = c => { S.panelClosed = c; panel.style.display = c ? 'none' : 'grid'; mini.style.display = c ? 'block' : 'none'; };
-  setClosed(S.panelClosed);
+  // パッチ版: 盤面修正と同じく、TETRA CHANNEL かリプレイで動き始めるまでは表示しない(数えるのは起動時から)
+  const shownYet = () => !W.__qpEmbedded || !!W.__qpEditStarted;
+  let visible = shownYet();
+  if (visible) setClosed(S.panelClosed); else { panel.style.display = 'none'; mini.style.display = 'none'; }
 
   let lastHtml = '';
   const esc = t => String(t).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
   const draw = force => {
+    if (!visible) {
+      if (!shownYet()) return;
+      visible = true; setClosed(S.panelClosed);
+    }
     bLines.textContent = 'SPIN の列ごと: ' + (S.byLines ? 'ON' : 'OFF');
     bPiece.textContent = 'ミノごと: ' + (S.byPiece ? 'ON' : 'OFF');
     const list = shown();
