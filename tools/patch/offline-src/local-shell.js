@@ -165,8 +165,16 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
   let url=window.__qpMissionEditorUrl||'/mission-editor.html';
   try{const library=window.LocalMissionLibrary?.read?.();if(library){const bytes=new TextEncoder().encode(JSON.stringify(library));let bin='';for(let i=0;i<bytes.length;i+=32768)bin+=String.fromCharCode(...bytes.subarray(i,i+32768));url=url.split('#')[0]+'#qp-missions='+btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}}
   catch(error){window.LocalUIHealth?.fail?.('ミッションエディタへの受け渡し',error)}
+  // v4.8240: the desktop app hands same-origin window.open() to the OS, which cannot open
+  // tetrio-local:// URLs (on every OS). Ask the patch's main process for an editor window.
+  if(location.protocol==='tetrio-local:'){
+   const full=new URL(url,location.href).href;
+   Promise.resolve(window.IPC?.invoke?.('qp-open-mission-editor',full)).then(reply=>{if(!reply?.ok)throw Error(reply?.error||'このバージョンのアプリでは開けません');})
+    .catch(error=>{window.LocalUIHealth?.fail?.('ミッションエディタを開く',error);alert('ミッションエディタを開けませんでした。\n'+error.message)});
+   return;
+  }
   window.open(url,'_blank','noopener');
- });
+ })
  missionButton('ミッションJSONを書き出す',()=>window.LocalMissionLibrary?.download?.());
  missionButton('ミッションJSONを読み込む',()=>missionImport.click());
  missionImport.onchange=async()=>{try{const file=missionImport.files?.[0];if(file)await window.LocalMissionLibrary?.importFile?.(file)}catch(error){window.LocalUIHealth?.fail?.('ミッションJSON',error);alert('ミッションJSONを読み込めません: '+error.message)}finally{missionImport.value=''}};

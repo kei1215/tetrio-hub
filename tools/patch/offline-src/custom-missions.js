@@ -163,6 +163,8 @@
   out.onclick=download;close.onclick=()=>dialog.hidden=true;
   dialog.append(title,note,area,status,save,defaults,out,close);document.body.appendChild(dialog);
  };
+ // v4.8240: the desktop editor window saves into the same storage; reload the missions here.
+ window.addEventListener('storage',event=>{if(event.key===KEY)window.dispatchEvent(new Event('local-custom-missions'))});
  window.LocalMissionLibrary={read,write,download,importFile,open,clean};
  window.dispatchEvent(new Event('local-mission-library-ready'));
 })();

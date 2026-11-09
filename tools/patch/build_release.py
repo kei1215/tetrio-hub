@@ -25,6 +25,9 @@ What it does (nothing is installed; it only writes the output folder):
 Usage:
   python3 build_release.py OLD_RELEASE_DIR NEW_RELEASE_DIR --old 8233 --new 8238 --hub DOCS_DIR \
       --port-2026-11-09 --offline-src tools/patch/offline-src
+  From v4.8239 on (the v4.8233 base is gone), rebuild incrementally from the last build:
+  python3 build_release.py release-v4.8239-ARO release-v4.8240-ARO --old 8239 --new 8240 --hub DOCS_DIR \\
+      --offline-src tools/patch/offline-src --incremental --notes '- ...'
 """
 import argparse, base64, hashlib, io, json, os, re, shutil, stat, sys, zipfile
 from pathlib import Path
@@ -227,7 +230,20 @@ def patch_offline_index(text):
     return replace_once(text, MISSIONS_TAG, EXTRA_TAG + MISSIONS_TAG, 'O/offline/index.html revive-missions tag')
 
 
-def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=False, offline=None):
+EDITOR_WINDOW_MARK = 'qp-mission-editor-window-v1'
+EDITOR_WINDOW_SRC = Path(__file__).with_name('app-src') / 'editor-window.js'
+
+
+def add_editor_window(text):
+    """Append the mission-editor window handler to O/local-main.js (once)."""
+    if EDITOR_WINDOW_MARK in text:
+        return text
+    if 'ipcMain' not in text:
+        raise SystemExit('O/local-main.js: ipcMain not found')
+    return text.rstrip('\n') + '\n' + EDITOR_WINDOW_SRC.read_text(encoding='utf-8')
+
+
+def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=False, offline=None, incremental=False, notes=''):
     offline = offline or {}
     out = io.BytesIO()
     with zipfile.ZipFile(old_zip) as zin, zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as zout:
@@ -247,13 +263,15 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                 data = offline[base]
                 if base == 'reverse-hyper-browser.js':
                     data = replace_once(data.decode('utf-8'), OLD_MUSIC, NEW_MUSIC, name).encode('utf-8')
-            elif has_offline and offline and name == 'O/offline/client.js':
+            elif has_offline and offline and name == 'O/offline/client.js' and not incremental:
                 data = fix_offline_client(data.decode('utf-8')).encode('utf-8')
+            elif offline and name == 'O/local-main.js':
+                data = add_editor_window(data.decode('utf-8')).encode('utf-8')
             elif has_offline and offline and name == 'O/offline/index.html':
                 data = patch_offline_index(data.decode('utf-8')).encode('utf-8')
-            elif name == 'O/transform.js':
+            elif name == 'O/transform.js' and not incremental:
                 data = patch_transform(data.decode('utf-8'), edit_src, counter_src, port, hyper_fix=bool(offline)).encode('utf-8')
-            elif name == 'O/offline/reverse-hyper-browser.js':
+            elif name == 'O/offline/reverse-hyper-browser.js' and not incremental:
                 data = replace_once(data.decode('utf-8'), OLD_MUSIC, NEW_MUSIC, name).encode('utf-8')
             elif name == 'package.json':
                 pkg = json.loads(data)
@@ -261,6 +279,8 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                     raise SystemExit(f'unexpected package.json in {old_zip.name}: {pkg}')
                 pkg['update'] = int(new)
                 data = json.dumps(pkg).encode('utf-8')
+            elif name == 'QP-CHANGELOG.txt' and incremental:
+                data = (f'v4.{new}\n{notes}\n' + data.decode('utf-8')).encode('utf-8')
             elif name == 'QP-CHANGELOG.txt':
                 entry = (f'v4.{new} replay board edit' + (' / TETR.IO 2026-11-09 client' if port else '')
                          + (' / revive mission extra effects' if offline else '') + '\n'
@@ -329,6 +349,8 @@ def main():
     ap.add_argument('--hub', required=True, type=Path, help='tetrio-hub/docs')
     ap.add_argument('--port-2026-11-09', dest='port', action='store_true', help='adapt anchors to the TETR.IO client of 2026-11-09')
     ap.add_argument('--offline-src', type=Path, help='folder with changed O/offline/* files (tools/patch/offline-src)')
+    ap.add_argument('--incremental', action='store_true', help='OLD is already a build of this script (v4.8239+): only re-overlay O/offline, keep transform.js and client.js')
+    ap.add_argument('--notes', default='', help='changelog lines for --incremental')
     a = ap.parse_args()
     offline = load_offline_src(a.offline_src)
     if a.new_dir.exists():
@@ -341,7 +363,7 @@ def main():
         old_zip = a.old_dir / f'QP-Patch-v{kind}4.{a.old}-Source.zip'
         new_zip = a.new_dir / f'QP-Patch-v{kind}4.{a.new}-Source.zip'
         old_sha = sha256(old_zip.read_bytes())
-        payload = build_zip(old_zip, new_zip, kind, a.old, a.new, edit_src, counter_src, a.port, offline)
+        payload = build_zip(old_zip, new_zip, kind, a.old, a.new, edit_src, counter_src, a.port, offline, a.incremental, a.notes)
         sums[new_zip.name] = sha256(payload)
         for osname, ext, flavor in OS_FILES:
             old_file = a.old_dir / f'tetrio-patch-{osname}-v{kind}4.{a.old}{ext}'

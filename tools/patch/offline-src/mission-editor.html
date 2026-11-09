@@ -36,7 +36,7 @@ dialog{width:min(560px,94vw);border:1px solid var(--border);border-radius:14px;b
 </style>
 </head><body>
 <header><h1>QP 復活ミッションエディタ <small>v6.5（v5.3互換）</small></h1>
-<button id="add">＋ 新規</button><button id="chooseFile">開く</button><button id="download" class="primary">保存</button>
+<button id="add">＋ 新規</button><button id="chooseFile">開く</button><button id="download" class="primary">保存</button><button id="saveToGame" type="button" hidden>ゲームに保存</button>
 <details class="menu"><summary>⋯ その他</summary><div>
 <label class="fld">ミッション名の表示言語<select id="nameView"><option value="ja">日本語</option><option value="original">英語の原文</option></select></label>
 <button id="copy">JSONをコピー</button><button id="random">🎲 ランダムに1件作る</button></div></details>
@@ -1000,7 +1000,10 @@ $('addTpl').onclick=()=>{tplQuery='';$('tplQ').value='';drawTpl();$('tpl').showM
 $('tplQ').oninput=e=>{tplQuery=e.target.value;drawTpl()};$('tplList').onclick=ev=>{const b=ev.target.closest('[data-tpl]');if(b)addTemplate(Number(b.dataset.tpl))};
 $('random').onclick=()=>{const pick=a=>a[Math.floor(Math.random()*a.length)],event=pick(EVENTS),t=OFFICIAL.find(o=>o.id===event),mod=pick(MODS),target=t?.target||pick([2,3,4,6,8]);append({...fresh([mod,event,target,0,pick(['E','D','C','B','A']),`Custom: ${event} ${target}`,'custom_random_'+Date.now()]),requiresAttack:['attack','ljgarbage','szgarbage'].includes(event)})};
 $('copy').onclick=async()=>{try{await navigator.clipboard.writeText(exportData());status('コピーしました')}catch(err){status('コピーできませんでした：'+err.message,true)}};
-$('download').onclick=save;$('chooseFile').onclick=()=>$('file').click();$('file').onchange=async e=>{await openFile(e.target.files[0]);e.target.value=''};
+$('download').onclick=save;
+// v4.8240: the desktop editor window shares the game's storage (tetrio-local://app), so it can
+// save straight into the game's mission library; the game reloads it from the storage event.
+if(location.protocol==='tetrio-local:'){const tag=document.createElement('script');tag.src='/custom-missions.js';tag.onload=()=>{const lib=window.LocalMissionLibrary;if(!lib)return;$('saveToGame').hidden=false;$('saveToGame').onclick=()=>{try{const value=lib.write(JSON.parse(exportData()));dirty=false;rememberOpened();drawList();status('ゲームに保存しました（'+value.missions.length+'件）')}catch(err){status('ゲームに保存できません：'+err.message,true)}}};document.head.appendChild(tag)}$('chooseFile').onclick=()=>$('file').click();$('file').onchange=async e=>{await openFile(e.target.files[0]);e.target.value=''};
 $('loadText').onclick=()=>{try{importText($('json').value)}catch(err){status('読み込み失敗：'+err.message,true)}};$('nameView').onchange=setLang;
 addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();save()}});
 addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue=''}});
