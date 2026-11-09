@@ -258,6 +258,17 @@ def replace_appended(text, mark, source):
     return text.rstrip('\n') + '\n' + block.lstrip('\n')
 
 
+def refresh_embedded(text, edit_src, counter_src):
+    """Incremental builds: put the current replay edit and spin counter into O/transform.js."""
+    for name, src in (('QP_REPLAY_EDIT_SRC', edit_src), ('QP_SPIN_COUNTER_SRC', counter_src)):
+        pattern = re.compile(r'^const ' + name + r'=.*;$', re.M)
+        if len(pattern.findall(text)) != 1:
+            raise SystemExit('O/transform.js: ' + name + ' line not found exactly once')
+        line = 'const ' + name + '=' + json.dumps(src, ensure_ascii=False) + ';'
+        text = pattern.sub(lambda _m: line, text)
+    return text
+
+
 def add_updater(text):
     """Append (or refresh) the patch updater (main process) in O/music-main.js, present in every kind."""
     return replace_appended(text, UPDATER_MARK, APP_SRC / 'patch-updater.js')
@@ -301,6 +312,8 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                 text = data.decode('utf-8')
                 if not incremental:
                     text = patch_transform(text, edit_src, counter_src, port, hyper_fix=bool(offline))
+                else:
+                    text = refresh_embedded(text, edit_src, counter_src)
                 if offline:
                     text = add_update_config(text)
                 data = text.encode('utf-8')

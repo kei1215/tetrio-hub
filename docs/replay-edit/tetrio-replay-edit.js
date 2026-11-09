@@ -29,6 +29,33 @@
     Object.defineProperty(Object.prototype, 'gsm', { configurable: true, enumerable: false, get() { return undefined; }, set });
   }
 
+  // ---- 再生中に置かれたミノの記録(fumen の「1巡」を、止める前の巡の始めから色分けするため) ----
+  // TETR.IO はミノを置くとき、盤面に書き込む前に "lock" を通知する(置いた数もまだ増えていない)。
+  // その時点の盤面と、置くミノのマスを、ゲームの最初から何個目のミノかで覚えておく(最新の 21 個まで)。
+  // このスクリプトがゲームを進めている最中(操作中)は記録しない
+  const hookLocks = n => {
+    const fm = n && n.fm;
+    if (!fm || fm.__rpeLockEmit || typeof fm.emit !== 'function') return;
+    const emit0 = fm.emit;
+    fm.__rpeLockEmit = emit0;
+    fm.emit = function (type, ...a) {
+      if (type === 'lock' && !stepping) {
+        try {
+          const g = n.gsm, piece = a[0], num = (g.stats.piecesplaced || 0) + 1;
+          const def = fm.GetPieceDefinition(piece.type, piece.r, true);
+          if (def && Array.isArray(def.data)) {
+            const y0 = Math.ceil(piece.y);
+            const log = n.__rpeLockLog || (n.__rpeLockLog = new Map());
+            log.set(num, { board: g.board.map(row => row.slice()), cells: def.data.map(([dx, dy]) => [piece.x + dx - def.dx, y0 + dy - def.dy]) });
+            for (const k of log.keys()) if (k < num - 21 || k > num) log.delete(k);
+          }
+        } catch (e) { }
+      }
+      return emit0.call(this, type, ...a);
+    };
+  };
+  const unhookLocks = () => { for (const n of games) { const fm = n && n.fm; if (fm && fm.__rpeLockEmit) { fm.emit = fm.__rpeLockEmit; delete fm.__rpeLockEmit; } } };
+
   // ---- キー設定(TETR.IO と同じ表) ----
   const PRESET = {
     guideline: { moveLeft: ['ARROWLEFT', 'LEFT', 'NUMPAD4'], moveRight: ['ARROWRIGHT', 'RIGHT', 'NUMPAD6'], softDrop: ['ARROWDOWN', 'DOWN', 'NUMPAD2'], hardDrop: ['SPACE', 'NUMPAD8'], rotateCCW: ['CONTROL', 'CONTROLLEFT', 'Z', 'KEYZ', 'NUMPAD3', 'NUMPAD7'], rotateCW: ['ARROWUP', 'UP', 'X', 'KEYX', 'NUMPAD1', 'NUMPAD5', 'NUMPAD9'], rotate180: ['A', 'KEYA'], hold: ['SHIFT', 'SHIFTLEFT', 'C', 'KEYC', 'NUMPAD0'], retry: ['R', 'KEYR'] },
@@ -63,6 +90,9 @@
     swapKey: keep.swapKey ?? null,     // そのときの2人(同じ2人のリプレイの間は並びを保つ)
     counter: keep.counter ?? true,   // スピンカウンター(SPIN・T-SPIN・QUAD)も出す    // 2人のリプレイで、左右のプレイヤーの位置を入れ替える(見た目だけ)   // 操作中の重力をなくす(ハードドロップ・ソフトドロップでだけ落ちる)
     side: keep.side ?? 0,        // 操作する盤面(左から何番目か)
+    // fumen の書き出し方(この端末に保存): ページ 'piece' | 'seven'、色 'none' | 'cycle' | 'piece'
+    fumenPage: (() => { try { return JSON.parse(localStorage.getItem('rpe-fumen-v1') || '{}').page || 'piece'; } catch (e) { return 'piece'; } })(),
+    fumenGray: (() => { try { return JSON.parse(localStorage.getItem('rpe-fumen-v1') || '{}').gray || 'none'; } catch (e) { return 'none'; } })(),
     panelClosed: updated ? !!keep.panelClosed : false,
     active: null,                // 操作中のゲーム
     msg: '',
@@ -356,12 +386,95 @@
   const fumenOf = n => fumenOfBoards([n.gsm.board]);
   // 操作中の流れ(止めた場面 + 置いたミノごと)
   // ラインを消したミノは「置いた所(消える前)」→「消えた後」の2ページ
+  // 設定:
+  //   S.fumenPage  'piece'(1ミノごと) / 'seven'(7ミノごと)
+  //   S.fumenGray  'none'(そのまま) / 'cycle'(その巡=7ミノで置いたミノ以外をグレー) / 'piece'(最後に置いたミノ以外をグレー)
+  // どのマスを何手目のミノで置いたかを、ライン消去・せり上がりで段がずれても追いかける。
+  // ずれ方が分からなくなったら、それまでのマスは「分からない」(グレー)にする
+  const filled = c => c !== null && c !== undefined && c !== 0 && c !== '';
   const fumenOfEdit = () => {
+    const pageMode = S.fumenPage === 'seven' ? 'seven' : 'piece';
+    const grayMode = ['cycle', 'piece'].includes(S.fumenGray) ? S.fumenGray : 'none';
+    const H = undo[0] ? undo[0].state.game.board.length : 40;
+    const W10 = 10;
+    let tags = Array.from({ length: H }, () => new Array(W10).fill(0));   // 0 = 止めた場面からあったマス
+    const matches = (grid, board) => grid.every((row, y) => row.every((t, x) => (t !== null) === filled(board[y] && board[y][x])));
+    // 地形が k 段上にずれた(下からせり上がった)として合わせる。下から入った段は「分からない」(-1)
+    const align = (grid, board) => {
+      if (matches(grid, board)) return grid;
+      for (let k = 1; k <= 20; k++) {
+        const g = grid.slice(k);
+        while (g.length < H) { const y = g.length; g.push((board[y] || []).slice(0, W10).map(c => filled(c) ? -1 : null)); }
+        if (matches(g, board)) return g;
+      }
+      return board.map(row => row.slice(0, W10).map(c => filled(c) ? -1 : null));
+    };
+    // 盤面 board を、手数 step と残すマスで色分けした盤面にする(グレー = 'gb')
+    const paint = (board, step, tagGrid) => {
+      if (grayMode === 'none') return board;
+      if (!(step > 0)) return board.map(row => row.map(c => filled(c) ? 'gb' : c));
+      const from = grayMode === 'piece' ? step : Math.floor((step - 1) / 7) * 7 + 1;
+      return board.map((row, y) => row.map((c, x) => {
+        if (!filled(c)) return c;
+        const t = tagGrid[y] && tagGrid[y][x];
+        return typeof t === 'number' && t >= from && t <= step ? c : 'gb';
+      }));
+    };
+    // tags の null = 空き、数 = ゲームの最初から何個目のミノで置いたマス(0 = 分からない古いマス)。
+    // 巡(7ミノ)はゲームの最初から数える。止めた場面が巡の途中なら、再生中の記録から
+    // その巡の始めから止めるまでに置いたミノのマスを割り出す(記録が足りなければ 0 のまま = グレー)
+    const P0 = base && Number.isFinite(base.pieces) ? base.pieces : 0;
+    const numOf = i => { const st = undo[i] && undo[i].state && undo[i].state.game && undo[i].state.game.stats; return st && Number.isFinite(st.piecesplaced) ? st.piecesplaced : P0 + i; };
+    const clearRows = (grid, board) => { const kept = grid.filter((row, y) => !(board[y] || []).every(c => filled(c) && c !== 'gbd')); while (kept.length < H) kept.unshift(new Array(W10).fill(null)); return kept; };
+    // 置いた後の地形 board に、前のタグ grid を合わせる(k 段せり上がっていれば k 段ずらす)。
+    // 前からあったマスは board でも埋まっているはず。新しく埋まったマス = 置いたミノ(手数 step)
+    const place = (grid, board, step) => {
+      for (let k = 0; k <= 20; k++) {
+        const g = grid.slice(k);
+        while (g.length < H) { const y = g.length; g.push((board[y] || []).slice(0, W10).map(c => filled(c) ? -1 : null)); }
+        if (g.every((row, y) => row.every((t, x) => t === null || filled(board[y] && board[y][x]))))
+          return g.map((row, y) => row.map((t, x) => t === null && filled(board[y] && board[y][x]) ? step : t));
+      }
+      return board.map(row => row.slice(0, W10).map(c => filled(c) ? -1 : null));
+    };
     const pages = [];
-    undo.forEach((u, i) => {
-      if (i > 0 && u.pre) pages.push({ board: u.pre, keep: true });
-      pages.push({ board: u.state.game.board });
-    });
+    const last = undo.length - 1;
+    const startTags = () => {
+      const stop = undo[0].state.game.board, fallback = stop.map(row => row.map(c => filled(c) ? 0 : null));
+      const from = Math.floor(Math.max(0, P0 - 1) / 7) * 7 + 1, log = S.active && S.active.__rpeLockLog;
+      if (grayMode === 'none' || !log || P0 < 1) return fallback;
+      for (let k = from; k <= P0; k++) if (!log.has(k)) return fallback;
+      let g = log.get(from).board.map(row => row.map(c => filled(c) ? 0 : null));
+      for (let k = from; k <= P0; k++) {
+        const e = log.get(k);
+        g = align(g, e.board);
+        const pre = e.board.map(row => row.slice());
+        for (const [x, y] of e.cells) if (pre[y] && x >= 0 && x < W10) { pre[y][x] = 'x'; g[y][x] = k; }
+        g = clearRows(g, pre);
+      }
+      return align(g, stop);
+    };
+    if (undo[0]) tags = startTags();
+    if (undo[0]) pages.push({ board: paint(undo[0].state.game.board, P0, tags) });
+    for (let i = 1; i <= last; i++) {
+      const u = undo[i], prevBoard = undo[i - 1].state.game.board, num = numOf(i);
+      const placedOn = u.pre || u.state.game.board;
+      // せり上がりで前の地形が上にずれていたら、タグも合わせてずらす
+      tags = align(tags, prevBoard);
+      // 置いたマス = 置いた後(消える前)に埋まっていて、前は空いていたマス(せり上がり分はずらしてから)
+      const tagged = place(tags, placedOn, num);
+      const showThis = pageMode === 'piece' || num % 7 === 0 || i === last;
+      if (u.pre && showThis) pages.push({ board: paint(u.pre, num, tagged), keep: true });
+      // ライン消去: 消える前にそろっていた行のタグを消して上を詰める
+      let after = tagged;
+      if (u.pre) {
+        const kept = tagged.filter((row, y) => !(u.pre[y] || []).every(filled));
+        while (kept.length < H) kept.unshift(new Array(W10).fill(null));
+        after = kept;
+      }
+      tags = align(after, u.state.game.board);
+      if (showThis) pages.push({ board: paint(u.state.game.board, num, tags) });
+    }
     return fumenOfBoards(pages);
   };
   S.fumen = n => S.active && !n ? fumenOfEdit() : fumenOf(n || shown()[0]);
@@ -397,8 +510,11 @@
     }
     window.open('https://fumen.zui.jp/?' + code, '_blank', 'noopener');
   });
+  const saveFumen = () => { try { localStorage.setItem('rpe-fumen-v1', JSON.stringify({ page: S.fumenPage, gray: S.fumenGray })); } catch (e) { } };
+  const bFumenPage = btn('', () => { S.fumenPage = S.fumenPage === 'seven' ? 'piece' : 'seven'; saveFumen(); draw(); });
+  const bFumenGray = btn('', () => { const order = ['none', 'cycle', 'piece']; S.fumenGray = order[(order.indexOf(S.fumenGray) + 1) % order.length]; saveFumen(); draw(); });
   const bClose = btn('パネルを閉じる', () => setClosed(true));
-  panel.append(status, bAuto, bSide, bSwap, bGrav, bReset, bFumen, bCounter, bClose);
+  panel.append(status, bAuto, bSide, bSwap, bGrav, bReset, bFumen, bFumenPage, bFumenGray, bCounter, bClose);
   const mini = document.createElement('div');
   mini.id = '__rpemini';
   mini.textContent = '盤面修正';
@@ -446,6 +562,8 @@
     bSwap.textContent = '2人の左右を入れ替え: ' + (S.swap ? 'ON' : 'OFF');
     bCounter.textContent = 'スピンカウンター: ' + (S.counter ? 'ON' : 'OFF');
     bFumen.textContent = S.active ? `fumen に書き出す(止めた場面 + ${undo.length - 1}ミノ)` : 'fumen で今の盤面を開く';
+    bFumenPage.textContent = 'fumen のページ: ' + (S.fumenPage === 'seven' ? '7ミノごと' : '1ミノごと');
+    bFumenGray.textContent = 'fumen の色: ' + ({ none: 'そのまま', cycle: '1巡(7ミノ)で置いたミノ以外グレー', piece: '最後に置いたミノ以外グレー' })[S.fumenGray];
     const tgt = pick(list);
     bSide.textContent = '操作する盤面: ' + (tgt ? name(tgt) : '-') + (list.length > 1 ? '(押すと切り替え)' : '');
     let t;
@@ -513,6 +631,7 @@
       if (!checkStart()) { last = now; return; }
       const list = shown();
       applySwap(list);
+      for (const g of list) hookLocks(g);
       // パッチ版: 盤面修正を ON にしている間は、次のラウンドへの自動再生を切る
       if (W.__qpEmbedded && list.length) {
         const nr = document.getElementById('replaytools_button_nextround');
@@ -564,6 +683,7 @@
   // ---- 片付け(押し直し・自動更新のとき) ----
   W.__rpeTeardown = upd => {
     leave(true);
+    unhookLocks();
     cancelAnimationFrame(raf);
     removeEventListener('keydown', onKey, true);
     removeEventListener('keyup', onKey, true);
