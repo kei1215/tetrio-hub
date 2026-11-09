@@ -74,6 +74,25 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
  const utilities=document.createElement('div');utilities.id='local-utility-actions';utilities.setAttribute('aria-label','ローカル操作');utilities.style.cssText='display:flex;flex-wrap:wrap;gap:.35em;margin:.45em 0';
  const noRenderButton=document.createElement('button');noRenderButton.id='local-no-render-toggle';noRenderButton.textContent='描画停止：OFF';noRenderButton.onclick=()=>{const enabled=window.LocalRenderDiagnostics?.noRender(!window.LocalRenderDiagnostics?.isNoRender());noRenderButton.textContent='描画停止：'+(enabled?'ON':'OFF')};utilities.appendChild(noRenderButton);
  const qpSettingsButton=document.createElement('button');qpSettingsButton.id='local-open-qp-settings';qpSettingsButton.textContent='QP設定を開く';qpSettingsButton.onclick=()=>openNativeQP(true);utilities.appendChild(qpSettingsButton);
+ // v4.8241: patch update (desktop app only; the main process downloads the launcher for this
+ // OS and the installed kind, quits TETR.IO and installs). Nothing happens when already latest.
+ if(location.protocol==='tetrio-local:'&&window.IPC?.invoke){
+  const updateButton=document.createElement('button');updateButton.id='local-patch-update';updateButton.textContent='パッチ更新：確認中…';updateButton.disabled=true;utilities.appendChild(updateButton);
+  let info=null;
+  const check=()=>window.IPC.invoke('qp-patch-update-check').then(r=>{info=r;
+   if(!r?.ok){updateButton.textContent='パッチ更新：確認できません';updateButton.title=r?.error||'';updateButton.disabled=false;return}
+   updateButton.textContent=r.available?'パッチを v'+r.version+' に更新':'パッチ：最新(v4.'+r.installed+' '+r.kind+')';updateButton.title=r.failed?'前回の更新は完了しませんでした: '+r.failed:'';updateButton.disabled=!r.available;
+  }).catch(error=>{info=null;updateButton.textContent='パッチ更新：確認できません';updateButton.title=String(error?.message||error);updateButton.disabled=false});
+  updateButton.onclick=()=>{
+   if(!info?.ok){updateButton.disabled=true;updateButton.textContent='パッチ更新：確認中…';check();return}
+   if(!info.available)return;
+   if(!confirm('パッチを v'+info.version+' に更新します。\nTETR.IO を終了して新しいパッチを入れ、自動で起動し直します。よろしいですか?'))return;
+   updateButton.disabled=true;updateButton.textContent='パッチ更新：ダウンロード中…';
+   window.IPC.invoke('qp-patch-update-run').then(r=>{if(!r?.ok){updateButton.textContent='パッチ更新：できません';updateButton.title=r?.error||'';info=null;updateButton.disabled=false;alert('パッチを更新できませんでした。\n'+(r?.error||''));return}updateButton.textContent='パッチ更新：TETR.IO を終了して更新します…'})
+    .catch(error=>{updateButton.textContent='パッチ更新：できません';info=null;updateButton.disabled=false;alert('パッチを更新できませんでした。\n'+String(error?.message||error))});
+  };
+  check();
+ }
  const stopButton=document.getElementById('local-stop');if(stopButton?.parentNode)stopButton.parentNode.insertBefore(utilities,stopButton.nextSibling);else panel.appendChild(utilities);panel.appendChild(diagnostics);
  const localSettings=document.createElement('details');localSettings.id='local-speed-settings';const localSettingsTitle=document.createElement('summary');localSettingsTitle.textContent='オフライン専用設定・ゲーム速度';localSettings.appendChild(localSettingsTitle);
  const speedRow=document.createElement('label');speedRow.textContent='ゲーム時間速度 ';const speedSelect=document.createElement('select');for(const value of [0,.25,.5,1,1.5,2,3,4,8]){const option=document.createElement('option');option.value=String(value);option.textContent=value===0?'0×（停止）':value+'×';speedSelect.appendChild(option)}speedSelect.value=localStorage.getItem('qp-local-game-speed')||'1';speedSelect.onchange=()=>LocalNative.setGameSpeed(Number(speedSelect.value));speedRow.appendChild(speedSelect);localSettings.appendChild(speedRow);

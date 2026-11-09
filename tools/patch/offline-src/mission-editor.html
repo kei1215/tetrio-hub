@@ -801,7 +801,7 @@ const setP=(o,p,v)=>{const ks=p.split('.'),l=ks.pop();let a=o;for(const k of ks)
 function status(msg,err=false,act){const s=$('status');s.className=err?'show error':'show';s.innerHTML=esc(msg)+(act?` <button type="button" id="act">${esc(act[0])}</button>`:'');if(act)$('act').onclick=()=>{act[1]();s.className=''};clearTimeout(tt);tt=setTimeout(()=>s.className='',act?9000:3000)}
 const opts=(list,sel)=>list.map(([v,l])=>`<option value="${esc(v)}" ${String(v)===String(sel)?'selected':''}>${esc(l)}</option>`).join('');
 const sw=(p,label,help='')=>`<label class="sw"><input type="checkbox" data-p="${p}" ${getP(M(),p)?'checked':''}><span><b>${label}</b>${help?`<small>${help}</small>`:''}</span></label>`;
-const num=(p,label,min,max)=>`<label class="fld">${label}<input type="number" data-p="${p}" min="${min}" max="${max}" value="${getP(M(),p)??''}"></label>`;
+const num=(p,label,min,max)=>`<label class="fld">${label}<input type="number" data-p="${p}" min="${min}" max="${max}" ${/\.handling\.(das|arr|dcd)$/.test(p)?'step="0.1"':''} value="${getP(M(),p)??''}"></label>`;
 const chips=(path,label,list)=>{const on=getP(M(),path)||[];return `<div class="help">${label}</div><div class="chips">${list.map(k=>`<button type="button" class="chip" data-chip="${path}" data-v="${k}" title="${k}" aria-pressed="${on.includes(k)}">${modJa(k)}</button>`).join('')}</div>`};
 const modRows=(path,t)=>chips(path,t+'：通常',MODS.slice(0,8))+chips(path,'リバース版',MODS.slice(8));
 const ap=(b,label,extra='')=>{const x=getP(M(),b)||{},md=x.mode||'normal';return `<div class="ap"><b>${label}</b><label class="fld">見え方<select data-p="${b}.mode" data-re="1">${opts(MODE_JA,md)}</select></label>${['pulse','gradient'].includes(md)?num(b+'.visiblePercent','表示率（％）',0,100):'<span></span>'}${['pulse','fade-in'].includes(md)?num(b+'.period','周期（秒）',1,60):'<span></span>'}${extra}</div>`};
@@ -881,22 +881,23 @@ function garbagePanel(g,i){
   ${pt==='template'?'<small>段数はテンプレートの高さです（盤面の高さに収まるように下から使います）。</small>':num(b+'.rows','段数（1～20）',1,20)}
   <div class="help">付け方（複数選択可。選ばなければゴミ予測バー）</div>${pickButtons(b+'.methods',METHOD_JA.map(x=>x[0]),METHOD_JA.map(x=>x[1]))}
   ${ruleSelect(b+'.pattern.type','地形・穴のパターン',PATTERN_JA)}
-  ${['fixed','alternate','shape'].includes(pt)?`<div class="help">${pt==='fixed'?'穴にする列（1＝左端）':pt==='alternate'?'交互にする2列（未選択ならシードで決める）':'形の基準列（未選択ならシードで決める）'}</div>${pickButtons(b+'.pattern.columns',[1,2,3,4,5,6,7,8,9,10])}`:''}
+  ${['fixed','alternate','shape'].includes(pt)?`<div class="help">${pt==='fixed'?'穴にする列（1＝左端）':pt==='alternate'?'交互にする2列（未選択ならシードで決める）':'形の基準列（未選択ならシードで決める）'}</div>${pickButtons(b+'.pattern.columns',Array.from({length:gridWidth(M())},(_,k)=>k+1))}`:''}
   ${pt==='shape'?ruleSelect(b+'.pattern.shape','形',SHAPE_JA):''}
   ${pt==='template'?templateGrid(g,i)+`<details><summary>テキストで編集</summary><label class="fld">上の段から。# ＝ブロック、. ＝穴。1行10文字<textarea data-p="${b}.pattern.template" rows="6" spellcheck="false" style="font-family:monospace">${esc(g.pattern.template||'')}</textarea></label></details>${ruleSelect(b+'.pattern.mirror','左右反転',[['none','しない'],['random','シードでランダム'],['always','常に反転']])}`:''}
   ${pt!=='fixed'&&pt!=='native'||(pt==='native'&&(g.methods||[]).some(x=>x==='terrain'||x==='holes'))?`<div class="grid">${ruleSelect(b+'.pattern.seedSource','シード',[['game','ゲームのシード由来'],['fixed','固定の数値']])}${g.pattern.seedSource==='fixed'?num(b+'.pattern.seed','シード値',0,2147483647):'<span></span>'}</div>`:''}
   ${sw(b+'.bombs','ボムにする','穴の代わりにボムを置きます。ボムの上にミノを置くと、その段が消えます。ボムが残っている間は、ほかのゴミは普通の穴のままです。ボムが残っている間は消せない段もボムの見た目になります。')}
   ${ruleSelect(b+'.when','発動するとき',[['start','ミッション開始時（下の繰り返しも使えます）'],['garbage','ゴミ（攻撃）を受けた時']])}
   ${g.when==='garbage'?'<small>ミッション中に攻撃を受けるたびに出します。</small>':repeatFields(b)}</div>`}
-function stampGrid(x){const h=gridHeight(M()),on=new Set((x.stamp.cells||[]).map(c=>c[0]+','+c[1]));
- return `<div class="help">マスをクリック（盤面と同じ ${h}段×10列、下が床）</div><div class="tgrid">${Array.from({length:h},(_,r)=>Array.from({length:10},(_,c)=>{const col=c+1,row=h-r;return `<button type="button" data-sg="${col},${row}" aria-pressed="${on.has(col+','+row)}" title="${row}段目・${col}列"></button>`}).join('')).join('')}</div><div class="chips"><button type="button" data-sg="clear">消す</button></div>`}
+function stampGrid(x){const h=gridHeight(M()),w=gridWidth(M()),on=new Set((x.stamp.cells||[]).map(c=>c[0]+','+c[1]));
+ return `<div class="help">マスをクリック（盤面と同じ ${h}段×${w}列、下が床）</div><div class="tgrid" style="grid-template-columns:repeat(${w},20px)">${Array.from({length:h},(_,r)=>Array.from({length:w},(_,c)=>{const col=c+1,row=h-r;return `<button type="button" data-sg="${col},${row}" aria-pressed="${on.has(col+','+row)}" title="${row}段目・${col}列"></button>`}).join('')).join('')}</div><div class="chips"><button type="button" data-sg="clear">消す</button></div>`}
 // Template grid: same size as the board (10 wide; the mission's board height, or 20).
 const TEMPLATE_PRESETS={tsd:['XX..XXXXXX','X...XXXXXX','XX.XXXXXXX'],tst:['XXX.XXXXXX','XX..XXXXXX','XXX.XXXXXX']};
 const gridHeight=m=>m.effects.extra?.board?.enabled?Number(m.effects.extra.board.height)||20:20;
-function templateMatrix(text,h){const lines=String(text||'').split('\n').filter(Boolean).map(l=>l.padEnd(10,'#').slice(0,10));const rows=lines.slice(-h);const pad=Array.from({length:h-rows.length},()=>'..........');return [...pad,...rows].map(r=>r.split('').map(c=>/[#xX]/.test(c)))}
+const gridWidth=m=>m.effects.extra?.board?.enabled?Math.max(4,Math.min(20,Number(m.effects.extra.board.width)||10)):10;
+function templateMatrix(text,h,w=10){const lines=String(text||'').split('\n').filter(Boolean).map(l=>l.padEnd(w,'#').slice(0,w));const rows=lines.slice(-h);const pad=Array.from({length:h-rows.length},()=>'.'.repeat(w));return [...pad,...rows].map(r=>r.split('').map(c=>/[#xX]/.test(c)))}
 function matrixText(mat){let rows=mat.map(r=>r.map(on=>on?'#':'.').join(''));while(rows.length&&!rows[0].includes('#'))rows.shift();while(rows.length&&!rows[rows.length-1].includes('#'))rows.pop();return rows.join('\n')}
-function templateGrid(g,i){const h=gridHeight(M()),mat=templateMatrix(g.pattern.template,h);
- return `<div class="help">マスをクリックしてブロックを置く（盤面と同じ ${h}段×10列。空の段は上下とも詰めます）</div><div class="tgrid">${mat.map((row,r)=>row.map((on,c)=>`<button type="button" data-tg="${i},${r},${c}" aria-pressed="${on}" title="${r+1}段目・${c+1}列"></button>`).join('')).join('')}</div>
+function templateGrid(g,i){const h=gridHeight(M()),w=gridWidth(M()),mat=templateMatrix(g.pattern.template,h,w);
+ return `<div class="help">マスをクリックしてブロックを置く（盤面と同じ ${h}段×${w}列。空の段は上下とも詰めます）</div><div class="tgrid" style="grid-template-columns:repeat(${w},20px)">${mat.map((row,r)=>row.map((on,c)=>`<button type="button" data-tg="${i},${r},${c}" aria-pressed="${on}" title="${r+1}段目・${c+1}列"></button>`).join('')).join('')}</div>
  <div class="chips"><button type="button" data-tpre="${i}:tsd">ひな形：TSD</button><button type="button" data-tpre="${i}:tst">ひな形：TST</button><button type="button" data-tpre="${i}:clear">消す</button></div><small>DT砲・STSDなどはマス目で描いてください。</small>`}
 function extraPanel(m){
  const x=m.effects.extra||(m.effects.extra=QP_EXTRA_SCHEMA.defaults()),P='effects.extra';
@@ -905,7 +906,9 @@ function extraPanel(m){
  <div class="box"><h3>盤面にブロックを置く</h3>${sw(P+'.stamp.enabled','ミッション開始時にブロックを置く','空いているマスにだけ置きます（せり上がりなし）。')}${x.stamp?.enabled?stampGrid(x):''}</div>
  <div class="box"><h3>消せない段</h3>${sw(P+'.unclearable.enabled','消せない段を増減する')}${x.unclearable.enabled?`<div class="grid">${num(P+'.unclearable.add','追加する段数',0,20)}${num(P+'.unclearable.remove','削除する段数',0,20)}</div>${repeatFields(P+'.unclearable')}<small>削除は一番下の消せない段から。削除のあと追加します。</small>`:''}</div>
  <div class="box"><h3>強制ゴミ</h3><small>地形指定なし＝ゲーム本体のランダムな穴。シード由来のパターンは、ゲームのシード（または固定の数値）から毎回同じ並びを作ります。</small>${(x.garbage||[]).map(garbagePanel).join('')}${(x.garbage||[]).length<6?'<div class="chips"><button type="button" data-gadd="1">＋ 強制ゴミを追加</button></div>':''}</div>
- <div class="box"><h3>盤面の高さ</h3>${sw(P+'.board.enabled','盤面の高さを変える')}${x.board.enabled?`<div class="grid">${num(P+'.board.height','高さ（4～40段）',4,40)}${ruleSelect(P+'.board.restoreAt','戻すタイミング',RESTORE_JA)}</div><small>HOLD・NEXTは作り直して表示を保ちます。</small>`:''}</div>
+ <div class="box"><h3>盤面の大きさ</h3>${sw(P+'.board.enabled','盤面の高さ・横幅を変える')}${x.board.enabled?`<div class="grid">${num(P+'.board.height','高さ（4～40段）',4,40)}${num(P+'.board.width','横幅（4～20列）',4,20)}${ruleSelect(P+'.board.restoreAt','戻すタイミング',RESTORE_JA)}</div><small>HOLD・NEXTは作り直して表示を保ちます。テンプレートとブロックを置くマス目も、この大きさになります。</small>`:''}</div>
+ <div class="box"><h3>操作感度</h3>${sw(P+'.handling.enabled','操作感度を変える')}${x.handling?.enabled?`<small>変えたいものだけONにしてください（例：DASだけ・ARRだけ）。単位はフレーム（1/60秒）。</small>
+  <div class="grid">${sw(P+'.handling.change.das','DASを変える')}${num(P+'.handling.das','DAS（1～20）',1,20)}${sw(P+'.handling.change.arr','ARRを変える')}${num(P+'.handling.arr','ARR（0～5）',0,5)}${sw(P+'.handling.change.sdf','SDFを変える')}${num(P+'.handling.sdf','SDF（5～41。41＝即時）',5,41)}${sw(P+'.handling.change.dcd','DCDを変える')}${num(P+'.handling.dcd','DCD（0～20）',0,20)}${ruleSelect(P+'.handling.restoreAt','戻すタイミング',RESTORE_JA)}</div>`:''}</div>
  <div class="box"><h3>直列率</h3>${sw(P+'.messiness.enabled','直列率を変える')}${x.messiness.enabled?`<div class="grid">${num(P+'.messiness.straight','直列率（％）：攻撃が変わっても穴が同じ列のまま',0,100)}${num(P+'.messiness.innerStraight','ゴミごとの直列率（％）：1回の攻撃の中で穴がそろう',0,100)}${ruleSelect(P+'.messiness.restoreAt','戻すタイミング',RESTORE_JA)}</div>`:''}</div>
  <div class="box"><h3>Spinルール</h3>${sw(P+'.spin.enabled','Spinルールを変える')}${x.spin.enabled?`<div class="grid">${ruleSelect(P+'.spin.rule','Spinの判定',SPIN_JA)}${ruleSelect(P+'.spin.restoreAt','戻すタイミング',RESTORE_JA)}</div><small>MODのSpinルールより、ここでの指定を優先します。</small>`:''}</div>
  <div class="box"><h3>ミノの増減・I5</h3>${sw(P+'.pieces.enabled','ミノの出方を変える')}${x.pieces.enabled?`<div class="grid">${QP_EXTRA_SCHEMA.PIECES.map(k=>num(P+'.pieces.delta.'+k,k+'ミノ（1袋あたり −1～+4）',-1,4)).join('')}${num(P+'.pieces.i5','I5ミノ（1袋あたりの個数）',0,4)}${ruleSelect(P+'.pieces.restoreAt','戻すタイミング',RESTORE_JA)}</div><small>次に作られる袋から反映します（表示中のNEXTは変えません）。</small>`:''}</div>`}
@@ -942,7 +945,7 @@ function save(){try{const c=exportData(),u=URL.createObjectURL(new Blob([c],{typ
 async function openFile(f){try{if(!f)return;if(f.size>1024*1024)throw Error('ファイルが1MBを超えています');importText(await f.text())}catch(err){status('読み込み失敗：'+err.message,true)}}
 
 $('editor').addEventListener('change',ev=>{const el=ev.target,p=el.dataset.p,m=M();if(!p||!m)return;let v=el.type==='checkbox'?el.checked:el.value;
- if(el.type==='number'){const n=Math.round(Number(el.value));v=Math.min(+el.max,Math.max(+el.min,el.value!==''&&Number.isFinite(n)?n:+el.min));el.value=v}
+ if(el.type==='number'){const n=el.step==='0.1'?Math.round(Number(el.value)*10)/10:Math.round(Number(el.value));v=Math.min(+el.max,Math.max(+el.min,el.value!==''&&Number.isFinite(n)?n:+el.min));el.value=v}
  if(p==='penaltyEvents')v=[...new Set(v.split(',').map(s=>s.trim()).filter(Boolean))];
  if(p==='event'&&!v)return;setP(m,p,v);if(p==='target')m.count=v;
  if(p==='event'){if(!v)return;m.timerStart=v==='lines'?'first-clear':'immediate';m.requiresAttack=['attack','ljgarbage','szgarbage'].includes(v);if(v==='leavewindow')m.penaltyEvents=[];else if(!m.penaltyEvents?.length)m.penaltyEvents=[v];if(v==='pieceheight')m.rules.height.enabled=true;else if(v!=='pieces')m.rules.height.enabled=false}
@@ -962,7 +965,7 @@ $('editor').addEventListener('click',ev=>{const t=ev.target.closest('button'),m=
  else if(d.sg&&d.sg!=='clear'&&ev.detail!==0){/* painted by pointer events */}
  else if(d.sg){const x=m.effects.extra,st=x.stamp||(x.stamp={enabled:true,cells:[]});if(d.sg==='clear')st.cells=[];else{const [c,r]=d.sg.split(',').map(Number),k=st.cells.findIndex(p=>p[0]===c&&p[1]===r);if(k>=0)st.cells.splice(k,1);else st.cells.push([c,r])}changed(true)}
  else if(d.tg&&ev.detail!==0){/* painted by pointer events */}
- else if(d.tg){const [i,r,c]=d.tg.split(',').map(Number),g=m.effects.extra.garbage[i],mat=templateMatrix(g.pattern.template,gridHeight(m));mat[r][c]=!mat[r][c];g.pattern.template=matrixText(mat);changed(true)}
+ else if(d.tg){const [i,r,c]=d.tg.split(',').map(Number),g=m.effects.extra.garbage[i],mat=templateMatrix(g.pattern.template,gridHeight(m),gridWidth(m));mat[r][c]=!mat[r][c];g.pattern.template=matrixText(mat);changed(true)}
  else if(d.tpre){const [i,k]=d.tpre.split(':'),g=m.effects.extra.garbage[Number(i)];g.pattern.template=k==='clear'?'':TEMPLATE_PRESETS[k].join('\n').replace(/X/g,'#');changed(true)}
  else if(d.gadd){const x=m.effects.extra||(m.effects.extra=QP_EXTRA_SCHEMA.defaults());(x.garbage||(x.garbage=[])).push(QP_EXTRA_SCHEMA.newGarbage());changed(true)}
  else if(d.gdel!==undefined){m.effects.extra.garbage.splice(Number(d.gdel),1);changed(true)}
@@ -982,7 +985,7 @@ $('editor').addEventListener('pointerdown',ev=>{
  const btn=ev.target.closest('.tgrid button');if(!btn||ev.button>0)return;const m=M();if(!m)return;
  ev.preventDefault();
  const on=btn.getAttribute('aria-pressed')!=='true';
- if(btn.dataset.tg){const i=Number(btn.dataset.tg.split(',')[0]),g=m.effects.extra.garbage[i];paint={on,index:i,kind:'tg',mat:templateMatrix(g.pattern.template,gridHeight(m)),dirty:false}}
+ if(btn.dataset.tg){const i=Number(btn.dataset.tg.split(',')[0]),g=m.effects.extra.garbage[i];paint={on,index:i,kind:'tg',mat:templateMatrix(g.pattern.template,gridHeight(m),gridWidth(m)),dirty:false}}
  else if(btn.dataset.sg&&btn.dataset.sg!=='clear'){const x=m.effects.extra;x.stamp||(x.stamp={enabled:true,cells:[]});paint={on,kind:'sg',dirty:false}}
  else return;
  paintCell(btn);

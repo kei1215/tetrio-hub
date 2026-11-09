@@ -22,7 +22,7 @@ const QP_EXTRA_SCHEMA=(()=>{
   while(rows.length&&!hasBlock(rows[rows.length-1]))rows.pop();
   if(rows.length>40)throw Error('テンプレートは40段までです');
   for(const row of rows){
-   if(row.length>10||/[^#xX._o ]/.test(row))throw Error('テンプレートの行は # と . の10文字以内です');
+   if(row.length>20||/[^#xX._o ]/.test(row))throw Error('テンプレートの行は # と . の20文字以内です');
    if(!row.padEnd(10,'#').split('').some(c=>/[._o ]/.test(c)))throw Error('テンプレートの各行には穴を1つ以上入れてください（全部ブロックの段はすぐ消えます）');
   }
   return rows.join('\n');
@@ -32,7 +32,7 @@ const QP_EXTRA_SCHEMA=(()=>{
   const methods=[...new Set((Array.isArray(g.methods)?g.methods:['queue']).map(String))].filter(m=>METHODS.includes(m));
   const type=pick(p.type,PATTERNS,'native');
   const columns=[...new Set((Array.isArray(p.columns)?p.columns:[]).map(Number))];
-  if(columns.some(c=>!Number.isInteger(c)||c<1||c>10)||columns.length>9)throw Error(label+'穴の列は1～10（9個まで）です');
+  if(columns.some(c=>!Number.isInteger(c)||c<1||c>20)||columns.length>19)throw Error(label+'穴の列は1～20（19個まで）です');
   if(type==='fixed'&&!columns.length)throw Error(label+'固定の穴の列を1つ以上選んでください');
   const template=type==='template'?templateRows(p.template):String(p.template??'').slice(0,440);
   if(type==='template'&&!template)throw Error(label+'テンプレートが空です');
@@ -41,19 +41,23 @@ const QP_EXTRA_SCHEMA=(()=>{
     shape:pick(p.shape,SHAPES,'tsd'),template,mirror:pick(p.mirror,['none','random','always'],'none')},
    bombs:g.bombs===true,repeat:repeat(g.repeat),when:g.when==='garbage'?'garbage':'start'};
  };
+ // Handling values may have one decimal (TETR.IO stores DAS/ARR/DCD in 0.1 frames).
+ const dec=(value,min,max,label)=>{const n=Math.round(Number(value)*10)/10;if(!Number.isFinite(n)||n<min||n>max)throw Error(label+'が不正です（'+min+'～'+max+'）');return n};
  function normalize(effects){
   const e=obj(effects);
+  const hd=obj(e.handling),hc=obj(hd.change);
   const u=obj(e.unclearable),b=obj(e.board),m=obj(e.messiness),s=obj(e.spin),p=obj(e.pieces),d=obj(p.delta);
   const garbage=Array.isArray(e.garbage)?e.garbage:[];
   const st=obj(e.stamp),cells=Array.isArray(st.cells)?st.cells:[];
   if(cells.length>200)throw Error('置くブロックは200マスまでです');
-  const stampCells=[...new Map(cells.map(c=>{if(!Array.isArray(c)||c.length!==2)throw Error('置くブロックの位置が不正です');const x=int(c[0],1,10,'置くブロックの列'),y=int(c[1],1,40,'置くブロックの段');return [x+','+y,[x,y]]})).values()];
+  const stampCells=[...new Map(cells.map(c=>{if(!Array.isArray(c)||c.length!==2)throw Error('置くブロックの位置が不正です');const x=int(c[0],1,20,'置くブロックの列'),y=int(c[1],1,40,'置くブロックの段');return [x+','+y,[x,y]]})).values()];
   if(garbage.length>6)throw Error('強制ゴミは6件までです');
   return {
    unclearable:{enabled:u.enabled===true,add:int(u.add??0,0,20,'消せない段の追加数'),remove:int(u.remove??0,0,20,'消せない段の削除数'),repeat:repeat(u.repeat)},
    garbage:garbage.map(garbageEntry),
    stamp:{enabled:st.enabled===true,cells:stampCells},
-   board:{enabled:b.enabled===true,height:int(b.height??20,4,40,'盤面の高さ'),restoreAt:pick(b.restoreAt,RESTORE,'mission')},
+   board:{enabled:b.enabled===true,height:int(b.height??20,4,40,'盤面の高さ'),width:int(b.width??10,4,20,'盤面の横幅'),restoreAt:pick(b.restoreAt,RESTORE,'mission')},
+   handling:{enabled:hd.enabled===true,change:{das:hc.das===true,arr:hc.arr===true,sdf:hc.sdf===true,dcd:hc.dcd===true},das:dec(hd.das??10,1,20,'DAS'),arr:dec(hd.arr??2,0,5,'ARR'),sdf:int(hd.sdf??6,5,41,'SDF'),dcd:dec(hd.dcd??0,0,20,'DCD'),restoreAt:pick(hd.restoreAt,RESTORE,'mission')},
    messiness:{enabled:m.enabled===true,straight:int(m.straight??0,0,100,'直列率'),innerStraight:int(m.innerStraight??100,0,100,'ゴミごとの直列率'),restoreAt:pick(m.restoreAt,RESTORE,'mission')},
    spin:{enabled:s.enabled===true,rule:pick(s.rule,SPIN_RULES,'T-spins'),restoreAt:pick(s.restoreAt,RESTORE,'mission')},
    pieces:{enabled:p.enabled===true,delta:Object.fromEntries(PIECES.map(k=>[k,int(d[k]??0,-1,4,k+'ミノの増減')])),i5:int(p.i5??0,0,4,'I5ミノの数'),restoreAt:pick(p.restoreAt,RESTORE,'mission')}

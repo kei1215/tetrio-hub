@@ -243,6 +243,28 @@ def add_editor_window(text):
     return text.rstrip('\n') + '\n' + EDITOR_WINDOW_SRC.read_text(encoding='utf-8')
 
 
+
+UPDATER_MARK = 'qp-patch-updater-v1'
+UPDATE_CONFIG_MARK = 'qp-patch-update-config-v1'
+APP_SRC = Path(__file__).with_name('app-src')
+TAIL_RETURN = "+')(document,window);\\n/* qp-replay-edit-v1 */';"
+
+
+def add_updater(text):
+    """Append the patch updater (main process) to O/music-main.js, present in every kind."""
+    if UPDATER_MARK in text:
+        return text
+    return text.rstrip('\n') + '\n' + (APP_SRC / 'patch-updater.js').read_text(encoding='utf-8')
+
+
+def add_update_config(text):
+    """Add CONFIG > QP PATCH TOOLS > PATCH UPDATE to the online-client tail in O/transform.js."""
+    if UPDATE_CONFIG_MARK in text:
+        return text
+    text = replace_once(text, TAIL_RETURN, "+')(document,window);\\n;('+qpPatchUpdateConfig.toString()+')(document,window);\\n/* qp-replay-edit-v1 */';", 'transform tail')
+    return (APP_SRC / 'update-config.js').read_text(encoding='utf-8') + text
+
+
 def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=False, offline=None, incremental=False, notes=''):
     offline = offline or {}
     out = io.BytesIO()
@@ -269,8 +291,15 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                 data = add_editor_window(data.decode('utf-8')).encode('utf-8')
             elif has_offline and offline and name == 'O/offline/index.html':
                 data = patch_offline_index(data.decode('utf-8')).encode('utf-8')
-            elif name == 'O/transform.js' and not incremental:
-                data = patch_transform(data.decode('utf-8'), edit_src, counter_src, port, hyper_fix=bool(offline)).encode('utf-8')
+            elif name == 'O/transform.js':
+                text = data.decode('utf-8')
+                if not incremental:
+                    text = patch_transform(text, edit_src, counter_src, port, hyper_fix=bool(offline))
+                if offline:
+                    text = add_update_config(text)
+                data = text.encode('utf-8')
+            elif offline and name == 'O/music-main.js':
+                data = add_updater(data.decode('utf-8')).encode('utf-8')
             elif name == 'O/offline/reverse-hyper-browser.js' and not incremental:
                 data = replace_once(data.decode('utf-8'), OLD_MUSIC, NEW_MUSIC, name).encode('utf-8')
             elif name == 'package.json':
@@ -351,6 +380,7 @@ def main():
     ap.add_argument('--offline-src', type=Path, help='folder with changed O/offline/* files (tools/patch/offline-src)')
     ap.add_argument('--incremental', action='store_true', help='OLD is already a build of this script (v4.8239+): only re-overlay O/offline, keep transform.js and client.js')
     ap.add_argument('--notes', default='', help='changelog lines for --incremental')
+    ap.add_argument('--manifest', type=Path, help='write the in-app updater manifest (docs/patch/latest.json)')
     a = ap.parse_args()
     offline = load_offline_src(a.offline_src)
     if a.new_dir.exists():
@@ -380,6 +410,12 @@ def main():
             shutil.copy2(a.old_dir / extra, a.new_dir / extra)
             sums[extra] = sha256((a.new_dir / extra).read_bytes())
     (a.new_dir / 'SHA256SUMS.txt').write_text(''.join(f'{v}  {k}\n' for k, v in sorted(sums.items())), encoding='utf-8')
+    if a.manifest:
+        # Read by CONFIG > PATCH UPDATE (app-src/patch-updater.js). Launchers only.
+        files = {k: {'sha256': v, 'size': (a.new_dir / k).stat().st_size} for k, v in sorted(sums.items()) if k.startswith('tetrio-patch-')}
+        a.manifest.parent.mkdir(parents=True, exist_ok=True)
+        a.manifest.write_text(json.dumps({'version': f'4.{a.new}', 'base': f'https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.{a.new}/', 'files': files}, indent=1) + '\n', encoding='utf-8')
+        print('manifest', a.manifest)
     print('done', a.new_dir)
 
 

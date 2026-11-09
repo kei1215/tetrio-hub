@@ -29,14 +29,15 @@
   const layers=[];            // {owner, restoreAt, key, value}
   const bases=new Map();      // key -> run value before the first layer
   let preMission=null;        // option values before the current mission's MOD values
-  const read=key=>key==='boardheight'?Number(S.setoptions.boardheight):key==='pieces'?null:S.setoptions[key];
-  function setBoardHeight(height){
-   const bm=engine.bm,current=Number(S.setoptions.boardheight);
-   if(!bm?.SetSize||!Number.isInteger(height)||height===current)return false;
+  const read=key=>key==='boardsize'?{width:W(),height:Number(S.setoptions.boardheight)}:key==='handling'?{...(S.handling||{})}:key==='pieces'?null:S.setoptions[key];
+  // v4.8241: width and height (native SetSize keeps the stack and moves the falling piece).
+  function setBoardSize(size){
+   const bm=engine.bm,width=Number(size?.width)||W(),height=Number(size?.height)||Number(S.setoptions.boardheight);
+   if(!bm?.SetSize||!Number.isInteger(width)||!Number.isInteger(height)||width===W()&&height===Number(S.setoptions.boardheight))return false;
    try{
-    bm.SetSize(W(),height,Number(S.setoptions.boardbuffer)||20);
+    bm.SetSize(width,height,Number(S.setoptions.boardbuffer)||20);
     bm.Resize?.();
-    for(const object of optionObjects())object.boardheight=height;
+    for(const object of optionObjects()){object.boardwidth=width;object.boardheight=height}
     bm.ClearIsLegalAtPosMemo?.();bm.PushUpFallingIfNeeded?.();
     return true;
    }catch(error){window.LocalUIHealth?.fail?.('リバイブ効果: 盤面の高さ',error);return false}
@@ -44,11 +45,13 @@
   let holderNeeded=false;
   function writeKey(key,value){
    if(key==='pieces')return;
-   if(key==='boardheight'){if(setBoardHeight(value))holderNeeded=true;return}
+   if(key==='boardsize'){if(setBoardSize(value))holderNeeded=true;return}
+   if(key==='handling'){if(S.handling&&value)Object.assign(S.handling,value);return}
    for(const object of optionObjects())object[key]=value;
   }
   function reassert(key){
    const top=[...layers].reverse().find(l=>l.key===key);
+   if(key==='handling'){if(top){writeKey(key,{...(bases.get(key)||{}),...top.value});return}if(bases.has(key)){writeKey(key,bases.get(key));bases.delete(key)}return}
    if(top){writeKey(key,top.value);return}
    if(bases.has(key)){writeKey(key,bases.get(key));bases.delete(key)}
   }
@@ -258,15 +261,16 @@
   // ---------- mission lifecycle ----------
   let active=null; // {task, timers:[{fire, seconds, pieces, frame, placed}]}
   const frame=()=>Number(game.getFrame?.()||0),placed=()=>Number(S.stats?.piecesplaced||0),received=()=>Number(S.stats?.garbage?.received||0);
-  function beforeMods(){preMission=Object.fromEntries(OPTION_KEYS.map(k=>[k,S.setoptions[k]]));preMission.boardheight=Number(S.setoptions.boardheight)}
+  function beforeMods(){preMission=Object.fromEntries(OPTION_KEYS.map(k=>[k,S.setoptions[k]]));preMission.boardsize={width:W(),height:Number(S.setoptions.boardheight)}}
   function activate(task){
    holderNeeded=false;
    const x=task?.effects?.extra;
-   if(!x){for(const key of new Set(layers.map(l=>l.key)))if(key!=='boardheight')reassert(key);preMission=null;return false}
+   if(!x){for(const key of new Set(layers.map(l=>l.key)))if(key!=='boardsize')reassert(key);preMission=null;return false}
    const owner=task.id;
    // Kept layers from an earlier mission win over this mission's MOD values.
-   for(const key of new Set(layers.map(l=>l.key)))if(key!=='boardheight')reassert(key);
-   if(x.board?.enabled&&!isReplay())push(owner,x.board.restoreAt,'boardheight',x.board.height);
+   for(const key of new Set(layers.map(l=>l.key)))if(key!=='boardsize')reassert(key);
+   if(x.board?.enabled&&!isReplay())push(owner,x.board.restoreAt,'boardsize',{width:x.board.width||W(),height:x.board.height});
+   if(x.handling?.enabled){const c=x.handling.change||{},v={};for(const k of ['das','arr','sdf','dcd'])if(c[k])v[k]=x.handling[k];if(Object.keys(v).length)push(owner,x.handling.restoreAt,'handling',v)}
    if(x.messiness?.enabled){push(owner,x.messiness.restoreAt,'messiness_change',1-x.messiness.straight/100);push(owner,x.messiness.restoreAt,'messiness_inner',1-x.messiness.innerStraight/100)}
    if(x.spin?.enabled)push(owner,x.spin.restoreAt,'spinbonuses',x.spin.rule);
    if(x.pieces?.enabled)push(owner,x.pieces.restoreAt,'pieces',{delta:x.pieces.delta,i5:x.pieces.i5});
@@ -322,7 +326,7 @@
   function cleanup(){
    holderNeeded=false;active=null;layers.length=0;bombSkin(false);
    // The run is over: put the option values back without resizing the finished board.
-   for(const [key,value]of bases){if(key==='pieces')continue;for(const object of optionObjects())object[key]=value}
+   for(const [key,value]of bases){if(key==='pieces')continue;if(key==='handling'){if(S.handling)Object.assign(S.handling,value);continue}if(key==='boardsize'){for(const object of optionObjects()){object.boardwidth=value.width;object.boardheight=value.height}continue}for(const object of optionObjects())object[key]=value}
    bases.clear();
    if(bam&&originalPopulate){if(ownPopulate)bam.PopulateBag=originalPopulate;else delete bam.PopulateBag}
    if(sdm&&originalDrawStack){if(ownDrawStack)sdm.DrawStack=originalDrawStack;else delete sdm.DrawStack}
