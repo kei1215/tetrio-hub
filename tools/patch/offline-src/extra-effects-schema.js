@@ -12,14 +12,18 @@ const QP_EXTRA_SCHEMA=(()=>{
  const int=(value,min,max,label)=>{const n=Number(value);if(!Number.isInteger(n)||n<min||n>max)throw Error(label+'が不正です（'+min+'～'+max+'）');return n};
  const pick=(value,list,fallback)=>list.includes(value)?value:fallback;
  const repeat=r=>{r=obj(r);return {seconds:int(r.seconds??0,0,600,'繰り返し秒数'),pieces:int(r.pieces??0,0,100,'繰り返しミノ数')}};
- // Template rows: '#'/'x'/'X' = block, '.'/'_'/' '/'o' = hole. Top row first.
+ // Template rows: '#'/'x'/'X' = block, '.'/'_'/'o' = hole (short rows are padded with blocks).
+ // Top row first. Rows without any block at the top and bottom are trimmed; empty rows in
+ // the middle stay (they rise as empty rows), so a shape can be drawn on the board grid.
  const templateRows=text=>{
   const rows=String(text??'').replace(/\r/g,'').split('\n').map(s=>s.replace(/\s+$/,'')).filter(s=>s.length);
+  const hasBlock=r=>/[#xX]/.test(r.padEnd(10,'#'));
+  while(rows.length&&!hasBlock(rows[0]))rows.shift();
+  while(rows.length&&!hasBlock(rows[rows.length-1]))rows.pop();
   if(rows.length>40)throw Error('テンプレートは40段までです');
   for(const row of rows){
    if(row.length>10||/[^#xX._o ]/.test(row))throw Error('テンプレートの行は # と . の10文字以内です');
-   const cells=row.padEnd(10,'#').split('');
-   if(!cells.some(c=>/[._o ]/.test(c))||!cells.some(c=>/[#xX]/.test(c)))throw Error('テンプレートの各行には穴とブロックを1つ以上入れてください');
+   if(!row.padEnd(10,'#').split('').some(c=>/[._o ]/.test(c)))throw Error('テンプレートの各行には穴を1つ以上入れてください（全部ブロックの段はすぐ消えます）');
   }
   return rows.join('\n');
  };
@@ -35,16 +39,20 @@ const QP_EXTRA_SCHEMA=(()=>{
   return {enabled:g.enabled!==false,rows:int(g.rows??1,1,20,label+'段数'),methods:methods.length?methods:['queue'],
    pattern:{type,columns:columns.sort((a,b)=>a-b),seedSource:p.seedSource==='fixed'?'fixed':'game',seed:int(p.seed??0,0,2147483647,label+'シード'),
     shape:pick(p.shape,SHAPES,'tsd'),template,mirror:pick(p.mirror,['none','random','always'],'none')},
-   bombs:g.bombs===true,repeat:repeat(g.repeat)};
+   bombs:g.bombs===true,repeat:repeat(g.repeat),when:g.when==='garbage'?'garbage':'start'};
  };
  function normalize(effects){
   const e=obj(effects);
   const u=obj(e.unclearable),b=obj(e.board),m=obj(e.messiness),s=obj(e.spin),p=obj(e.pieces),d=obj(p.delta);
   const garbage=Array.isArray(e.garbage)?e.garbage:[];
+  const st=obj(e.stamp),cells=Array.isArray(st.cells)?st.cells:[];
+  if(cells.length>200)throw Error('置くブロックは200マスまでです');
+  const stampCells=[...new Map(cells.map(c=>{if(!Array.isArray(c)||c.length!==2)throw Error('置くブロックの位置が不正です');const x=int(c[0],1,10,'置くブロックの列'),y=int(c[1],1,40,'置くブロックの段');return [x+','+y,[x,y]]})).values()];
   if(garbage.length>6)throw Error('強制ゴミは6件までです');
   return {
    unclearable:{enabled:u.enabled===true,add:int(u.add??0,0,20,'消せない段の追加数'),remove:int(u.remove??0,0,20,'消せない段の削除数'),repeat:repeat(u.repeat)},
    garbage:garbage.map(garbageEntry),
+   stamp:{enabled:st.enabled===true,cells:stampCells},
    board:{enabled:b.enabled===true,height:int(b.height??20,4,40,'盤面の高さ'),restoreAt:pick(b.restoreAt,RESTORE,'mission')},
    messiness:{enabled:m.enabled===true,straight:int(m.straight??0,0,100,'直列率'),innerStraight:int(m.innerStraight??100,0,100,'ゴミごとの直列率'),restoreAt:pick(m.restoreAt,RESTORE,'mission')},
    spin:{enabled:s.enabled===true,rule:pick(s.rule,SPIN_RULES,'T-spins'),restoreAt:pick(s.restoreAt,RESTORE,'mission')},

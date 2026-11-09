@@ -11,8 +11,8 @@ import re, sys
 from pathlib import Path
 
 DOCS = Path(sys.argv[1])
-PATCH = '4.8238'
-OFFLINE = '4.8238'
+PATCH = '4.8239'
+OFFLINE = '4.8239'
 REL = f'https://github.com/kei1215/tetrio-hub/releases/download/patch-v{PATCH}/'
 
 NAV = [('', 'Home'), ('spin/', '盤面回転'), ('replay-edit/', '盤面修正'), ('bookmarklets/', 'QP OFFLINE・パッチ')]
@@ -109,7 +109,7 @@ def page_patch():
     body += '\n' + card('ブックマークレット', f'''    <p>TETR.IO を開いた状態で使う OFFLINE 版です。別タブに <code>blob:https://tetr.io/…</code> を起動します(v{OFFLINE})。</p>
     <div class="d-flex gap-2 flex-wrap"><a class="btn btn-primary" id="install" href="#" draggable="true">ブックマークバーへドラッグ</a><button class="btn btn-outline-primary" id="copy" type="button">コードをコピー</button><a class="btn btn-outline-secondary" href="tetrio-offline-standalone-v{OFFLINE}.txt" download>コードTXTを保存</a></div>
     <p class="small mt-2 mb-0" id="copy-status" aria-live="polite"></p>
-    <p class="small text-success mt-2 mb-0">2026年11月9日の TETR.IO 更新に対応(デスクトップ版 vO 4.8238 が元)。リバイブミッションの追加効果(消せない段・強制ゴミ・ボム・盤面の高さ・直列率・Spinルール・ミノの増減・I5)、4分割ミッション画面効果・操作反転・リバースHYPERSPEED曲(Kugelhagel OVERDRIVE、3:08.499583でループ)対応。v4.8235 のブックマークは2回目の起動で失敗することがあるので、v4.8238 のコードに登録し直してください。</p>
+    <p class="small text-success mt-2 mb-0">2026年11月9日の TETR.IO 更新に対応(デスクトップ版 vO 4.8239 が元)。裏HYPERSPEED曲のラグとリザルト画面の HYPER を修正、ブラウザ版でも裏HYPERSPEED曲が鳴るように。ミッション失敗で即死・達成時の距離/火力の設定を追加。リバイブミッションの追加効果(消せない段・強制ゴミ・ボム・盤面の高さ・直列率・Spinルール・ミノの増減・I5)、4分割ミッション画面効果・操作反転・リバースHYPERSPEED曲(Kugelhagel OVERDRIVE、3:08.499583でループ)対応。v4.8235 以前のブックマークは2回目の起動で失敗することがあるので、新しいコードに登録し直してください。</p>
     <p class="small text-muted mt-3 mb-0"><strong>PC:</strong> 左のボタンをブックマークバーへドラッグします。<strong>スマホ:</strong>「コードをコピー」→ ブックマーク編集の URL 欄へ貼り付けます。TXT をブックマークバーで開いても起動用ブックマークにはなりません。</p>
     <p class="small text-success mt-2 mb-0"><strong>30日キャッシュ版:</strong> いったん新しいコードへ貼り替え、オンラインで OFFLINE を1回起動してください。その後は TETR.IO タブをリロードせず開いたままなら、ネットが切れても保存済みの OFFLINE を起動できます。30日後、接続できる時だけ更新します。</p>
     <details class="mt-3"><summary class="small">コードを手動でコピーする</summary><textarea id="manual" class="code-box mt-2" readonly>Loading…</textarea></details>''')
@@ -125,7 +125,7 @@ def page_patch():
     <p class="small text-muted mt-2 mb-0"><strong>O形式・A形式</strong>には TETRIO-Resources-1.0.zip(TETR.IO の素材。Discord で配布)が必要です。起動ファイルと同じフォルダ、その一つ上、または「ダウンロード」フォルダに置いてください。R形式は不要です。</p>
   </section>'''
     body += '\n' + card('A形式の Discord 認証', '    <p class="mb-0">A形式(AI 版)を選ぶと、Discord のログイン画面を開きます。指定の Discord サーバーでロールを持っていることを確かめたあと、ダウンロードできます。</p>')
-    body += '\n' + card('リバイブミッションの追加効果(v4.8238)', '''    <p>ミッションエディタ v6.5 の「追加効果」タブで設定します。複数を同時に使えます。</p>
+    body += '\n' + card('リバイブミッションの追加効果(v4.8238〜)', '''    <p>ミッションエディタ v6.5 の「追加効果」タブで設定します。複数を同時に使えます。</p>
     <ul class="small mb-0">
       <li>消せない段の追加・削除(開始時と、N秒ごと/Nミノごとの繰り返し)。</li>
       <li>強制ゴミ:即時上昇・地形変更(下からN段を書き換え/今あるゴミ段の穴だけ変更)・ゴミ予測バーに付与。地形指定なし、またはシード由来のパターン(1つ穴・2つ穴・2列の交互配置・市松模様・固定の列・特定の形・テンプレート)。ボムにもできます。</li>
@@ -137,8 +137,8 @@ def page_patch():
       <li>QP TOOLS を PAUSED にしていても動きます。</li>
       <li>ON の間は、パッチのリプレイ演出(背景変更・シークバー非表示・Z/X/C の演出切り替え・TL 演出・結果画面)と、次のラウンドの自動再生を切ります。名前はそのまま出ます。</li>
     </ul>''')
-    body += '\n' + card('機能基準書・ミッションエディタ', f'''    <p>追加・変更する機能はこの基準書へ記録します。v5.3 の設定項目を維持した v6.5 エディタ(追加効果タブ付き)も利用できます。ゲームの「詳細エディタを開く」から開くと、今あるミッションを表示します。</p>
-    <div class="d-flex gap-2 flex-wrap"><a href="offline-v{OFFLINE}/FEATURE-BASELINE.md" class="btn btn-outline-dark">機能基準書を読む</a><a href="offline-v{OFFLINE}/mission-editor.html" class="btn btn-outline-primary" target="_blank" rel="noopener">ミッションエディタ v6.5</a><a href="../patch/v4.8233/QP-Mission-Editor-v6.3.html" class="btn btn-outline-secondary" target="_blank" rel="noopener">v6.3</a></div>''', mb=5)
+    body += '\n' + card('機能基準書・ミッションエディタ', f'''    <p>これまでに追加した機能は、機能説明書にまとめています(分かる範囲で、追加された版も書いています)。追加・変更する機能はこの基準書へ記録します。v5.3 の設定項目を維持した v6.5 エディタ(追加効果タブ付き)も利用できます。ゲームの「詳細エディタを開く」から開くと、今あるミッションを表示します。</p>
+    <div class="d-flex gap-2 flex-wrap"><a href="offline-v{OFFLINE}/FEATURE-MANUAL.md" class="btn btn-dark">機能説明書を読む</a><a href="offline-v{OFFLINE}/FEATURE-BASELINE.md" class="btn btn-outline-dark">機能基準書を読む</a><a href="offline-v{OFFLINE}/mission-editor.html" class="btn btn-outline-primary" target="_blank" rel="noopener">ミッションエディタ v6.5</a><a href="../patch/v4.8233/QP-Mission-Editor-v6.3.html" class="btn btn-outline-secondary" target="_blank" rel="noopener">v6.3</a></div>''', mb=5)
     script = f'''        <script>
           let bookmarkCode = '';
           fetch('./tetrio-offline-standalone-v{OFFLINE}.txt').then(r => r.text()).then(code => {{

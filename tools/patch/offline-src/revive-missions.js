@@ -20,9 +20,9 @@
   const rankKeys=new Set(['F','E','D','C','B','A']);
   const hasMissionMod=task=>Array.isArray(task?.mods)&&task.mods.length>0||!!task?.mod;
   const autoRank=task=>task?.rankMode==='auto'||task?.rank==null||task?.rank===''||task?.rank==='auto';
+  // v4.8239: a fixed rank is never changed. Only an automatic rank becomes A with MODs.
   const effectiveRank=(task,nativeRank)=>{
-   if(hasMissionMod(task))return 'A';
-   if(autoRank(task))return rankKeys.has(nativeRank)?nativeRank:'E';
+   if(autoRank(task)){if(hasMissionMod(task))return 'A';return rankKeys.has(nativeRank)?nativeRank:'E'}
    return rankKeys.has(task.rank)?task.rank:'E';
   };
   function selectLocalRevivePrompts(nativeRows, customTasks, testIds, source, shuffle, toRow){
@@ -60,7 +60,7 @@
   if(manager._localMissionCleanup)return manager._localMissionCleanup;
   config={source:'standard',attackEnabled:false,includeAttackRequired:false,allowControlPenalties:false,...config};
   game._localMissionConfig={...config};
-  const originals={GetPromptsList:manager.GetPromptsList,IncrementPrompt:manager.IncrementPrompt,NixPrompt:manager.NixPrompt,CheckPromptCompletion:manager.CheckPromptCompletion};
+  const originals={GetPromptsList:manager.GetPromptsList,IncrementPrompt:manager.IncrementPrompt,NixPrompt:manager.NixPrompt,CheckPromptCompletion:manager.CheckPromptCompletion,...(typeof manager.BumpPrompt==='function'?{BumpPrompt:manager.BumpPrompt}:{})};
   const originalHold=engine.fm?.Hold;
   // v4.8238 extra effects (unclearable rows, forced garbage, board height, spin rule, pieces...).
   const extras=window.LocalReviveExtraEffects?.attach?.(game)||null;
@@ -137,6 +137,33 @@
     (!r.holdRequired||holdUsed)&&Number.isFinite(placedX)&&
     placedX>=Number(r.columnMin??1)-1&&placedX<=Number(r.columnMax??10)-1&&heightMatches(piece,r);
   };
+  // v4.8239 washing machine: four rotations in the same direction that bring the piece back
+  // to the same place and facing count as one loop, with a block inside the piece's 3x3 box.
+  let washer={token:'',history:[],stable:null};
+  const fallingState=()=>{const f=game.state?.falling;return f&&Number.isFinite(Number(f.x))?{x:Number(f.x),y:Math.ceil(Number(f.y)),r:((Number(f.r)%4)+4)%4,type:String(f.type||'')}:null};
+  const pieceToken=()=>String(game.state?.stats?.piecesplaced??0)+':'+String(game.state?.falling?.type||'');
+  function washerTrack(){const t=pieceToken();if(t!==washer.token){washer={token:t,history:[],stable:null}}washer.stable=fallingState()}
+  function blockInsideBox(s){
+   const def=engine.fm?.GetPieceDefinition?.(s.type,s.r,true),b=game.state?.board;if(!def||!b)return false;
+   const own=new Set(def.data.map(([dx,dy])=>(s.x+dx-def.dx)+','+(s.y+dy-def.dy)));
+   const mat=engine.cm?.constants?.tetrominoes?.[s.type]?.matrix,w=mat?.w||3,h=mat?.h||3;
+   for(let yy=0;yy<h;yy++)for(let xx=0;xx<w;xx++){const X=s.x+xx-def.dx,Y=s.y+yy-def.dy;if(own.has(X+','+Y))continue;if(b[Y]?.[X])return true}
+   return false;
+  }
+  function washerRotation(){
+   const t=pieceToken(),now=fallingState();if(!now)return false;
+   if(t!==washer.token){washer={token:t,history:[],stable:null}}
+   const h=washer.history;
+   if(!h.length&&washer.stable)h.push(washer.stable);
+   const prev=h[h.length-1];
+   const dir=prev?((now.r-prev.r+4)%4):0;
+   if(dir!==1&&dir!==3){washer.history=[now];return false} // 180 or no change: start again
+   if(h.length>=2){const d0=(h[1].r-h[0].r+4)%4;if(d0!==dir){washer.history=[prev,now];return false}}
+   h.push(now);
+   if(h.length>=5){const a=h[h.length-5];if(a.x===now.x&&a.y===now.y&&a.r===now.r&&blockInsideBox(now)){washer.history=[now];return true}}
+   if(h.length>8)h.splice(0,h.length-5);
+   return false;
+  }
   function lockPlacement(piece){
    extraCall('onLock');
    const task=current;
@@ -340,7 +367,7 @@
     return [rank,task.id,task.target,`${name}${timed?' · Within '+task.timeout+'s':''}`,official?.[4]??(task.event==='survive'?4:2),[]];
    };
    // Native slot count is the cap; custom-only uses only matching custom IDs.
-   // Rankless missions inherit the slot rank and MOD missions are always A.
+   // Automatic-rank missions inherit the slot rank (A with MODs); fixed ranks stay as saved.
    return selectLocalRevivePrompts(standard,candidates,fixed,config.source,
     array=>this.S.rngex.shuffleArray(array),toRow);
   };
@@ -353,7 +380,17 @@
    if(task?.id!==current?.id){if(task)activate(task);else if(current)restore()}
    return prompt;
   }
-  function maybeAnnounce(prompt,task){if(!prompt?.complete||announced.has(prompt))return;announced.add(prompt);reviveCount++;const all=(game.state.zenith?.reviveprompts||[]).every(p=>p.complete);
+  function maybeAnnounce(prompt,task){if(!prompt?.complete||announced.has(prompt))return;announced.add(prompt);reviveCount++;
+   // v4.8239: optional altitude reward for clearing this mission (0-1000 m).
+   const reward=Number(task.rewardAltitude)||0;
+   // setZenithAltitude() ignores writes while the game is synced, so change the stat directly;
+   // the zenith manager derives the floor from it on the next frame.
+   const zstats=engine.gsm?.stats?.zenith;
+   if(reward>0&&zstats&&!engine.iom?.IsReplay?.()){const before=Number(zstats.altitude)||0;zstats.altitude=before+reward}
+   // Optional attack reward: sent like a real attack (offsets garbage, counts as attack, climbs).
+   // Deferred to the next frame so it never runs inside the prompt completion itself.
+   const attack=Number(task.rewardAttack)||0;
+   if(attack>0&&!engine.iom?.IsReplay?.())pendingAttack+=attack;const all=(game.state.zenith?.reviveprompts||[]).every(p=>p.complete);
    // The display overlay must be gone before the native revive animation
    // begins. It never calls revive logic or changes the partner game state.
    if(all&&stopScreen){stopScreen();stopScreen=null;screenPersists=false}
@@ -363,7 +400,10 @@
    const result=originals.IncrementPrompt.call(this,id,amount);
    // Native mission IDs (including spin/garbage/consecutive challenges)
    // are emitted by the original engine; forward only matching events.
-   if(task&&task===current&&id===task.event&&task.event!=='lines'&&id!==task.id&&!filteredPlacement(task))originals.IncrementPrompt.call(this,task.id,amount);
+   // v4.8239: a rotate mission may count only some pieces (e.g. J/L for the washing machine).
+   const rotatePieceOk=id!=='rotate'||!(task?.rules?.pieces?.length)||task.rules.pieces.includes(String(game.state?.falling?.type||'').toUpperCase());
+   if(task&&task===current&&id==='rotate'&&task.event==='rotate'&&task.rules?.washer){if(rotatePieceOk&&washerRotation())originals.IncrementPrompt.call(this,task.id,1)}
+   else if(task&&task===current&&id===task.event&&task.event!=='lines'&&id!==task.id&&!filteredPlacement(task)&&rotatePieceOk)originals.IncrementPrompt.call(this,task.id,amount);
    if(task&&entry)maybeAnnounce(entry,task);
    return result;
   };
@@ -371,9 +411,18 @@
    const task=current;const result=originals.NixPrompt.call(this,id,...args);
    if(task&&task===current&&id!==task.id){
     const failEvents=Array.isArray(task.penaltyEvents)?task.penaltyEvents:[task.event];
-    // Forward only a penalty received from the native event engine.
-    if(failEvents.includes(id))originals.NixPrompt.call(this,task.id,...args);
+    // Forward only a penalty received from the native event engine. A native nix resets
+    // the progress (e.g. B2B broken), so "die on reset" applies here too.
+    if(failEvents.includes(id)){if(task.rules?.dieOnReset&&failDeath(task))return result;originals.NixPrompt.call(this,task.id,...args)}
    }
+   return result;
+  };
+  // v4.8239: progress that the native engine raises to a value (B2B: "Reach B2B xN") uses
+  // BumpPrompt, not IncrementPrompt. Forward it to the matching custom mission.
+  if(originals.BumpPrompt)manager.BumpPrompt=function(id,value,...rest){
+   sync();const task=current,entry=task&&(game.state.zenith?.reviveprompts||[]).find(p=>p.id===task.id);
+   const result=originals.BumpPrompt.call(this,id,value,...rest);
+   if(task&&task===current&&id===task.event&&id!==task.id){originals.BumpPrompt.call(this,task.id,value,...rest);if(entry)maybeAnnounce(entry,task)}
    return result;
   };
   manager.CheckPromptCompletion=function(){const task=current,entry=task&&(game.state.zenith?.reviveprompts||[]).find(p=>p.id===task.id);const result=originals.CheckPromptCompletion.call(this);if(task&&entry)maybeAnnounce(entry,task);sync();return result};
@@ -390,8 +439,19 @@
   document.addEventListener('visibilitychange',otherAppVisibility,true);
   // A failed local timer should restart this prompt, never lock all prompts.
   // Keep the native prompt object/ID so native duo UI can continue reporting progress.
+  // v4.8239: a mission can turn its failure (time limit / accepted reset) into an instant death.
+  // The death runs on the next frame, never inside the key or lock handler that failed.
+  let deathPending=false,deathDone=false,pendingAttack=0;
+  function failDeath(task){if(deathDone||current!==task||engine.iom?.IsReplay?.())return false;deathPending=true;return true}
+  function runPendingDeath(){
+   if(!deathPending||deathDone)return;deathPending=false;deathDone=true;
+   restore();
+   try{if(typeof manager.IncapacitateSelf==='function')manager.IncapacitateSelf('topout');else engine.gom?.GameOver?.('topout')}
+   catch(error){window.LocalUIHealth?.fail?.('ミッション失敗の即死',error);try{engine.gom?.GameOver?.('topout')}catch{}}
+  }
   function resetProgress(prompt,task){
    if(!prompt||current!==task||prompt.complete)return;
+   if(task.rules?.dieOnReset&&failDeath(task))return;
    originals.NixPrompt.call(manager,task.id,0);
    prompt.count=0;prompt.locked=false;prompt.stunned=false;
    trackedPiece='';trackedFalling=null;heightWasSatisfied=null;heightCounted=false;
@@ -423,8 +483,11 @@
   }
   const tick=()=>{
    
+   if(deathPending){runPendingDeath();return}
+   if(pendingAttack>0&&game.isPlaying()){const amount=pendingAttack;pendingAttack=0;try{engine.atm?.FightLines?.(amount)}catch(error){window.LocalUIHealth?.fail?.('ミッション達成の火力',error)}}
    const prompt=sync(),task=current;
    if(extraCall('tick')){refreshHUD(engine,{},true);maskPreviews()}
+   if(task?.rules?.washer)washerTrack();
    if(!task||!game.isPlaying())return;
    maskPreviews();window.LocalVisibilityEffects?.tick?.(game);
    refillDamnationBelowFive();
@@ -453,7 +516,7 @@
    }
    if(current!==task||prompt?.complete)return;
    
-   if(task.timeout&&timerArmed&&elapsed>=task.timeout){retryPrompt(prompt,task);return;}
+   if(task.timeout&&timerArmed&&elapsed>=task.timeout){if(task.rules?.dieOnTimeout&&failDeath(task))return;retryPrompt(prompt,task);return;}
   };
   game.on('frame','local-missions',tick);
   function cleanup(){restore(true);extraCall('cleanup');if(originalEmit)engine.esm.Emit=originalEmit;if(originalHold&&engine.fm)engine.fm.Hold=originalHold;window.removeEventListener('local-custom-missions',invalidateMissions);window.removeEventListener('blur',gameNotViewed,true);document.removeEventListener('visibilitychange',otherAppVisibility,true);for(const [name,method]of Object.entries(originals))manager[name]=method;game.remove('frame','local-missions');game.remove('lock','local-mission-conditioned-lock');game.remove('end','local-mission-stop');delete manager._localMissionCleanup}

@@ -98,11 +98,13 @@ def port_client(src):
     return pat.sub(lambda m: names[m.group(1)], src)
 
 
-def patch_transform(src, edit_src, counter_src, port=False):
+def patch_transform(src, edit_src, counter_src, port=False, hyper_fix=False):
     if 'qpReplayEditRunner' in src:
         raise SystemExit('transform.js already contains the replay edit')
     if port:
         src = port_client(src)
+    if hyper_fix:
+        src = fix_transform_hyper(src)
     # (a) Skip the replay presentation while the replay edit is ON.
     src = replace_once(src,
         " if (window.__qpReplayUIInstalled) return;",
@@ -146,6 +148,59 @@ EDITOR_VERSION = '6.5'
 SCHEMA_MARK = '/*QP_EXTRA_SCHEMA*/'
 EXTRA_TAG = '<script src="/revive-extra-effects.js"></script>'
 MISSIONS_TAG = '<script src="/revive-missions.js"></script>'
+
+
+# Text fixes for the frozen offline client (O/offline/client.js), applied with --offline-src.
+# (old, new, expected count). The client itself is TETR.IO code and is not kept in this repo.
+OFFLINE_CLIENT_FIXES = [
+    # Reverse HYPERSPEED music: BgmPlaySmoothly only sets the current track after the mp3 is
+    # decoded, so play() restarted the decode every frame until then (unplayable lag).
+    # Start it once; if the game ends before the track starts, stop it as soon as it starts.
+    ("let requested=null,loaded=false,loading=null,failed=false;",
+     "let requested=null,loaded=false,loading=null,failed=false,starting=false,lastOn=0;", 2),
+    # Two callers (local QP sync and the HYPER presentation) report every frame; a
+    # stop while the game is still playing must last 0.3 s, so the music never flips
+    # between the reverse track and the zenith score (each flip reloads the music).
+    ("  if(!on||!reverse||!game.isPlaying?.()){stop(game,game.isPlaying?.()===true);return}\n  requested=game;",
+     "  const playingNow=game.isPlaying?.()===true;\n"
+     "  if(!on||!reverse||!playingNow){if(playingNow&&requested&&performance.now()-lastOn<300)return;stop(game,playingNow);return}\n"
+     "  lastOn=performance.now();requested=game;", 2),
+    ("const play=()=>{if(requested?.isPlaying?.()&&loaded&&audio.BgmGetCurrent()!==url)audio.BgmPlaySmoothly(url,.25)};",
+     "const play=()=>{if(audio.BgmGetCurrent()===url){starting=false;return}if(starting||!requested?.isPlaying?.()||!loaded)return;starting=true;audio.BgmPlaySmoothly(url,.25)};", 2),
+    ("const stop=(game,restart)=>{\n  if(!requested||key(requested)!==key(game))return;requested=null;\n"
+     "  if(audio.BgmGetCurrent()===url){if(restart)audio.BgmPlaySmoothly('zenith',.25);else audio.BgmFadeOut(.2)}\n };",
+     "const stop=(game,restart)=>{\n  if(!requested||key(requested)!==key(game))return;requested=null;\n"
+     "  const pending=starting;starting=false;\n"
+     "  if(audio.BgmGetCurrent()===url){if(restart)audio.BgmPlaySmoothly('zenith',.25);else audio.BgmFadeOut(.2)}\n"
+     "  else if(pending){if(restart)audio.BgmPlaySmoothly('zenith',.25);else{let n=0;const timer=setInterval(()=>{if(requested||++n>150){clearInterval(timer);return}if(audio.BgmGetCurrent()===url){clearInterval(timer);audio.BgmFadeOut(.2)}},100)}}\n };", 2),
+    # Result screen: a finished game is no longer in HYPERSPEED (no HYPER overlay, beat
+    # sounds or HYPER music after the game ends), and the end cue is not played then.
+    (' const game=this._GetSpeedrunViewGame();\n if(!game)return {state:"off",splits:[0,0,0,0,0,0,0,0,0],time:0,floor:1,progress:0};\n const state=game.getZenithSpeedrunState();',
+     ' const game=this._GetSpeedrunViewGame();\n if(!game||game.isPlaying?.()===false)return {state:"off",splits:[0,0,0,0,0,0,0,0,0],time:0,floor:1,progress:0};\n const state=game.getZenithSpeedrunState();', 1),
+    ('_PlaySpeedrunEnd(e){if(Sa.SePlay("zenith_speedrun_end"),!this._speedrunMeta.container)return;',
+     '_PlaySpeedrunEnd(e){if(this._GetSpeedrunViewGame()?.isPlaying?.()===false||Sa.SePlay("zenith_speedrun_end"),!this._speedrunMeta.container)return;', 1),
+]
+
+
+def fix_offline_client(text):
+    for old, new, count in OFFLINE_CLIENT_FIXES:
+        if text.count(old) != count:
+            raise SystemExit(f'O/offline/client.js fix anchor found {text.count(old)}x, expected {count}: {old[:60]}')
+        text = text.replace(old, new)
+    return text
+
+
+# The online-client patch (O/transform.js, in every kind) carries the same reverse HYPERSPEED
+# music code and the same speedrun view state once (replay / spectator presentation).
+# Apply the same fixes there; the native end cue is left as it is online.
+def fix_transform_hyper(text):
+    for old, new, count in OFFLINE_CLIENT_FIXES:
+        if '_PlaySpeedrunEnd' in old:
+            continue
+        if text.count(old) != 1:
+            raise SystemExit(f'O/transform.js hyper fix anchor found {text.count(old)}x, expected 1: {old[:60]}')
+        text = text.replace(old, new)
+    return text
 
 
 def load_offline_src(folder):
@@ -192,10 +247,12 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                 data = offline[base]
                 if base == 'reverse-hyper-browser.js':
                     data = replace_once(data.decode('utf-8'), OLD_MUSIC, NEW_MUSIC, name).encode('utf-8')
+            elif has_offline and offline and name == 'O/offline/client.js':
+                data = fix_offline_client(data.decode('utf-8')).encode('utf-8')
             elif has_offline and offline and name == 'O/offline/index.html':
                 data = patch_offline_index(data.decode('utf-8')).encode('utf-8')
             elif name == 'O/transform.js':
-                data = patch_transform(data.decode('utf-8'), edit_src, counter_src, port).encode('utf-8')
+                data = patch_transform(data.decode('utf-8'), edit_src, counter_src, port, hyper_fix=bool(offline)).encode('utf-8')
             elif name == 'O/offline/reverse-hyper-browser.js':
                 data = replace_once(data.decode('utf-8'), OLD_MUSIC, NEW_MUSIC, name).encode('utf-8')
             elif name == 'package.json':
@@ -208,6 +265,13 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                 entry = (f'v4.{new} replay board edit' + (' / TETR.IO 2026-11-09 client' if port else '')
                          + (' / revive mission extra effects' if offline else '') + '\n'
                          + ('- 2026-11-09 の TETR.IO 更新(内部の名前の付け替え)に合わせて書き換え位置を更新。\n' if port else '')
+                         + ('- オフラインQP: 裏HYPERSPEED曲の再生でラグが出る問題(曲の変換を毎フレームやり直していた)を修正。\n'
+                            '  リザルト画面では表・裏とも HYPER(演出・曲・終了音)を止める。ブラウザ版でも裏HYPERSPEED曲が鳴る。\n'
+                            '  オンライン用の書き換え(リプレイ・観戦の表示)にも同じ修正を当てた。\n'
+                            '- ミッション: 失敗(時間切れ/リセット判定)で即死の設定、達成時に伸ばす距離(0〜1000m)と送る火力(0〜1000)。\n'
+                            '  ランクを固定したミッションは MOD があってもそのランクのまま(自動のときだけ A)。\n'
+                            '- 強制ゴミのテンプレートを盤面サイズのマス目で描画(なぞって設置・削除)、ゴミを受けた時に発動、盤面にブロックを置く効果、\n'
+                            '  洗濯機ミッション(J/L を4回回して元の位置に戻ったら1周)。B2B ミッションが進まない問題を修正(B2B が切れたら0に戻る)。\n' if offline else '')
                          + ('- リバイブミッションに追加効果(複数同時可):消せない段の追加・削除、強制ゴミ(即時上昇・地形変更・ゴミ予測バー、\n'
                             '  地形指定なし/シード由来のパターン・形・テンプレート、ボム)、盤面の高さ、直列率、Spinルール、ミノの増減、I5。\n'
                             '  盤面の高さ・直列率・Spin・ミノは「ミッション終了時/復活し終えた時/ラン中」から戻すタイミングを選べる。\n'

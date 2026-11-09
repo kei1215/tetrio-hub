@@ -147,6 +147,22 @@ def main():
     if not old:
         raise SystemExit('loader version anchor')
     loader = loader.replace(old.group(0), f"const VERSION = '{a.version}';")
+    # Core client: reuse the previous core folder when the patched client is identical,
+    # otherwise this version's client.patch.* becomes the core.
+    core = re.search(r"const CORE_VERSION = '([\d.]+)';", loader)
+    if not core:
+        raise SystemExit('loader core version anchor')
+    core_meta = a.extra_from.parent / f'offline-v{core.group(1)}' / 'client.patch.json'
+    same = core_meta.exists() and json.loads(core_meta.read_text())['targetSha256'] == sha256(client) \
+        and json.loads(core_meta.read_text())['sourceSha256'] == sha256(source)
+    if same:
+        (a.out_dir / 'client.patch.json').unlink()
+        (a.out_dir / 'client.patch.bin').unlink()
+        print('core client unchanged: loader keeps offline-v' + core.group(1))
+    else:
+        loader = loader.replace(core.group(0), f"const CORE_VERSION = '{a.version}';")
+        loader = re.sub(r'// client\.patch\.\* \(vO [\d.]+ client', f'// client.patch.* (vO {a.version} client', loader, count=1)
+        print('core client changed: loader reads offline-v' + a.version)
     loader = re.sub(r'/\* tetrio-patch [\d.]+ standalone', f'/* tetrio-patch {a.version} standalone', loader, count=1)
     (a.out_dir / 'standalone-loader.js').write_text(loader, encoding='utf-8')
     print('modules', len(modules), 'ops', len(ops), 'additions', len(additions), 'copied', len(client) - len(additions))

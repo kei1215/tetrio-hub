@@ -101,24 +101,27 @@
   const horizontal=['any','leftHeld','rightHeld','eitherHeld'].includes(inputRules.horizontal)?inputRules.horizontal:'any';
   const spinType=['any','full','mini','empty'].includes(inputRules.spinType)?inputRules.spinType:'any';
   const resetOnMismatch=inputRules.resetOnMismatch===true;
+  // v4.8239: failure => instant death (time limit / accepted reset).
+  const dieOnTimeout=inputRules.dieOnTimeout===true,dieOnReset=inputRules.dieOnReset===true,washer=inputRules.washer===true&&event==='rotate';
   const rules={piece:pieces.length===1?pieces[0]:'',pieces,
    facing:facings.length===1?facings[0]:'',facings,
    holdRequired:inputRules.holdRequired===true,
-   columnMin:number(inputRules.columnMin??1,1,10,'columnMin'),columnMax:number(inputRules.columnMax??10,1,10,'columnMax'),height,lines,resetOn,rotationInput,softDrop,horizontal,spinType,resetOnMismatch};
+   columnMin:number(inputRules.columnMin??1,1,10,'columnMin'),columnMax:number(inputRules.columnMax??10,1,10,'columnMax'),height,lines,resetOn,rotationInput,softDrop,horizontal,spinType,resetOnMismatch,dieOnTimeout,dieOnReset,washer};
   if(rules.columnMin>rules.columnMax)throw Error('列指定の範囲が逆です');
-  if(!['pieces','pieceheight','spin','lines'].includes(event)&&(pieces.length||facings.length||rules.holdRequired||rules.columnMin!==1||rules.columnMax!==10||height.enabled||lines.enabled||spinType!=='any'))
+  if(!['pieces','pieceheight','spin','lines'].includes(event)&&(pieces.length&&event!=='rotate'||facings.length||rules.holdRequired||rules.columnMin!==1||rules.columnMax!==10||height.enabled||lines.enabled||spinType!=='any'))
     throw Error('詳細なミノ条件は設置・高さ・Spin・ラインミッションで使用します');
   if(event==='pieceheight'&&lines.enabled)throw Error('操作ミノの高さにはライン数を指定できません');
   if(!['spin','lines'].includes(event)&&lines.enabled)throw Error('ライン数はSpin・ライン消去で指定します');
   if(event!=='spin'&&spinType!=='any')throw Error('Spin種類はSpinで指定します');
   if(event==='pieceheight'&&target>100)throw Error('操作ミノの高さミッションの目標回数は1～100です');
-  // A mission with MODs always *appears* as A in the deck, while retaining
+  // An automatic-rank mission with MODs appears as A; a fixed rank is kept as saved.
   // its stored original rank for reversibility. No rank => normal-level auto.
   const savedRank=typeof row.rank==='string'?row.rank.trim().toUpperCase():'';
   const rankMode=row.rankMode==='auto'||!savedRank?'auto':'fixed';
   if(savedRank&&!['A','B','C','D','E','F'].includes(savedRank))throw Error('ランクが不正です');
   const modLabels=mods(row.modLabels??missionMods);
   const applyModRules=row.applyModRules!==false;
+  const rewardAltitude=number(row.rewardAltitude??0,0,1000,'達成時の距離'),rewardAttack=number(row.rewardAttack??0,0,1000,'達成時の火力');
   // Native failure event names, not player-written JavaScript. By default,
   // reuse the official penalty for the selected mission event; No Hold also
   // fails on the engine's actual `nohold` failure event.
@@ -126,7 +129,7 @@
   if(!Array.isArray(rawPenalty)||rawPenalty.length>24||rawPenalty.some(x=>typeof x!=='string'||!/^[a-z][a-z0-9_]{0,39}$/.test(x)))throw Error('ペナルティイベントIDが不正です');
   const penaltyEvents=[...new Set(rawPenalty)];
   
-  return {id:'custom_'+rawId.replace(/^custom_/,'').replace(/^local_mod_/,'').slice(0,45),source:'custom',name,event,target,count:target,timeout,timerStart,mods:missionMods,mod:missionMods[0]||'',modLabels,applyModRules,penaltyEvents,requiresAttack:row.requiresAttack===true,rank:rankMode==='fixed'?savedRank:null,rankMode,rules,when:conditions,effects:{visibility,boardRotation,screen,controls,holdEnabled:typeof effects.holdEnabled==='boolean'?effects.holdEnabled:!(applyModRules&&missionMods.some(m=>m==='nohold'||m==='nohold_reversed')),sound,extra:QP_EXTRA_SCHEMA.normalize(effects.extra)}};
+  return {id:'custom_'+rawId.replace(/^custom_/,'').replace(/^local_mod_/,'').slice(0,45),source:'custom',name,event,target,count:target,timeout,timerStart,mods:missionMods,mod:missionMods[0]||'',modLabels,applyModRules,penaltyEvents,requiresAttack:row.requiresAttack===true,rewardAltitude,rewardAttack,rank:rankMode==='fixed'?savedRank:null,rankMode,rules,when:conditions,effects:{visibility,boardRotation,screen,controls,holdEnabled:typeof effects.holdEnabled==='boolean'?effects.holdEnabled:!(applyModRules&&missionMods.some(m=>m==='nohold'||m==='nohold_reversed')),sound,extra:QP_EXTRA_SCHEMA.normalize(effects.extra)}};
  };
  // Only a mission ID from the imported JSON is allowed for each forced slot.
  const testSequence=(input,missions)=>{

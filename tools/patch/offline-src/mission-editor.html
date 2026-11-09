@@ -32,6 +32,7 @@ textarea{width:100%;height:200px;font:12px/1.4 ui-monospace,Menlo,monospace}deta
 dialog{width:min(560px,94vw);border:1px solid var(--border);border-radius:14px;background:var(--card);color:var(--tx);padding:14px}dialog::backdrop{background:#0008}#tplList{display:grid;gap:5px;max-height:60vh;overflow:auto;margin-top:8px}
 #drop{position:fixed;inset:0;background:#5647cf99;color:#fff;display:none;place-items:center;font-size:22px;z-index:30}#drop.on{display:grid}
 @media(max-width:820px){main{display:block;padding:10px}aside{position:static;margin-bottom:12px}.list{max-height:34vh}.ap{grid-template-columns:1fr 1fr}.ap b{grid-column:1/-1}header{padding:8px 10px}}
+.tgrid{touch-action:none;user-select:none;display:grid;grid-template-columns:repeat(10,20px);gap:2px;margin:6px 0}.tgrid button{width:20px;height:20px;padding:0;border-radius:3px;background:transparent}.tgrid button[aria-pressed=true]{background:#8a8f99;border-color:#b6bcc6}
 </style>
 </head><body>
 <header><h1>QP 復活ミッションエディタ <small>v6.5（v5.3互換）</small></h1>
@@ -43,7 +44,7 @@ dialog{width:min(560px,94vw);border:1px solid var(--border);border-radius:14px;b
 <main>
 <aside>
  <div class="card"><input id="q" type="search" placeholder="🔍 ミッションを検索" style="width:100%"><div class="chips" id="filters"></div><label class="fld">並び順（表示のみ）<select id="listOrder"><option value="rank">難易度・名前</option><option value="mod">MOD別</option><option value="original">保存順</option></select></label><div id="list" class="list"></div>
- <div class="chips"><button id="addTpl" class="primary" style="flex:1">公式ミッションから追加</button></div></div>
+ <div class="chips"><button id="addTpl" class="primary" style="flex:1">公式ミッションから追加</button><button id="addWasher" type="button">洗濯機ミッションを追加</button></div></div>
  <details class="card"><summary>復活テスト：1～3番目を固定</summary><p class="help">未指定ならランダム。復活開始時にここで選んだミッションが優先されます。</p><div id="testSequence"></div></details>
 </aside>
 <section><div class="card" id="editor"></div>
@@ -706,14 +707,14 @@ const setLang=()=>{
 };
 
 const defaults=()=>({when:{floorMin:1,floorMax:10,reviveMin:0,reviveMax:99,modsAll:[],modsNone:[]},effects:{visibility:{hold:true,holdContent:true,next:true,nextCount:5,nextHidden:[],nextWhenSpawnSlots:[],nextSlots:Array.from({length:6},()=>({mode:'normal',visiblePercent:100,period:5})),nextWhenSpawnHidden:false,modes:Object.fromEntries(['stack','garbage','active','ghost','next','hold'].map(key=>[key,{mode:'normal',visiblePercent:100,period:5,afterLock:false}]))},holdEnabled:true,sound:{rotation:true},boardRotation:{enabled:false,mode:'fixed',degrees:180,durationMs:700},screen:{mode:'none'},controls:{reverseHorizontal:false,reverseRotation:false},extra:QP_EXTRA_SCHEMA.defaults()}});
-const fresh=(row)=>{const [mod,event,target,timeout,rank,name,id,floorMin,floorMax]=row;let other=defaults(),mods=mod?mod.split('+'):[];const band={F:[1,2],E:[1,3],D:[3,5],C:[4,7],B:[6,9],A:[8,10]}[rank]||[1,10];other.when.floorMin=floorMin??band[0];other.when.floorMax=floorMax??band[1];if(mods.includes('nohold_reversed'))other.effects.visibility.nextCount=1;if(mods.some(m=>m==='nohold'||m==='nohold_reversed'))other.effects.holdEnabled=false;return {id,source:'custom',name,event,target,count:target,timeout,timerStart:event==='lines'?'first-clear':'immediate',mods,mod:mods[0]||'',modLabels:mods,applyModRules:true,penaltyEvents:event==='leavewindow'?[]:[event,...(mods.includes('nohold')?['nohold']:[])],requiresAttack:event==='attack',rank:rank||null,rankMode:rank?'fixed':'auto',rules:{piece:'',pieces:[],facing:'',facings:[],holdRequired:false,columnMin:1,columnMax:10,height:{enabled:false,rows:0,compare:'atMost',requireCrossing:true},lines:{enabled:false,compare:'exact',count:1},resetOn:[],resetOnMismatch:false,rotationInput:'any',softDrop:'any',horizontal:'any',spinType:'any'},...other}};
+const fresh=(row)=>{const [mod,event,target,timeout,rank,name,id,floorMin,floorMax]=row;let other=defaults(),mods=mod?mod.split('+'):[];const band={F:[1,2],E:[1,3],D:[3,5],C:[4,7],B:[6,9],A:[8,10]}[rank]||[1,10];other.when.floorMin=floorMin??band[0];other.when.floorMax=floorMax??band[1];if(mods.includes('nohold_reversed'))other.effects.visibility.nextCount=1;if(mods.some(m=>m==='nohold'||m==='nohold_reversed'))other.effects.holdEnabled=false;return {id,source:'custom',name,event,target,count:target,timeout,timerStart:event==='lines'?'first-clear':'immediate',mods,mod:mods[0]||'',modLabels:mods,applyModRules:true,penaltyEvents:event==='leavewindow'?[]:[event,...(mods.includes('nohold')?['nohold']:[])],requiresAttack:event==='attack',rank:rank||null,rankMode:rank?'fixed':'auto',rules:{piece:'',pieces:[],facing:'',facings:[],holdRequired:false,columnMin:1,columnMax:10,height:{enabled:false,rows:0,compare:'atMost',requireCrossing:true},lines:{enabled:false,compare:'exact',count:1},resetOn:[],resetOnMismatch:false,dieOnTimeout:false,dieOnReset:false,rotationInput:'any',softDrop:'any',horizontal:'any',spinType:'any'},...other}};
 let data={schema:9,starterInstalled:true,testSequence:['','',''],missions:START.map(fresh)};let selected=0;let filter='ALL';
 const $=id=>document.getElementById(id);
 const escapeHtml=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const clone=o=>JSON.parse(JSON.stringify(o));
 const numeric=(v,min,max,field)=>{const n=Number(v);if(!Number.isInteger(n)||n<min||n>max)throw Error(field+`は${min}～${max}の整数にしてください`);return n};
 function normalizeMods(values){if(!Array.isArray(values))return [];const result=[...new Set(values.filter(v=>MODS.includes(v)))];if(new Set(result.map(m=>m.replace(/_reversed$/,''))).size!==result.length)throw Error('同じMODの通常とリバースを同時指定できません');return result}
-function normalize(row){const m=clone(row);if(!m.id||!m.name||!EVENTS.includes(m.event))throw Error('ID・名前・イベントを確認してください');m.id=String(m.id).replace(/[^a-zA-Z0-9_-]/g,'').slice(0,48);m.name=String(m.name).trim().slice(0,48);m.target=m.count=numeric(m.target,1,999,'目標値');m.timeout=numeric(m.timeout||0,0,600,'制限時間');m.timerStart=m.event==='survive'?'immediate':(m.timerStart??(m.event==='lines'?'first-clear':'immediate'));if(!['immediate','first-clear'].includes(m.timerStart))throw Error('カウント開始の設定が不正です');m.mods=normalizeMods(m.mods|| (m.mod?[m.mod]:[]));m.mod=m.mods[0]||'';m.modLabels=normalizeMods(m.modLabels??m.mods);m.applyModRules=m.applyModRules!==false;
+function normalize(row){const m=clone(row);if(!m.id||!m.name||!EVENTS.includes(m.event))throw Error('ID・名前・イベントを確認してください');m.id=String(m.id).replace(/[^a-zA-Z0-9_-]/g,'').slice(0,48);m.name=String(m.name).trim().slice(0,48);m.target=m.count=numeric(m.target,1,999,'目標値');m.timeout=numeric(m.timeout||0,0,600,'制限時間');m.timerStart=m.event==='survive'?'immediate':(m.timerStart??(m.event==='lines'?'first-clear':'immediate'));if(!['immediate','first-clear'].includes(m.timerStart))throw Error('カウント開始の設定が不正です');m.mods=normalizeMods(m.mods|| (m.mod?[m.mod]:[]));m.mod=m.mods[0]||'';m.modLabels=normalizeMods(m.modLabels??m.mods);m.applyModRules=m.applyModRules!==false;m.rewardAltitude=numeric(m.rewardAltitude??0,0,1000,'達成時の距離');m.rewardAttack=numeric(m.rewardAttack??0,0,1000,'達成時の火力');
  m.penaltyEvents=[...new Set((m.penaltyEvents??[m.event,...(m.applyModRules&&m.mods.includes('nohold')?['nohold']:[])]).map(s=>String(s).trim()))];
  if(m.penaltyEvents.some(x=>!/^[a-z][a-z0-9_]{0,39}$/.test(x))||m.penaltyEvents.length>24)throw Error('ペナルティ判定IDが不正です');m.rankMode=(m.rankMode==='auto'||m.rank==null||m.rank==='')?'auto':'fixed';m.rank=['F','E','D','C','B','A'].includes(m.rank)?m.rank:null;m.source='custom';m.when={...defaults().when,...m.when};for(const name of ['floorMin','floorMax'])m.when[name]=numeric(m.when[name],1,10,name);for(const name of ['reviveMin','reviveMax'])m.when[name]=numeric(m.when[name],0,99,name);if(m.when.floorMin>m.when.floorMax||m.when.reviveMin>m.when.reviveMax)throw Error('出現条件の範囲が逆です');m.when.modsAll=normalizeMods(m.when.modsAll||[]);m.when.modsNone=normalizeMods(m.when.modsNone||[]);m.effects={...defaults().effects,...m.effects,visibility:{...defaults().effects.visibility,...m.effects?.visibility},sound:{rotation:m.effects?.sound?.rotation!==false}};const vis=m.effects.visibility;vis.hold=vis.hold!==false;vis.holdContent=vis.holdContent!==false;vis.next=vis.next!==false;vis.nextCount=numeric(vis.nextCount??5,0,6,'次のミノの個数');vis.nextHidden=[...new Set((vis.nextHidden||[]).map(Number))].filter(v=>Number.isInteger(v)&&v>=1&&v<=6).sort((a,b)=>a-b);vis.nextWhenSpawnSlots=[...new Set((vis.nextWhenSpawnSlots||[]).map(Number))].filter(v=>Number.isInteger(v)&&v>=1&&v<=5).sort((a,b)=>a-b);
  vis.nextSlots=Array.from({length:6},(_,i)=>{const x=vis.nextSlots?.[i]||{},mode=x.mode||'normal';if(!['normal','hidden','pulse','fade-in','gradient'].includes(mode))throw Error('NEXT'+(i+1)+'番目の表示モードが不正です');return {mode,visiblePercent:numeric(x.visiblePercent??100,0,100,'NEXT表示率'),period:numeric(x.period??5,1,60,'NEXT周期')}});m.effects.holdEnabled=m.effects.holdEnabled!==false;vis.nextWhenSpawnHidden=vis.nextWhenSpawnHidden===true;
@@ -744,12 +745,12 @@ function normalize(row){const m=clone(row);if(!m.id||!m.name||!EVENTS.includes(m
  m.rules.resetOn=[...new Set(Array.isArray(m.rules.resetOn)?m.rules.resetOn:[])];
  const keyChoices=['hold','moveLeft','moveRight','rotateCW','rotateCCW','rotate180','softDrop','hardDrop'];
  if(m.rules.resetOn.some(x=>!keyChoices.includes(x)))throw Error('リセット操作が不正です');
- m.rules.resetOnMismatch=m.rules.resetOnMismatch===true;
+ m.rules.resetOnMismatch=m.rules.resetOnMismatch===true;m.rules.dieOnTimeout=m.rules.dieOnTimeout===true;m.rules.dieOnReset=m.rules.dieOnReset===true;m.rules.washer=m.rules.washer===true&&m.event==='rotate';
  m.rules.rotationInput=['any','only180','onlyCWCCW'].includes(m.rules.rotationInput)?m.rules.rotationInput:'any';
  m.rules.softDrop=['any','held','forbid'].includes(m.rules.softDrop)?m.rules.softDrop:'any';
  m.rules.horizontal=['any','leftHeld','rightHeld','eitherHeld'].includes(m.rules.horizontal)?m.rules.horizontal:'any';
  m.rules.spinType=['any','full','mini','empty'].includes(m.rules.spinType)?m.rules.spinType:'any';
- if(!['pieces','pieceheight','spin','lines'].includes(m.event)&&(m.rules.pieces.length||m.rules.facings.length||m.rules.holdRequired||m.rules.columnMin>1||m.rules.columnMax<10||h.enabled||l.enabled||m.rules.spinType!=='any'))throw Error('詳細条件を利用できるのは設置・高さ・Spin・ライン消去です');
+ if(!['pieces','pieceheight','spin','lines'].includes(m.event)&&(m.rules.pieces.length&&m.event!=='rotate'||m.rules.facings.length||m.rules.holdRequired||m.rules.columnMin>1||m.rules.columnMax<10||h.enabled||l.enabled||m.rules.spinType!=='any'))throw Error('詳細条件を利用できるのは設置・高さ・Spin・ライン消去です');
  if(!['spin','lines'].includes(m.event)&&l.enabled)throw Error('消去ライン数はSpin・ライン消去の条件です');
  if(m.event!=='spin'&&m.rules.spinType!=='any')throw Error('Spin種別はSpin達成条件専用です');
  m.effects.extra=QP_EXTRA_SCHEMA.normalize(m.effects.extra);
@@ -814,18 +815,18 @@ function drawList(){const q=query.trim().toLowerCase();const found=data.missions
  drawFilters();drawTestSequence();$('json').value=JSON.stringify(data,null,2);$('download').textContent=dirty?'保存 ●':'保存'}
 
 const pickButtons=(path,list,labels)=>{const on=getP(M(),path)||[];return `<div class="chips">${list.map((item,i)=>`<button type="button" class="chip" data-pick="${path}" data-v="${item}" aria-pressed="${on.map(String).includes(String(item))}">${esc(labels?.[i]??item)}</button>`).join('')}</div>`};
-const effectiveEditorRank=m=>(m.mods?.length||m.mod)?'A':(m.rankMode==='auto'||!m.rank?'AUTO':m.rank);
+const effectiveEditorRank=m=>(m.rankMode==='auto'||!m.rank)?((m.mods?.length||m.mod)?'A':'AUTO'):m.rank;
 const KEY_NAMES=[['hold','HOLD'],['moveLeft','左移動'],['moveRight','右移動'],['rotateCW','右回転 (CW)'],['rotateCCW','左回転 (CCW)'],['rotate180','180°回転'],['softDrop','ソフトドロップ'],['hardDrop','ハードドロップ']];
 const ruleSelect=(path,label,items)=>`<label class="fld">${label}<select data-p="${path}" data-re="1">${opts(items,getP(M(),path))}</select></label>`;
 const heightOptions=m=>`<div class="grid"><label class="fld">高さの比較<select data-p="rules.height.compare">${opts([['atMost','床から指定段以下'],['atLeast','床から指定段以上']],m.rules?.height?.compare||'atMost')}</select></label>${num('rules.height.rows','床から何段（0～39）',0,39)}</div>`;
 function panel(m,v,e,w){
  if(tab==='basic')return `<label class="fld">ミッション名<input type="text" data-p="name" maxlength="48" value="${esc(m.name)}"><small>一覧での表示：${esc(displayName(m))}（保存データにはこの名前が入ります）</small></label>
-  <small>達成に関係するミノ・向き・Spin・操作・失敗条件はこの「基本」タブ内でまとめて編集できます。</small><div class="fld">ランク<div class="seg"><button type="button" data-seg="AUTO" aria-pressed="${m.rankMode==='auto'}">自動</button>${RANKS.map(r=>`<button type="button" data-seg="${r}" aria-pressed="${m.rankMode!=='auto'&&m.rank===r}">${r}</button>`).join('')}</div><small>自動＝通常ミッションの抽選ランクに合わせる。MOD指定があれば保存ランクに関係なく実効ランクA。</small></div>
+  <small>達成に関係するミノ・向き・Spin・操作・失敗条件はこの「基本」タブ内でまとめて編集できます。</small><div class="fld">ランク<div class="seg"><button type="button" data-seg="AUTO" aria-pressed="${m.rankMode==='auto'}">自動</button>${RANKS.map(r=>`<button type="button" data-seg="${r}" aria-pressed="${m.rankMode!=='auto'&&m.rank===r}">${r}</button>`).join('')}</div><small>自動＝通常ミッションの抽選ランクに合わせる（MOD指定があればA）。ランクを選んだ場合は、MODがあってもそのランクのままです。</small></div>
   <label class="fld">達成条件（基本）<select data-p="event" data-re="1">${coreEventOpts(m.event)}</select></label>
   <details class="box" ${CORE_SET.has(m.event)?'':'open'}><summary>その他の公式達成条件（互換性用）</summary><small>T-Spin / S・Z Spin / Spin Doubleなどは上のSpinに集約。旧ミッションを読み込んだ場合のIDは維持します。</small>
   <select data-p="event" data-re="1">${advancedEventOpts(m.event)}</select></details>
-  <div class="grid">${num('target','目標回数・数値',1,999)}${num('timeout','制限時間（秒・0で無制限）',0,600)}</div>
-  ${m.timeout>0&&m.event!=='survive'?`<label class="fld">制限時間のカウント開始<select data-p="timerStart">${opts([['immediate','ミッションが表示された時'],['first-clear','最初にラインを消した時']],m.timerStart)}</select><small>時間切れになると進捗を0に戻して再挑戦します。</small></label>`:''}
+  <div class="grid">${num('target','目標回数・数値',1,999)}${num('timeout','制限時間（秒・0で無制限）',0,600)}${num('rewardAltitude','達成時に伸ばす距離（m・0でなし）',0,1000)}${num('rewardAttack','達成時に送る火力（0でなし）',0,1000)}</div><small>火力は実際に攻撃したのと同じ扱いです（受けているゴミの相殺・攻撃の統計・攻撃による上昇・「攻撃を送る」ミッションの進捗）。</small>
+  ${m.timeout>0&&m.event!=='survive'?`<label class="fld">制限時間のカウント開始<select data-p="timerStart">${opts([['immediate','ミッションが表示された時'],['first-clear','最初にラインを消した時']],m.timerStart)}</select><small>時間切れになると進捗を0に戻して再挑戦します（下の「時間切れで即死」をONにすると即死）。</small></label>${sw('rules.dieOnTimeout','時間切れで即死','制限時間内に達成できなかったら、再挑戦ではなくその場でゲームオーバーになります。')}`:''}
   ${m.event==='pieceheight'?'<small>操作中のミノの実ブロック最下部が高さ条件を満たした時だけカウント。置いた後のブロック・NEXT・ゴーストは対象外です。0段への接触は最初の観測フレームでも判定します。</small>':''}${sw('requiresAttack','攻撃・お邪魔ラインが必要なミッション')}
   ${['pieces','pieceheight','spin','lines'].includes(m.event)?`<details class="box" open data-section="mino"><summary><b>ミノ・向き・配置</b></summary>
    <small>複数選択可。未選択の場合は全ミノ・全方向が対象です。I/O/T/S/Z/J/Lを直接選べます。</small>
@@ -838,6 +839,7 @@ function panel(m,v,e,w){
    ${m.event==='pieceheight'?sw('rules.height.requireCrossing','高さの境界を通過した場合のみ成功'):''}
    <small>高さの基準は実ブロック最下部。床は0段です。</small>
   </details>`:''}
+  ${m.event==='rotate'?`<div class="box"><b>回転を数えるミノ</b><small>未選択なら全ミノ。例：洗濯機はJとL。</small>${pickButtons('rules.pieces',['I','O','T','S','Z','J','L'])}${sw('rules.washer','洗濯機：4回回して元の位置に戻ったら1周','同じ向きに4回回して、元の位置・向きに戻り、ミノの3×3の枠の中にブロックがある時に1回と数えます。')}</div>`:''}
   ${['spin','lines'].includes(m.event)?`<details class="box" open data-section="spin"><summary><b>Spin・消去ライン</b></summary>
     ${m.event==='spin'?ruleSelect('rules.spinType','Spinの種類',[['any','Any Spin'],['full','通常のSpin（Mini以外）'],['mini','Mini Spin'],['empty','空Spin（ライン消去なし）']]):''}
     ${sw('rules.lines.enabled','1回の消去ライン数を指定')}
@@ -848,6 +850,7 @@ function panel(m,v,e,w){
    <div class="grid">${ruleSelect('rules.rotationInput','回転の制限',[['any','指定なし'],['only180','180°回転のみ'],['onlyCWCCW','左右回転のみ（180°禁止）']])}${ruleSelect('rules.softDrop','ソフトドロップ',[['any','指定なし'],['held','押し続ける（離すと不成立）'],['forbid','禁止（自然落下・ハードドロップのみ）']])}${ruleSelect('rules.horizontal','左右入力を押し続ける条件',[['any','指定なし'],['leftHeld','左を押した状態で達成'],['rightHeld','右を押した状態で達成'],['eitherHeld','左右いずれかを押した状態で達成']])}</div>
    ${sw('rules.resetOnMismatch','追加条件を満たさなかったら進捗を0に戻す','OFFならその操作・設置を数えず、進捗を保持します。')}
    <div class="help">押すと進捗を初期化するキー（複数選択）</div>${pickButtons('rules.resetOn',KEY_NAMES.map(x=>x[0]),KEY_NAMES.map(x=>x[1]))}
+   ${sw('rules.dieOnReset','リセット判定で即死','上のキーを押した時や、追加条件を満たさず進捗が0に戻る時に、その場でゲームオーバーになります。')}
    <small>これらの条件はミッションの進捗に作用します。ゲームの入力やAI操作自体は変更しません。キー監視・Spin詳細の実ゲーム対応は未検証です。</small>
   </details>
   <details class="box" data-section="failure"><summary><b>失敗時の判定イベント</b></summary><label class="fld">ミスとして扱うイベントID（半角カンマ区切り）<input type="text" data-p="penaltyEvents" value="${esc((m.penaltyEvents||[m.event]).join(','))}"><small>例：nohold,spam　空欄ならなし</small></label>
@@ -875,19 +878,31 @@ const repeatFields=(b)=>`<div class="grid">${num(b+'.repeat.seconds','繰り返�
 function garbagePanel(g,i){
  const b='effects.extra.garbage.'+i,pt=g.pattern.type;
  return `<div class="box"><div class="top"><h3>強制ゴミ ${i+1}</h3><button type="button" data-gdel="${i}">削除</button></div>${sw(b+'.enabled','有効')}
-  ${num(b+'.rows','段数（1～20）',1,20)}
+  ${pt==='template'?'<small>段数はテンプレートの高さです（盤面の高さに収まるように下から使います）。</small>':num(b+'.rows','段数（1～20）',1,20)}
   <div class="help">付け方（複数選択可。選ばなければゴミ予測バー）</div>${pickButtons(b+'.methods',METHOD_JA.map(x=>x[0]),METHOD_JA.map(x=>x[1]))}
   ${ruleSelect(b+'.pattern.type','地形・穴のパターン',PATTERN_JA)}
   ${['fixed','alternate','shape'].includes(pt)?`<div class="help">${pt==='fixed'?'穴にする列（1＝左端）':pt==='alternate'?'交互にする2列（未選択ならシードで決める）':'形の基準列（未選択ならシードで決める）'}</div>${pickButtons(b+'.pattern.columns',[1,2,3,4,5,6,7,8,9,10])}`:''}
   ${pt==='shape'?ruleSelect(b+'.pattern.shape','形',SHAPE_JA):''}
-  ${pt==='template'?`<label class="fld">テンプレート（上の段から。# ＝ブロック、. ＝穴。1行10文字）<textarea data-p="${b}.pattern.template" rows="6" spellcheck="false" style="font-family:monospace">${esc(g.pattern.template||'')}</textarea><small>段数より短いときは繰り返します。</small></label>${ruleSelect(b+'.pattern.mirror','左右反転',[['none','しない'],['random','シードでランダム'],['always','常に反転']])}`:''}
+  ${pt==='template'?templateGrid(g,i)+`<details><summary>テキストで編集</summary><label class="fld">上の段から。# ＝ブロック、. ＝穴。1行10文字<textarea data-p="${b}.pattern.template" rows="6" spellcheck="false" style="font-family:monospace">${esc(g.pattern.template||'')}</textarea></label></details>${ruleSelect(b+'.pattern.mirror','左右反転',[['none','しない'],['random','シードでランダム'],['always','常に反転']])}`:''}
   ${pt!=='fixed'&&pt!=='native'||(pt==='native'&&(g.methods||[]).some(x=>x==='terrain'||x==='holes'))?`<div class="grid">${ruleSelect(b+'.pattern.seedSource','シード',[['game','ゲームのシード由来'],['fixed','固定の数値']])}${g.pattern.seedSource==='fixed'?num(b+'.pattern.seed','シード値',0,2147483647):'<span></span>'}</div>`:''}
   ${sw(b+'.bombs','ボムにする','穴の代わりにボムを置きます。ボムの上にミノを置くと、その段が消えます。ボムが残っている間は、ほかのゴミは普通の穴のままです。ボムが残っている間は消せない段もボムの見た目になります。')}
-  ${repeatFields(b)}</div>`}
+  ${ruleSelect(b+'.when','発動するとき',[['start','ミッション開始時（下の繰り返しも使えます）'],['garbage','ゴミ（攻撃）を受けた時']])}
+  ${g.when==='garbage'?'<small>ミッション中に攻撃を受けるたびに出します。</small>':repeatFields(b)}</div>`}
+function stampGrid(x){const h=gridHeight(M()),on=new Set((x.stamp.cells||[]).map(c=>c[0]+','+c[1]));
+ return `<div class="help">マスをクリック（盤面と同じ ${h}段×10列、下が床）</div><div class="tgrid">${Array.from({length:h},(_,r)=>Array.from({length:10},(_,c)=>{const col=c+1,row=h-r;return `<button type="button" data-sg="${col},${row}" aria-pressed="${on.has(col+','+row)}" title="${row}段目・${col}列"></button>`}).join('')).join('')}</div><div class="chips"><button type="button" data-sg="clear">消す</button></div>`}
+// Template grid: same size as the board (10 wide; the mission's board height, or 20).
+const TEMPLATE_PRESETS={tsd:['XX..XXXXXX','X...XXXXXX','XX.XXXXXXX'],tst:['XXX.XXXXXX','XX..XXXXXX','XXX.XXXXXX']};
+const gridHeight=m=>m.effects.extra?.board?.enabled?Number(m.effects.extra.board.height)||20:20;
+function templateMatrix(text,h){const lines=String(text||'').split('\n').filter(Boolean).map(l=>l.padEnd(10,'#').slice(0,10));const rows=lines.slice(-h);const pad=Array.from({length:h-rows.length},()=>'..........');return [...pad,...rows].map(r=>r.split('').map(c=>/[#xX]/.test(c)))}
+function matrixText(mat){let rows=mat.map(r=>r.map(on=>on?'#':'.').join(''));while(rows.length&&!rows[0].includes('#'))rows.shift();while(rows.length&&!rows[rows.length-1].includes('#'))rows.pop();return rows.join('\n')}
+function templateGrid(g,i){const h=gridHeight(M()),mat=templateMatrix(g.pattern.template,h);
+ return `<div class="help">マスをクリックしてブロックを置く（盤面と同じ ${h}段×10列。空の段は上下とも詰めます）</div><div class="tgrid">${mat.map((row,r)=>row.map((on,c)=>`<button type="button" data-tg="${i},${r},${c}" aria-pressed="${on}" title="${r+1}段目・${c+1}列"></button>`).join('')).join('')}</div>
+ <div class="chips"><button type="button" data-tpre="${i}:tsd">ひな形：TSD</button><button type="button" data-tpre="${i}:tst">ひな形：TST</button><button type="button" data-tpre="${i}:clear">消す</button></div><small>DT砲・STSDなどはマス目で描いてください。</small>`}
 function extraPanel(m){
  const x=m.effects.extra||(m.effects.extra=QP_EXTRA_SCHEMA.defaults()),P='effects.extra';
  let check='';try{QP_EXTRA_SCHEMA.normalize(x)}catch(err){check=`<p class="help" style="color:#ff8a80">⚠ ${esc(err.message)}</p>`}
  return `${check}<small>ミッションが表示された時に発動します。ゴミと消せない段は盤面に残ります。下の設定は「戻すタイミング」で元に戻します（MODの変更は必ずミッション終了時に戻ります）。</small>
+ <div class="box"><h3>盤面にブロックを置く</h3>${sw(P+'.stamp.enabled','ミッション開始時にブロックを置く','空いているマスにだけ置きます（せり上がりなし）。')}${x.stamp?.enabled?stampGrid(x):''}</div>
  <div class="box"><h3>消せない段</h3>${sw(P+'.unclearable.enabled','消せない段を増減する')}${x.unclearable.enabled?`<div class="grid">${num(P+'.unclearable.add','追加する段数',0,20)}${num(P+'.unclearable.remove','削除する段数',0,20)}</div>${repeatFields(P+'.unclearable')}<small>削除は一番下の消せない段から。削除のあと追加します。</small>`:''}</div>
  <div class="box"><h3>強制ゴミ</h3><small>地形指定なし＝ゲーム本体のランダムな穴。シード由来のパターンは、ゲームのシード（または固定の数値）から毎回同じ並びを作ります。</small>${(x.garbage||[]).map(garbagePanel).join('')}${(x.garbage||[]).length<6?'<div class="chips"><button type="button" data-gadd="1">＋ 強制ゴミを追加</button></div>':''}</div>
  <div class="box"><h3>盤面の高さ</h3>${sw(P+'.board.enabled','盤面の高さを変える')}${x.board.enabled?`<div class="grid">${num(P+'.board.height','高さ（4～40段）',4,40)}${ruleSelect(P+'.board.restoreAt','戻すタイミング',RESTORE_JA)}</div><small>HOLD・NEXTは作り直して表示を保ちます。</small>`:''}</div>
@@ -931,6 +946,7 @@ $('editor').addEventListener('change',ev=>{const el=ev.target,p=el.dataset.p,m=M
  if(p==='penaltyEvents')v=[...new Set(v.split(',').map(s=>s.trim()).filter(Boolean))];
  if(p==='event'&&!v)return;setP(m,p,v);if(p==='target')m.count=v;
  if(p==='event'){if(!v)return;m.timerStart=v==='lines'?'first-clear':'immediate';m.requiresAttack=['attack','ljgarbage','szgarbage'].includes(v);if(v==='leavewindow')m.penaltyEvents=[];else if(!m.penaltyEvents?.length)m.penaltyEvents=[v];if(v==='pieceheight')m.rules.height.enabled=true;else if(v!=='pieces')m.rules.height.enabled=false}
+ if(/^effects\.extra\.garbage\.\d+\.pattern\.type$/.test(p)&&['shape','template'].includes(v)){const g=getP(m,p.replace(/\.pattern\.type$/,''));if(JSON.stringify(g.methods||['queue'])===JSON.stringify(['queue']))g.methods=['rise']}
  changed(!!el.dataset.re||p.startsWith('effects.extra.')||['event','timeout','effects.boardRotation.enabled','effects.boardRotation.mode','effects.visibility.nextCount','rules.height.enabled','target'].includes(p)&&p!=='target')});
 $('editor').addEventListener('click',ev=>{const t=ev.target.closest('button'),m=M();if(!t||!m)return;const d=t.dataset;
  if(d.tab){tab=d.tab;drawEditor()}
@@ -943,14 +959,42 @@ $('editor').addEventListener('click',ev=>{const t=ev.target.closest('button'),m=
   if(d.chip==='mods'){m.mod=next[0]||'';if(JSON.stringify(old)===JSON.stringify(m.modLabels))m.modLabels=[...next]}changed(true)}
  else if(d.nh){const x=Number(d.nh),h=m.effects.visibility.nextHidden||[];m.effects.visibility.nextHidden=(h.includes(x)?h.filter(k=>k!==x):[...h,x]).sort();if(!h.includes(x))m.effects.visibility.next=true;changed(true)}
  else if(d.ns){const x=Number(d.ns),h=m.effects.visibility.nextWhenSpawnSlots||[];m.effects.visibility.nextWhenSpawnSlots=(h.includes(x)?h.filter(k=>k!==x):[...h,x]).sort();changed(true)}
+ else if(d.sg&&d.sg!=='clear'&&ev.detail!==0){/* painted by pointer events */}
+ else if(d.sg){const x=m.effects.extra,st=x.stamp||(x.stamp={enabled:true,cells:[]});if(d.sg==='clear')st.cells=[];else{const [c,r]=d.sg.split(',').map(Number),k=st.cells.findIndex(p=>p[0]===c&&p[1]===r);if(k>=0)st.cells.splice(k,1);else st.cells.push([c,r])}changed(true)}
+ else if(d.tg&&ev.detail!==0){/* painted by pointer events */}
+ else if(d.tg){const [i,r,c]=d.tg.split(',').map(Number),g=m.effects.extra.garbage[i],mat=templateMatrix(g.pattern.template,gridHeight(m));mat[r][c]=!mat[r][c];g.pattern.template=matrixText(mat);changed(true)}
+ else if(d.tpre){const [i,k]=d.tpre.split(':'),g=m.effects.extra.garbage[Number(i)];g.pattern.template=k==='clear'?'':TEMPLATE_PRESETS[k].join('\n').replace(/X/g,'#');changed(true)}
  else if(d.gadd){const x=m.effects.extra||(m.effects.extra=QP_EXTRA_SCHEMA.defaults());(x.garbage||(x.garbage=[])).push(QP_EXTRA_SCHEMA.newGarbage());changed(true)}
  else if(d.gdel!==undefined){m.effects.extra.garbage.splice(Number(d.gdel),1);changed(true)}
  else if(t.id==='dup'){const x=clone(m);x.id+='_'+Date.now();x.name=m.name+' (copy)';append(x)}
  else if(t.id==='del'){const i=selected,gone=data.missions.splice(i,1)[0];selected=Math.max(0,Math.min(i,data.missions.length-1));dirty=true;changed(true);status('削除しました',false,['元に戻す',()=>{data.missions.splice(i,0,gone);selected=i;changed(true)}])}});
+// Press and drag on a grid paints: the first cell decides add (empty) or remove (filled).
+let paint=null;
+function paintCell(btn){
+ if(!paint||!btn||btn.getAttribute('aria-pressed')===String(paint.on))return;
+ const m=M();if(!m)return;
+ if(btn.dataset.tg){const [i,r,c]=btn.dataset.tg.split(',').map(Number);if(i!==paint.index)return;paint.mat[r][c]=paint.on}
+ else if(btn.dataset.sg&&btn.dataset.sg!=='clear'){const [c,r]=btn.dataset.sg.split(',').map(Number),st=m.effects.extra.stamp,k=st.cells.findIndex(p=>p[0]===c&&p[1]===r);if(paint.on&&k<0)st.cells.push([c,r]);if(!paint.on&&k>=0)st.cells.splice(k,1)}
+ else return;
+ btn.setAttribute('aria-pressed',String(paint.on));paint.dirty=true;
+}
+$('editor').addEventListener('pointerdown',ev=>{
+ const btn=ev.target.closest('.tgrid button');if(!btn||ev.button>0)return;const m=M();if(!m)return;
+ ev.preventDefault();
+ const on=btn.getAttribute('aria-pressed')!=='true';
+ if(btn.dataset.tg){const i=Number(btn.dataset.tg.split(',')[0]),g=m.effects.extra.garbage[i];paint={on,index:i,kind:'tg',mat:templateMatrix(g.pattern.template,gridHeight(m)),dirty:false}}
+ else if(btn.dataset.sg&&btn.dataset.sg!=='clear'){const x=m.effects.extra;x.stamp||(x.stamp={enabled:true,cells:[]});paint={on,kind:'sg',dirty:false}}
+ else return;
+ paintCell(btn);
+});
+addEventListener('pointermove',ev=>{if(!paint)return;const el=document.elementFromPoint(ev.clientX,ev.clientY);paintCell(el?.closest?.('.tgrid button'))});
+const endPaint=()=>{if(!paint)return;const p=paint;paint=null;const m=M();if(p.kind==='tg'&&p.dirty)m.effects.extra.garbage[p.index].pattern.template=matrixText(p.mat);if(p.dirty)changed(true)};
+addEventListener('pointerup',endPaint);addEventListener('pointercancel',endPaint);
 $('list').addEventListener('click',ev=>{const b=ev.target.closest('[data-i]');if(b){selected=Number(b.dataset.i);redraw();if(innerWidth<=820)$('editor').scrollIntoView({behavior:'smooth'})}});
 $('filters').addEventListener('click',ev=>{const b=ev.target.closest('[data-f]');if(b){filter=b.dataset.f;drawList()}});
 $('testSequence').addEventListener('change',ev=>{const s=ev.target;if(s.dataset.fixed!==undefined){data.testSequence[Number(s.dataset.fixed)]=s.value;changed(false)}});
 $('q').oninput=e=>{query=e.target.value;drawList()};$('listOrder').onchange=e=>{sortMode=e.target.value;drawList()};
+$('addWasher').onclick=()=>{const w=fresh(['','rotate',1,0,null,'Washing Machine: 1 LOOP','custom_washer_'+Date.now()]);w.rules.pieces=['J','L'];w.rules.washer=true;w.effects.extra=QP_EXTRA_SCHEMA.normalize({stamp:{enabled:true,cells:[[5,2]]},pieces:{enabled:true,delta:{J:2,L:2},restoreAt:'mission'}});w.penaltyEvents=[];append(w)};
 $('add').onclick=()=>append(fresh(['','pieces',6,0,null,'New Mission','custom_new_'+Date.now()]));
 $('addTpl').onclick=()=>{tplQuery='';$('tplQ').value='';drawTpl();$('tpl').showModal()};$('tplClose').onclick=()=>$('tpl').close();
 $('tplQ').oninput=e=>{tplQuery=e.target.value;drawTpl()};$('tplList').onclick=ev=>{const b=ev.target.closest('[data-tpl]');if(b)addTemplate(Number(b.dataset.tpl))};
