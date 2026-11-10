@@ -19,7 +19,9 @@ What it does (nothing is installed; it only writes the output folder):
   6. With --offline-src DIR (tools/patch/offline-src): replaces / adds the
      O/offline/* files found there (in the vO and vA zips, which carry the offline
      client), inlines extra-effects-schema.js at /*QP_EXTRA_SCHEMA*/, and loads
-     revive-extra-effects.js from O/offline/index.html. The standalone mission
+     revive-extra-effects.js from O/offline/index.html. replay-edit-offline.js gets the
+     same replay edit + spin counter as the online patch (always on in QP OFFLINE) and is
+     loaded after local-shell.js. The standalone mission
      editor is written as QP-Mission-Editor-v<EDITOR>.html.
   7. With --ai-src DIR (tools/patch/ai-src): replaces / adds the vA-only AI files
      under A/offline/ (same relative paths, e.g. engine/bot-ai.js, ai-loader.js).
@@ -170,6 +172,10 @@ EDITOR_VERSION = '6.5'
 SCHEMA_MARK = '/*QP_EXTRA_SCHEMA*/'
 EXTRA_TAG = '<script src="/revive-extra-effects.js"></script>'
 MISSIONS_TAG = '<script src="/revive-missions.js"></script>'
+REPLAY_EDIT_FILE = 'replay-edit-offline.js'
+REPLAY_EDIT_TAG = '<script src="/replay-edit-offline.js"></script>'
+SHELL_TAG = '<script src="/local-shell.js"></script>'
+REPLAY_EDIT_MARKS = ('/*QP_REPLAY_EDIT_SRC*/', '/*QP_SPIN_COUNTER_SRC*/')
 
 
 # Text fixes for the frozen offline client (O/offline/client.js), applied with --offline-src.
@@ -225,8 +231,9 @@ def fix_transform_hyper(text):
     return text
 
 
-def load_offline_src(folder):
-    """O/offline overrides: {file name: bytes}. The schema file itself is not shipped."""
+def load_offline_src(folder, edit_src=None, counter_src=None):
+    """O/offline overrides: {file name: bytes}. The schema file itself is not shipped.
+    replay-edit-offline.js gets the same replay edit / spin counter as the online patch."""
     if folder is None:
         return {}
     schema = (folder / 'extra-effects-schema.js').read_text(encoding='utf-8')
@@ -239,8 +246,18 @@ def load_offline_src(folder):
             if text.count(SCHEMA_MARK) != 1:
                 raise SystemExit('schema marker in ' + f.name)
             text = text.replace(SCHEMA_MARK, schema)
+        if f.name == REPLAY_EDIT_FILE:
+            for mark, src in zip(REPLAY_EDIT_MARKS, (edit_src, counter_src)):
+                if src is None or text.count(mark) != 1:
+                    raise SystemExit('replay edit marker in ' + f.name + ': ' + mark)
+                text = text.replace(mark, embed_body(src))
         files[f.name] = text.encode('utf-8')
     return files
+
+
+def embed_body(src):
+    """The embedded source is pasted inside a function body: keep it as is, ending in a newline."""
+    return src.rstrip('\n') + '\n'
 
 
 def load_ai_src(folder):
@@ -258,10 +275,12 @@ def load_ai_src(folder):
     return files
 
 
-def patch_offline_index(text):
-    if EXTRA_TAG in text:
-        return text
-    return replace_once(text, MISSIONS_TAG, EXTRA_TAG + MISSIONS_TAG, 'O/offline/index.html revive-missions tag')
+def patch_offline_index(text, replay_edit=False):
+    if EXTRA_TAG not in text:
+        text = replace_once(text, MISSIONS_TAG, EXTRA_TAG + MISSIONS_TAG, 'O/offline/index.html revive-missions tag')
+    if replay_edit and REPLAY_EDIT_TAG not in text:
+        text = replace_once(text, SHELL_TAG, SHELL_TAG + REPLAY_EDIT_TAG, 'O/offline/index.html local-shell tag')
+    return text
 
 
 EDITOR_WINDOW_MARK = 'qp-mission-editor-window-v1'
@@ -352,7 +371,7 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
             elif offline and name == 'O/local-main.js':
                 data = add_editor_window(data.decode('utf-8')).encode('utf-8')
             elif has_offline and offline and name == 'O/offline/index.html':
-                data = patch_offline_index(data.decode('utf-8')).encode('utf-8')
+                data = patch_offline_index(data.decode('utf-8'), REPLAY_EDIT_FILE in offline).encode('utf-8')
             elif name == 'O/transform.js':
                 text = data.decode('utf-8')
                 if not incremental:
@@ -452,12 +471,12 @@ def main():
     ap.add_argument('--ai-src', type=Path, help='folder with changed vA-only A/offline/* files (tools/patch/ai-src)')
     ap.add_argument('--manifest', type=Path, help='write the in-app updater manifest (docs/patch/latest.json)')
     a = ap.parse_args()
-    offline = load_offline_src(a.offline_src)
-    ai = load_ai_src(a.ai_src)
     if a.new_dir.exists():
         raise SystemExit('output folder already exists: ' + str(a.new_dir))
     edit_src = (a.hub / 'replay-edit/tetrio-replay-edit.js').read_text(encoding='utf-8')
     counter_src = (a.hub / 'counter/tetrio-spin-counter.js').read_text(encoding='utf-8')
+    offline = load_offline_src(a.offline_src, edit_src, counter_src)
+    ai = load_ai_src(a.ai_src)
     a.new_dir.mkdir(parents=True)
     sums = {}
     for kind in KINDS:
