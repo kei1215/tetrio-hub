@@ -101,6 +101,9 @@ CLIENT_RENAMES_2026_11_09 = {'Bc': 'Sc', 'El': 'Ml', 'Ht': 'Rt', 'Js': 'Zs', 'Mc
 # the new client). See tools/patch/CLIENT-UPDATES.md.
 CLIENT_RENAMES_2026_11_10 = {'Ko': 'Vo', 'kc': 'Bc', 'Bs': 'Ls', 'Ml': 'Dl', '_c': 'gc',
                              'yl': 'Al', 'vl': 'wl', 'Rt': 'Ht', 'Ys': 'Qs', 'Qo': 'Yo'}
+# Same commit e84ebccd2 rebuilt (build 20261109T191625): some names moved again. Applied on top of
+# a v4.8247+ transform.js (which already carries CLIENT_RENAMES_2026_11_10).
+CLIENT_RENAMES_2026_11_10B = {'Bc': 'Lc', 'Gc': 'Xc', 'Kc': 'Qc', 'Ls': 'Bs', 'Vo': 'Ko', 'Yl': 'Jl'}
 
 
 def rename_client_ids(src, names):
@@ -465,6 +468,7 @@ def main():
     ap.add_argument('--hub', required=True, type=Path, help='tetrio-hub/docs')
     ap.add_argument('--port-2026-11-09', dest='port', action='store_true', help='adapt anchors to the TETR.IO client of 2026-11-09')
     ap.add_argument('--port-2026-11-10', dest='port1110', action='store_true', help='with --incremental: rename the client ids in transform.js for the TETR.IO client of 2026-11-10')
+    ap.add_argument('--port-2026-11-10b', dest='port1110b', action='store_true', help='with --incremental: rename the client ids for the rebuilt 2026-11-10 client (build 20261109T191625)')
     ap.add_argument('--offline-src', type=Path, help='folder with changed O/offline/* files (tools/patch/offline-src)')
     ap.add_argument('--incremental', action='store_true', help='OLD is already a build of this script (v4.8239+): only re-overlay O/offline, keep transform.js and client.js')
     ap.add_argument('--notes', default='', help='changelog lines for --incremental')
@@ -483,7 +487,7 @@ def main():
         old_zip = a.old_dir / f'QP-Patch-v{kind}4.{a.old}-Source.zip'
         new_zip = a.new_dir / f'QP-Patch-v{kind}4.{a.new}-Source.zip'
         old_sha = sha256(old_zip.read_bytes())
-        payload = build_zip(old_zip, new_zip, kind, a.old, a.new, edit_src, counter_src, a.port, offline, a.incremental, a.notes, ai if kind == 'A' else None, CLIENT_RENAMES_2026_11_10 if a.port1110 else None)
+        payload = build_zip(old_zip, new_zip, kind, a.old, a.new, edit_src, counter_src, a.port, offline, a.incremental, a.notes, ai if kind == 'A' else None, CLIENT_RENAMES_2026_11_10 if a.port1110 else CLIENT_RENAMES_2026_11_10B if a.port1110b else None)
         sums[new_zip.name] = sha256(payload)
         for osname, ext, flavor in OS_FILES:
             old_file = a.old_dir / f'tetrio-patch-{osname}-v{kind}4.{a.old}{ext}'

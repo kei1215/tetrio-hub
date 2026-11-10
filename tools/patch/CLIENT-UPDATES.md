@@ -13,6 +13,10 @@
   - `[Local patch] Unsupported client; preserving QP patch only.`
   - `[QP replay patch] Unsupported client version; leaving game unchanged.`
 - CONFIG の QP PATCH TOOLS(リプレイ編集・PATCH UPDATE)は、名前に頼らない作りなので残ることが多い。
+  ただし **QP TOOLS: ON/PAUSED(停止)と TETR.IO PATCH DELETE(削除)** はリプレイ用の書き換えの中で
+  入れているので、`[QP replay patch] Unsupported client version` のときは一緒に消える。
+- 同じ commit のまま build だけ新しくなって名前が変わることがある(2026-11-10b)。bootstrap の hv の
+  最後(build 日時)も見比べる。
 
 ## 確かめ方
 1. TETR.IO を ⌘Q で終了し、デバッグ用ポートを付けて起動する:
@@ -45,3 +49,4 @@
 |---|---|---|---|
 | 2026-11-09 | (前回) | `CLIENT_RENAMES_2026_11_09`(Bc→Sc, El→Ml, Ht→Rt, Js→Zs, Mc→Ec, Ql→Yl, Qs→Ys, Ss→Bs, Yo→Qo, Zo→Jo)、Zenith の基底名を動的に読む | v4.8239〜 |
 | 2026-11-10 | commit e84ebccd2 / build 20261109T164827 | `CLIENT_RENAMES_2026_11_10`(Ko→Vo, kc→Bc, Bs→Ls, Ml→Dl, _c→gc, yl→Al, vl→wl, Rt→Ht, Ys→Qs, Qo→Yo) | v4.8247 |
+| 2026-11-10b | commit e84ebccd2 / build 20261109T191625(同じ commit の作り直し) | `CLIENT_RENAMES_2026_11_10B`(Bc→Lc, Gc→Xc, Kc→Qc, Ls→Bs, Vo→Ko, Yl→Jl)。症状: QP TOOLS の停止と PATCH DELETE が消えた、`Unsupported client version` | v4.8255 |
