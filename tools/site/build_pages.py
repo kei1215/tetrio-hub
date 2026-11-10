@@ -11,7 +11,7 @@ import re, sys
 from pathlib import Path
 
 DOCS = Path(sys.argv[1])
-PATCH = '4.8245'
+PATCH = '4.8248'
 OFFLINE = '4.8241'
 REL = f'https://github.com/kei1215/tetrio-hub/releases/download/patch-v{PATCH}/'
 

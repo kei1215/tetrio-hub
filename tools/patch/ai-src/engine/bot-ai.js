@@ -44,9 +44,9 @@
    for(let y=h-1;y>=0&&rows<4;y--){if(board[y].every((v,i)=>i===x||v!==null))rows++;else break}best=Math.max(best,rows)}return best;
  }
  function clearKind(before,after){const a=after.stats.clears||{},b=before.stats.clears||{};return Object.keys(a).filter(k=>(a[k]||0)>(b[k]||0))}
- function tactical(before,after){const lines=after.stats.lines-before.stats.lines,kinds=clearKind(before,after),full=kinds.some(k=>k.startsWith('tspin')&&!k.includes('mini'));
+ function tactical(before,after,spinMode=false){const lines=after.stats.lines-before.stats.lines,kinds=clearKind(before,after),full=kinds.some(k=>k.startsWith('tspin')&&!k.includes('mini'));
   // Emergency survival and MOD penalties still outweigh these bounded bonuses.
-  return (lines===4?18:0)+(full&&lines>0?12+4*lines:0)+3*quadReady(after.board);
+  return spinMode?(full&&lines>0?20+10*lines:0):(lines===4?18:0)+(full&&lines>0?12+4*lines:0)+3*quadReady(after.board);
  }
  // Optional B2B curriculum policy: preserve a reachable well and delay small clears.
  function chainBonus(before,after,spin,well=9){const old=geometry(before.board),lines=after.stats.lines-before.stats.lines,safety=old.peak>=14?.15:1;
@@ -290,6 +290,43 @@
   // Filling a ready slot with a non-T piece throws the setup away.
   return a>=b?a-b:-.6*(b-a);
  }
+ // v4.8246 Spin B2B mode (game._aiTSpinB2B, solo / no-attack rooms).
+ // Terrain read on the cell level: empty cells that a piece can still reach
+ // from the sky by moving down / sideways are "tuck" cells (a spin or tuck
+ // fills them); covered cells that nothing can reach are sealed holes. A
+ // one-wide open column deeper than two rows can only be filled by a straight
+ // I, which is never a spin, so those rows are dead for a spin chain.
+ const B2BP=window.__b2bParams||(window.__b2bParams={});
+ const bp=(k,d)=>B2BP[k]??d;
+ function spinTerrain(board){
+  const h=board.length,w=board[0].length,seen=new Uint8Array(h*w),stack=[];
+  for(let x=0;x<w;x++)if(board[0][x]===null){seen[x]=1;stack.push(x)}
+  while(stack.length){const i=stack.pop(),x=i%w,y=(i-x)/w;
+   if(x>0&&!seen[i-1]&&board[y][x-1]===null){seen[i-1]=1;stack.push(i-1)}
+   if(x<w-1&&!seen[i+1]&&board[y][x+1]===null){seen[i+1]=1;stack.push(i+1)}
+   if(y<h-1&&!seen[i+w]&&board[y+1][x]===null){seen[i+w]=1;stack.push(i+w)}}
+  const heights=[];for(let x=0;x<w;x++){let y=0;while(y<h&&board[y][x]===null)y++;heights.push(h-y)}
+  let sealed=0,tuck=0,dead=0;
+  for(let y=0;y<h;y++){let fill=0;for(let x=0;x<w;x++)if(board[y][x]!==null)fill++;
+   for(let x=0;x<w;x++){if(board[y][x]!==null||h-y>heights[x])continue;
+    // covered cell (something above it in this column)
+    if(!seen[y*w+x])sealed++;else if(fill>=w-4)tuck+=fill>=w-2?1:.6}}
+  for(let x=0;x<w;x++){const l=x?heights[x-1]:h,r=x<w-1?heights[x+1]:h,depth=Math.min(l,r)-heights[x];if(depth>=3)dead+=depth-2}
+  return {sealed,tuck,dead,peak:Math.max(...heights)};
+ }
+ function b2bScore(before,after,features,nativeSpinClear,type,mini,danger){
+  const lines=features[0],btb=Math.max(0,Number(before.stats.btb)||0);let score=0;
+  if(lines>0){
+   if(nativeSpinClear)score+=type==='t'&&!mini?bp('tFull',80)+bp('tLine',40)*(lines-1):bp('miniClear',55)+bp('miniLine',20)*(lines-1);
+   else if(lines===4)score+=danger?bp('quadDanger',20):bp('quad',-20);
+   else score-=danger?bp('breakDanger',40):bp('break',300)+5*Math.min(40,btb);
+  }
+  const a=spinTerrain(after.board),b=spinTerrain(before.board);
+  score-=bp('sealed',18)*(a.sealed-b.sealed);
+  score+=bp('tuck',14)*(Math.min(8,a.tuck)-Math.min(8,b.tuck));
+  score-=bp('dead',10)*(a.dead-b.dead);
+  return score;
+ }
  function spinMini(before,after){const a=after.stats.clears||{},b=before.stats.clears||{};return Object.keys(a).some(k=>k.includes('mini')&&(a[k]||0)>(b[k]||0))}
  function quickScore(plan,source){
    const before=geometry(source.board),after=plan.chainBoard?geometry(plan.chainBoard):null;
@@ -347,10 +384,14 @@
    score-=9*(Math.max(0,deepWells(rows)-1)-ctx.wells);
    if(b.holes>a.holes)score-=3*Math.max(0,holeDamage(rows)-ctx.damage);
    if(p.spin&&lines>0)score+=40+15*lines;
+   if(tspinB2B&&lines>0&&!p.spin&&lines<4)score-=b.peak>=dangerPeak?40:400;
+   if(tspinB2B&&p.spin&&lines>0)score+=type==='t'?40:25;
+   if(p.spin&&lines===0&&!zeroSpinUseful)score-=tspinB2B?20:8;
    if(ctx.tSoon&&b.peak<=10)score+=Math.max(0,Math.min(3,tSlotHoles(rows))-Math.min(3,ctx.slots))*30;
    return {score,lines};
   }
-  function nodeChoices(snapshot,spins,limit=Infinity){
+  const cellKey=(type,x,y,r)=>{const d=engine.fm.GetPieceDefinition(type,r);return d?d.data.map(([dx,dy])=>(x+dx-d.dx)+':'+(y+dy-d.dy)).sort().join('|'):''};
+  function nodeChoices(snapshot,spins,limit=Infinity,prefer=null){
    const lanes=[];
    restore(snapshot);
    const plainType=sandbox.state.falling?.type;
@@ -368,6 +409,7 @@
     }
    }
    restore(snapshot);
+   if(prefer)for(const lane of lanes)for(const c of lane)if(c.quick&&!!c.hold===prefer.hold&&cellKey(c.type,c.x,c.y,c.r)===prefer.key){c.quick.score+=1e5+(!!c.spin===!!prefer.spin?50:0)-(c.path?.length||0);c.planned=true}
    const ordered=lanes.map(lane=>{
     const valid=lane.filter(c=>c.quick).sort((a,b)=>b.quick.score-a.quick.score);
     if(!Number.isFinite(limit))return valid;
@@ -376,17 +418,49 @@
     return [...spinsFirst,...rest.slice(0,Math.max(2,limit-spinsFirst.length))];
    });
    const out=[];for(let i=0;i<Math.max(0,...ordered.map(l=>l.length));i++)for(const lane of ordered)if(i<lane.length)out.push(lane[i]);
-   return out.map(c=>({hold:c.hold,start:c.start,type:c.type,path:c.path,x:c.x,y:c.y,rotation:c.r,turn:c.spin?1:0,spin:c.spin,quickScore:c.quick.score}));
+   return out.map(c=>({hold:c.hold,start:c.start,type:c.type,path:c.path,x:c.x,y:c.y,rotation:c.r,turn:c.spin?1:0,spin:c.spin,quickScore:c.quick.score,planned:!!c.planned}));
   }
+  // Spin B2B mode (vA option, meant for solo / no-attack rooms): every line
+  // clear should be a spin (T-Spins first, any mini allowed), planned by
+  // LocalSpinPlanner. Only while nothing is incoming: under attack the normal
+  // evaluation decides.
+  const tspinB2B=game._aiTSpinB2B===true&&pressure(base.game)===0;
+  const dangerPeak=Math.max(8,(base.game.setoptions?.boardheight||20)-6);
+  // A zero-line spin only adds inputs, except where it scores by itself
+  // (All-Spin / Warlock mod) or a revive mission asks for it.
+  const zeroSpinUseful=(base.game.setoptions?.zenith_mods||[]).some(m=>m==='allspin'||m==='allspin_reversed')||!!botPolicy?.prompt;
   const rules0=rotationRules(base.game.setoptions);
   const rootLimit=settings.realtime?(settings.humanActive?5:Math.max(5,Math.min(12,Math.floor((Number(settings.rootBudget)||24)/3)))):Infinity;
-  queue=nodeChoices(base,!botPolicy?.ownDanger,rootLimit);
-  if(settings.fast)queue=queue.slice(0,6);
-  rootBudget=queue.length;
-  game._localSpinAudit={enumerated:queue.filter(c=>c.spin).length,generated:queue.length,checked:0,rootChecked:0,lookaheadChecked:0,rootBudget:queue.length,scriptTrials:0,nativeSpinHits:0,spinClears:0,selectedSpin:false,rules:rules0};
+  // The plan runs in time slices inside step(), so a live frame never stalls
+  // on it; the native root candidates are built once it is done.
+  let spinPlan=null,planner=null,planSlices=0,planFrameCap=Infinity;
+  if(tspinB2B&&window.LocalSpinPlanner&&base.game.falling?.type&&!settings.fast){
+   try{const budget=Number(settings.rootBudget)||40;
+    // Frames until this piece locks (high gravity leaves only the lock delay):
+    // a short window gets a narrower, quicker plan.
+    const left=settings.realtime?Number(window.LocalLegacyAI?.timing?.(game)?.total):Infinity;
+    const quick=left<bp('quickFrames',45)?10:left<bp('mediumFrames',70)?16:24;
+    // The piece keeps falling while the plan runs; its keys must still work.
+    planFrameCap=Number.isFinite(left)?Math.max(4,Math.floor(left/3)):Infinity;
+    planner=LocalSpinPlanner.create(engine,{board:base.game.board,falling:base.game.falling.type,hold:LocalAIInformation.holdPiece(base.game.hold),queue:LocalAIInformation.known(base),
+     holdAllowed:LocalAIInformation.holdAllowed(base,game._aiAllowHold!==false),b2b:base.game.stats?.btb||0},
+     {width:Math.min(quick,!settings.realtime||budget>=40?24:budget>=28?16:10)});
+   }catch(error){planner=null}
+  }
+  function buildRoot(){
+   let planMs=0;if(planner){planMs=planner.spent;const p=planner.done?planner.result():planner.stop();spinPlan=p?{...p,key:cellKey(p.type,p.x,p.y,p.r)}:null;planner=null}
+   game._localSpinPlan=spinPlan;
+   queue=nodeChoices(base,!botPolicy?.ownDanger||tspinB2B,rootLimit,spinPlan);
+   if(settings.fast)queue=queue.slice(0,6);
+   rootBudget=queue.length;cursor=0;
+   game._localSpinAudit={enumerated:queue.filter(c=>c.spin).length,generated:queue.length,checked:0,rootChecked:0,lookaheadChecked:0,rootBudget:queue.length,scriptTrials:0,nativeSpinHits:0,spinClears:0,selectedSpin:false,rules:rules0,plan:spinPlan,planMs};
+  }
+  game._localSpinAudit={enumerated:0,generated:0,checked:0,rootChecked:0,lookaheadChecked:0,rootBudget:0,scriptTrials:0,nativeSpinHits:0,spinClears:0,selectedSpin:false,rules:rules0};
+  if(!planner)buildRoot();
+
   const imitation=game._aiMimicTiming?1:game._rlState?.imitation??.75;
   const playerSpinRate=(()=>{const t=game._aiBehavior?.total;if(!t)return 0;const n=(t.fire||0)+(t.dig||0)+(t.lower||0)+(t.build||0);return n>=20?Math.min(1,(t.spin||0)/n):0})();
-  function evaluate(choice,snapshot){if(choice.spin)game._localSpinAudit.checked++;
+  function evaluate(choice,snapshot,root=false){if(choice.spin)game._localSpinAudit.checked++;
    restore(choice.start||snapshot);const before=structuredClone(sandbox.state);
    const io=LocalAIMoveGen.makeIO(engine,sandbox.state),routeStart={x:sandbox.state.falling.x,r:sandbox.state.falling.r},trace=[];
    for(const key of choice.path){
@@ -408,16 +482,18 @@
    const nativeSpinClear=spin&&clearKind(before,after).some(kind=>/spin/i.test(kind));
    if(nativeSpinClear)game._localSpinAudit.spinClears++;
    const route=choice.path.slice(),spinSteps=[],spinTrace=trace;const g=geometry(before.board);
-      const visible=LocalAIInformation.modelStates(before,after,choice.start||snapshot),input=(network||settings.collect)?LocalAIModel.encode(...visible,features):null;const playerImitation=game._aiMimicTiming?1:game._rlState?.imitation??.75;let score=boundedLearningValue(features,weights)+tactical(before,after)+(game._aiChainFocus?chainBonus(before,after,spin,game._aiChainWell??9):0)+(nativeSpinClear&&features[0]>0?Math.min(40,16+8*features[0])*(spinMini(before,after)?.35:1):0)+(network?Math.max(-24,Math.min(24,(1+3*playerImitation)*LocalAIModel.score(network,input))):0);
+      const visible=LocalAIInformation.modelStates(before,after,choice.start||snapshot),input=(network||settings.collect)?LocalAIModel.encode(...visible,features):null;const playerImitation=game._aiMimicTiming?1:game._rlState?.imitation??.75;let score=boundedLearningValue(features,weights)+tactical(before,after,tspinB2B)+(game._aiChainFocus?chainBonus(before,after,spin,game._aiChainWell??9):0)+(nativeSpinClear&&features[0]>0?Math.min(40,16+8*features[0])*(spinMini(before,after)?.35:1):0)+(network?Math.max(-24,Math.min(24,(1+3*playerImitation)*LocalAIModel.score(network,input))):0);
    score+=allSpinB2BBonus(before,after,nativeSpinClear,rotationRules(base.game.setoptions));
    score+=iTriplePenalty(before,after,before.falling.type,nativeSpinClear);
+   if(tspinB2B&&root&&choice.planned)score+=bp('planBonus',120);
+   if(tspinB2B)score+=b2bScore(before,after,features,nativeSpinClear,before.falling.type,spinMini(before,after),geometry(before.board).peak>=dangerPeak);
    // v4.8243: a T-slot overhang built while a T is coming is a setup, not a
    // buried hole. Only the slot's own covered cells are forgiven.
    const slotCredit=botPolicy?.ownDanger||before.falling.type==='t'?0:tSlotCredit(before.board,after.board,{...after,_known:LocalAIInformation.known(choice.start||snapshot)});
    score+=slotCredit*36;
    score-=wellPenalty(before.board,after.board);
    // A spin that clears nothing only spends the T/piece (no attack, no B2B).
-   if(spin&&features[0]===0&&!rotationRules(base.game.setoptions).allSpin)score-=10;
+   if(spin&&features[0]===0&&!zeroSpinUseful)score-=tspinB2B?bp('zeroSpin',25):12;
    else if(spin&&features[0]===0)score-=6;
    // Player imitation: a player who spins often makes confirmed spin clears worth more.
    if(nativeSpinClear&&features[0]>0)score+=Math.min(30,6+40*playerSpinRate)*(0.5+0.5*imitation)*(spinMini(before,after)?.35:1);
@@ -464,7 +540,17 @@
     };
     best=priorityRoots.reduce((a,b)=>effective(a)>=effective(b)?a:b);
    }if(!disposed&&!settings.collect&&game._rlState?.enabled){const picked=LocalRLCore.choose(game._aiMimicTiming?{...game._rlState,imitation:1}:game._rlState,game._rlKey,priorityRoots);if(picked&&(!best||((picked.futureScore??picked.score)>=(best.futureScore??best.score)-6&&picked.structuralRisk<=(best.structuralRisk||0)+3)))best=picked}else if(!settings.rootOnly&&!disposed&&game._aiExploration&&!botPolicy?.ownDanger&&roots.length>1&&Math.random()<.12){const candidates=priorityRoots.filter(r=>(r.futureScore??r.score)>((best?.lookaheadScore??best?.score??0)-10)&&r.score> -100000);if(candidates.length){const picked=candidates[Math.floor(Math.random()*Math.min(3,candidates.length))];best={...picked,depth:picked.futureScore===undefined?1:2,lookaheadScore:picked.futureScore}}}if(!disposed&&best&&!settings.collect){game._localSpinAudit.selectedSpin=!!best.spin;best={...best,next:best.nextPlan||best.next}}if(!disposed){disposed=true;sandbox.state.playing=false;sandbox.destroy()}return {done:true,best,previewChoices:previewChoices(),...(settings.collect?{choices:roots}: {})}}
-  return {finalize:finish,step(limit=4){if(disposed)return {done:true,best};const start=performance.now();let count=0;
+  return {finalize(){if(planner)buildRoot();return finish()},step(limit=4){if(disposed)return {done:true,best};
+   if(planner){
+    // Live play: the plan never holds the piece past its lock time. With
+    // little time left (high gravity) the deepest finished beam level is used.
+    const left=settings.realtime?Number(window.LocalLegacyAI?.timing?.(game)?.total):Infinity;
+    if(!planner.done&&(planSlices>=planFrameCap||planSlices>=(settings.realtime?bp('planSlices',(Number(settings.rootBudget)||40)>=40?20:(Number(settings.rootBudget)||40)>=28?10:6):Infinity)||left<bp('planStopFrames',22)))planner.stop();
+    if(!planner.done){planSlices++;planner.step(settings.realtime?stepBudgetMs:1e9);return {done:false,best:null,previewChoices:[]}}
+    // Native root candidates in the next slice, not in the same one.
+    buildRoot();if(settings.realtime)return {done:false,best:null,previewChoices:[]};
+   }
+   const start=performance.now();let count=0;
    while(count<limit&&(count===0||performance.now()-start<stepBudgetMs)){
     if(cursor>=queue.length||(phase===0&&cursor>=rootBudget&&roots.length)){
      if(phase===0){roots.sort((a,b)=>b.score-a.score);best=roots[0]||null;if(settings.rootOnly)return finish();beam=balancedBeam(roots,beamWidth);phase=1;beamIndex=0}
@@ -473,14 +559,18 @@
      if(!beam.length)return finish();
      const continuation=planAt(beam[beamIndex],phase-1).snapshot;const spins=!botPolicy?.ownDanger;queue=nodeChoices(continuation,spins,settings.realtime?(phase>=2?2:3):12);cursor=0;if(!queue.length)continue;
     }
-    const root=phase?beam[beamIndex]:null,result=evaluate(queue[cursor++],phase?planAt(root,phase-1).snapshot:base);count++;
+    const root=phase?beam[beamIndex]:null,result=evaluate(queue[cursor++],phase?planAt(root,phase-1).snapshot:base,!phase);count++;
     if(phase){lookaheadChecked++;game._localSpinAudit.lookaheadChecked=lookaheadChecked}
     else {rootChecked++;game._localSpinAudit.rootChecked=rootChecked}
     if(!result)continue;
-    if(!phase){roots.push(result);if(!best||result.score>best.score)best=result}
+    if(!phase){roots.push(result);if(!best||result.score>best.score)best=result;
+     // Spin B2B mode: the planner reproduces the native rules exactly, so a
+     // planned placement whose keys, kicks and spin flag the sandbox confirmed
+     // is played as is (the remaining native checks only cost time).
+     if(tspinB2B&&result.planned&&result.score>-1e5&&(!spinPlan?.spin||result.spin)){roots=[result];best=result;return finish()}}
     else {if(result.score< -100000)continue;depth=Math.max(depth,phase+1);let combined=result.score*Math.pow(.65,phase),weight=Math.pow(.65,phase);for(let i=0;i<phase;i++){combined+=planAt(root,i).score*Math.pow(.65,i);weight+=Math.pow(.65,i)}combined/=weight;root.depthScores??={};if(combined>(root.depthScores[phase]??-Infinity)){root.depthScores[phase]=combined;const parent=planAt(root,phase-1);if(phase===1)parent.nextPlan=result;else parent.next=result;root.futureScore=combined;root.depth=phase+1}const winner=roots.reduce((a,b)=>(a.futureScore??a.score)>(b.futureScore??b.score)?a:b);best={...winner,lookaheadScore:winner.futureScore??winner.score,depth:winner.depth,next:winner.nextPlan}}
 
-   }return {done:false,best,previewChoices:previewChoices()}},dispose:finish,get candidates(){return queue.length},get depth(){return depth}};
+   }return {done:false,best,previewChoices:previewChoices()}},dispose(){planner=null;return finish()},get candidates(){return queue.length},get depth(){return depth}};
  }
  window.LocalCombatAI={client:CLIENT,featureNames:NAMES,defaults:DEFAULT,geometry,edgeAccess,deepWells,tSlotHoles,tSlotCredit,terrainCorrection,holeDamage,qualityChange,reserveValue,holdGuard:holeGuard,quickScore,boundedLearningValue,balancedQueue,balancedBeam,chainBonus,allSpinB2BBonus,iTriplePenalty,quadReady,clearKind,tactical,pressure,charge,vector,value,rotationRules,canSpin,variants,spinEntryScripts,scheduleFamilies,createSearch};
 })();

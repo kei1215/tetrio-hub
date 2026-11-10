@@ -14,3 +14,19 @@ v4.8244 AI changes:
   equal horizontal moves is one held key (native DAS/ARR) when it ends at a wall or
   the ARR is 1 frame or slower; drops are a held soft drop released on the floor.
 - `ai-loader.js`: loads `ai-movegen.js`.
+
+v4.8246 Spin B2B mode (vA option "BOT: Spin B2B モード", localStorage
+`qp-local-ai-tspin-b2b`, for solo / no-attack rooms):
+- `engine/ai-spin-planner.js` (new): bitboard look-ahead over CURRENT / HOLD /
+  NEXT (beam 24, depth 6). Piece shapes, SRS+ kicks and the T corner table are
+  read from the running engine; spins follow the client's all-mini+ rule. It
+  matched `LocalAIMoveGen` on every placement and spin flag tested. Runs in
+  time slices inside the search, never one long frame.
+- `engine/bot-ai.js`: with `game._aiTSpinB2B` and nothing incoming, the plan's
+  first placement is checked once in the native sandbox and played. Non-spin
+  clears are avoided (Quad / any clear only near top-out). Zero-line spins are
+  penalised in every mode except All-Spin / Warlock mods and revive missions.
+  With the option OFF the evaluation is the v4.8245 one.
+- `engine/qp-ai-options.js`: the checkbox. `engine/live-bot-controller.js`:
+  reads it every piece into `game._aiTSpinB2B`.
+- `ai-loader.js`: loads `ai-spin-planner.js`.
