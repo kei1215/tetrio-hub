@@ -424,7 +424,9 @@
   // clear should be a spin (T-Spins first, any mini allowed), planned by
   // LocalSpinPlanner. Only while nothing is incoming: under attack the normal
   // evaluation decides.
-  const tspinB2B=game._aiTSpinB2B===true&&pressure(base.game)===0;
+  // v4.8250: also under attack; the plan then weighs cancelling the incoming
+  // garbage and the B2B charge against keeping the chain (by height).
+  const tspinB2B=game._aiTSpinB2B===true;
   const dangerPeak=Math.max(8,(base.game.setoptions?.boardheight||20)-6);
   // A zero-line spin only adds inputs, except where it scores by itself
   // (All-Spin / Warlock mod) or a revive mission asks for it.
@@ -443,9 +445,53 @@
     // The piece keeps falling while the plan runs; its keys must still work.
     planFrameCap=Number.isFinite(left)?Math.max(4,Math.floor(left/3)):Infinity;
     planner=LocalSpinPlanner.create(engine,{board:base.game.board,falling:base.game.falling.type,hold:LocalAIInformation.holdPiece(base.game.hold),queue:LocalAIInformation.known(base),
-     holdAllowed:LocalAIInformation.holdAllowed(base,game._aiAllowHold!==false),b2b:base.game.stats?.btb||0},
-     {width:Math.min(quick,!settings.realtime||budget>=40?24:budget>=28?16:10)});
+     holdAllowed:LocalAIInformation.holdAllowed(base,game._aiAllowHold!==false),b2b:base.game.stats?.btb||0,combo:base.game.stats?.combo||0},
+     {width:Math.min(quick,!settings.realtime||budget>=40?24:budget>=28?16:10),...playerPlanOptions(base.game),
+      // The room's rotation rules: kick table, 180 on/off, and high gravity
+      // (one row a frame or more: every move ends on the floor).
+      kickset:String(base.game.setoptions?.kickset||'SRS+'),allow180:rules0.allow180&&sandbox.options?.allow180!==false,
+      slam:Number(engine.fm.GetEffectiveGravity?.()??base.game.g??0)>=1});
    }catch(error){planner=null}
+  }
+  // The player's own data steers the plan: templates that fit this board and
+  // the coming pieces, where they make spins, how often they take a
+  // low-attack B2B clear (single-line spin / mini) and how often a Quad.
+  function playerPlanOptions(state){
+   const out={},T=window.LocalAITemplates,o=state.setoptions||{};
+   const incoming=pressure(state),g=geometry(state.board);
+   out.charging=!!o.b2bcharging;out.chargeAt=Number(o.b2bcharge_at??4);out.chargeBase=Number(o.b2bcharge_base??3);
+   // Cancel or take it? Keep a record of the garbage received lately: in QP
+   // attacks come in series, so more is likely right after some arrived.
+   const frame=typeof game.getFrame==='function'?game.getFrame():0,recv=Number(state.stats?.garbage?.received)||0;
+   const hist=game._aiRecvHist||(game._aiRecvHist=[]);hist.push([frame,recv]);while(hist.length>2&&frame-hist[0][0]>600)hist.shift();
+   const span=Math.max(60,frame-hist[0][0]),rate=(recv-hist[0][1])/span*60;
+   const series=Math.min(12,rate*3);
+   // Room to the top after all of it lands. Plenty of room: take the garbage
+   // (it can be dug with spins / combos) and send the attack, which in QP also
+   // climbs; cancelling is only special when taking it could kill.
+   const top=Number(o.boardheight||20),margin=top-(g.peak+incoming+series);
+   out.incoming=incoming+(margin<8?Math.round(series):0);
+   out.cancelW=!incoming?0:margin<4?4+.5*g.peak:margin<8?1.5:0;
+   out.cashout=50;
+   game._aiCancelInfo={incoming,series:+series.toFixed(1),margin:+margin.toFixed(1),cancelW:out.cancelW};
+   if(!T)return out;
+   try{
+    const pieces=[state.falling?.type,LocalAIInformation.holdPiece(state.hold),...LocalAIInformation.known(base)];
+    const ctx=T.ctxOf?T.ctxOf(state.setoptions):'normal';
+    out.templates=T.match(state.board,pieces,8,ctx);
+    game._localTemplateMatches=(game._localTemplateMatches||0)+(out.templates.length?1:0);
+    const st=T.style(ctx);
+    if(st){
+     out.colWeight=st.colWeight;if(st.cashout)out.cashout=Math.max(8,st.cashout);
+     const low=Math.max(0,Math.min(1,st.lowShare));
+     out.mini=[0,1+12*low,8,14];out.tMini=[0,1+8*low,3+4*low,4];
+     // Quads in imported matches can be relaxed play against a weaker side;
+     // the share only nudges the Quad value, capped well below a full copy.
+     out.quad=Math.round(14*Math.max(.5,Math.min(1.3,.6+2*st.quadShare)));
+     out.tFull=[0,16,38,52+20*Math.min(1,st.tripleShare*4)];
+    }
+   }catch(error){}
+   return out;
   }
   function buildRoot(){
    let planMs=0;if(planner){planMs=planner.spent;const p=planner.done?planner.result():planner.stop();spinPlan=p?{...p,key:cellKey(p.type,p.x,p.y,p.r)}:null;planner=null}
