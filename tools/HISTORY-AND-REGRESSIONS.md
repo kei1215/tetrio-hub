@@ -88,3 +88,10 @@
 - サイトに「GitHub のリリースに置いてある」と書かない。
 - TETRIO-Resources-1.0.zip を公開しない。Tampermonkey は使わない。tetr.io の userConfig に書き込まない。
 - ファイルの検索は ~/Downloads/tetrio-hub、all-tetrio-patch、tetrio-replay-video の中だけ。
+
+## 4. memory から移した経緯(2026-11-13 整理)
+- パッチ:v4.8233 を基に build_release.py で作り直し開始。2026-11-09 に旧リリースフォルダをすべてゴミ箱へ(~/.Trash/tetrio-cleanup-20261109-155815)。以後は最新フォルダから --incremental で作る。
+- 2026-11-09 の TETR.IO 更新でミニファイ名が変わり --port-2026-11-09、11-10 に --port-2026-11-10 / 11-10b(同じコミットの再ビルド)。v4.8246・4.8247・4.8249〜4.8253 は公開していない。
+- v4.8241 で PATCH UPDATE(docs/patch/latest.json)。リリースを公開してから site を push する。リリースは既存のリモート commit を target にする。
+- AI:v4.8245 で movegen + DAS 実行、v4.8248 で Spin B2B planner、v4.8249 でテンプレート学習(5han の TL 106 ラウンド → 2372 テンプレート)、v4.8250 で TETR.IO の火力計算と B2B 解放・被弾の判断。v4.8254 で全部公開。当時の APP:Node 0.72、ゲーム内 0.55〜0.62(旧 AI 0.45)。ユーザー本人 1.31。
+- MP4 ツール:2026-11-12 に方針が何度か変わった(自前描画 → TETR.IO 本体の録画 → blob ページ → 最終的に tetr.io 上でヘッドレス:自前エンジン + 自前描画、進み具合だけ表示)。capture/* は放棄。video_background のスライダーが userConfig を書き換えた件はユーザーに伝える必要あり。
