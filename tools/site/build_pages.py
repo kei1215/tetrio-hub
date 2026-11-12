@@ -15,7 +15,7 @@ PATCH = '4.8255'
 OFFLINE = '4.8241'
 REL = f'https://github.com/kei1215/tetrio-hub/releases/download/patch-v{PATCH}/'
 
-NAV = [('', 'Home'), ('spin/', '盤面回転'), ('replay-edit/', '盤面修正'), ('bookmarklets/', 'QP OFFLINE・パッチ')]
+NAV = [('', 'Home'), ('spin/', '盤面回転'), ('replay-edit/', '盤面修正'), ('replay-video/', 'MP4変換'), ('bookmarklets/', 'QP OFFLINE・パッチ')]
 
 
 def shell(depth, title, body, scripts=''):
@@ -93,6 +93,7 @@ def page_index():
     body += '\n  <section class="mb-4"><div class="row g-3">\n' + '\n'.join([
         tool_card('spin/', '盤面回転', '回転入れの判定が出たときだけ、その向きへ盤面を回すブックマークレット(中心はプレイ範囲の真ん中)。', 'SOLO・リプレイ・ルームで使えます。2人以上は「それぞれ回す/まとめて回す」を選べます。'),
         tool_card('replay-edit/', 'リプレイ盤面修正', 'リプレイを止めると、その場面から自分で操作できるブックマークレット(再生すると元に戻る)。', '火力は表示だけで相手に送りません。fumen 書き出し・2人の左右入れ替え・スピンカウンター付き。'),
+        tool_card('replay-video/', 'リプレイ → MP4 変換', 'リプレイ(.ttr / .ttrm)を 1080p の MP4 動画にするブックマークレット。', 'TETR.IO の画面はそのままで、裏で計算・描画します。TL・QP(MOD 付きも)・40L など。'),
         tool_card('bookmarklets/', 'QP OFFLINE', 'TETR.IO 上で、別タブに OFFLINE 版を起動するブックマークレット(30日キャッシュ版)。', 'QP・ZEN・ローカルリプレイ・端末内保存。'),
         tool_card('bookmarklets/#desktop', 'デスクトップ版パッチ', f'Mac・Windows・Linux の TETR.IO に入れるパッチ v{PATCH}(O形式・R形式・A形式)。', 'ミッションエディタ・機能基準書もこちら。'),
     ]) + '\n  </div></section>'
@@ -190,6 +191,48 @@ def convert(path, depth, label, title):
     return shell(depth, title, body, script)
 
 
+# ---------------- リプレイ → MP4 ----------------
+def page_replay_video():
+    body = hero('Bookmarklet', 'リプレイ → MP4 変換', '公式の <code>https://tetr.io/</code> で、リプレイファイル(<code>.ttr</code> / <code>.ttrm</code>)を <strong>1080p の MP4 動画</strong>にします。リプレイの入力からゲームを計算し直し、TETR.IO の画像・音を使って裏で描画します。画面には進み具合だけが出ます。',
+                'ファイルはどこにも送りません(読み込み・変換・保存はすべてブラウザの中です)。TETR.IO の画像・音楽・効果音は、実行時に tetr.io から読み込みます。')
+    body += '\n' + card('登録', '''    <p>下のボタンを<strong>ブックマークバーへドラッグ</strong>してください(このページでクリックしても動きません)。</p>
+    <p><a id="bmA" class="btn btn-primary" href="#">MP4変換</a></p>
+    <p class="small text-muted">上が動かないときの代替: <a id="bmB" class="btn btn-outline-primary" href="#">MP4変換(fetch版)</a></p>
+    <p><button id="copy" class="btn btn-outline-primary" type="button">ブックマークコードをコピー</button> <span id="copy-status" aria-live="polite"></span></p>
+    <details class="mt-2"><summary class="small">コードを手動でコピーする</summary><textarea id="manual" class="code-box mt-2" readonly>Loading…</textarea></details>''')
+    body += '\n' + card('使い方(PC)', '''    <ol>
+      <li><code>https://tetr.io/</code> を開き、ブックマークをクリックします。右下に「リプレイ → MP4」のパネルが出ます。</li>
+      <li>「リプレイを選ぶ」で <code>.ttr</code> / <code>.ttrm</code> を選びます。</li>
+      <li>ラウンド(全ラウンド/1ラウンドだけ)、フレームレート(60 / 30fps)、画質を選んで「MP4 を作る」を押します。</li>
+      <li>終わったら「MP4 を保存」で保存します。保存しないままページを閉じると消えます。</li>
+    </ol>
+    <ul class="small mb-0">
+      <li>変換中も TETR.IO の画面はそのままです。タブを閉じたりリロードしたりすると中止になります。</li>
+      <li>見た目は ULTRA 相当の固定設定です(自分の TETR.IO の設定は読み取るだけで、書き換えません)。</li>
+      <li>Chrome / Edge などの WebCodecs(動画エンコード)に対応したブラウザで使ってください。</li>
+    </ul>''')
+    body += '\n' + card('対応しているリプレイ', '''    <ul class="mb-0">
+      <li>TETRA LEAGUE・ルーム対戦(.ttrm)、40L・BLITZ など(.ttr)。</li>
+      <li>QUICK PLAY(ZENITH)。MOD 付き(リバース MOD を含む)も計算できます。DUO は一部だけの対応です。</li>
+      <li>QP の画面(高度メーターなど)はまだ通常の盤面で描いています。</li>
+    </ul>''', mb=5)
+    script = '''        <script>
+          const url = new URL('tetrio-replay-video.js', location.href).href;
+          const a = "javascript:(()=>{if(location.hostname!=='tetr.io')return alert('https://tetr.io/ で実行してください');const s=document.createElement('script');s.src='" + url + "?v='+Date.now();s.onerror=()=>alert('load failed');document.head.appendChild(s)})();";
+          const b = "javascript:(()=>{if(location.hostname!=='tetr.io')return alert('https://tetr.io/ で実行してください');fetch('" + url + "?v='+Date.now()).then(r=>r.text()).then(t=>(0,eval)(t)).catch(e=>alert('load failed: '+e))})();";
+          document.getElementById('bmA').href = a;
+          document.getElementById('bmB').href = b;
+          document.getElementById('manual').value = a;
+          for (const id of ['bmA', 'bmB']) document.getElementById(id).addEventListener('click', e => { e.preventDefault(); alert('ブックマークバーへドラッグして登録し、tetr.io で実行してください。'); });
+          document.getElementById('copy').onclick = async () => {
+            const status = document.getElementById('copy-status');
+            try { await navigator.clipboard.writeText(a); status.textContent = 'コピーしました'; }
+            catch (e) { document.querySelector('details').open = true; document.getElementById('manual').select(); status.textContent = '自動コピーできませんでした。下の欄からコピーしてください。'; }
+          };
+        </script>'''
+    return shell(1, 'TETR.IO リプレイ → MP4 変換', body, script)
+
+
 def page_auth():
     old = (DOCS / 'bookmarklets/auth.html').read_text(encoding='utf-8')
     script = re.search(r'(\s*<script>(?:(?!</script>).)*</script>)\s*</body>', old, re.S).group(1)
@@ -210,6 +253,7 @@ def main():
         'spin/index.html': convert(DOCS / 'spin/index.html', 1, 'Bookmarklet', 'TETR.IO 盤面回転'),
         'replay-edit/index.html': convert(DOCS / 'replay-edit/index.html', 1, 'Bookmarklet', 'TETR.IO リプレイ盤面修正'),
         'bookmarklets/auth.html': page_auth(),
+        'replay-video/index.html': page_replay_video(),
     }
     for name, html in out.items():
         (DOCS / name).write_text(html, encoding='utf-8')

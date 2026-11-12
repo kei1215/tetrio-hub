@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ja">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+        <title>TETR.IO リプレイ → MP4 変換</title>
+        <script src="../assets/tools.js"></script>
+        <link href="https://fonts.googleapis.com/css?family=Lora:400,700,400italic,700italic" rel="stylesheet" type="text/css" />
+        <link href="https://fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,700italic,800italic,400,300,600,700,800" rel="stylesheet" type="text/css" />
+        <link rel="stylesheet" href="../assets/clean-blog.css" />
+        <link rel="stylesheet" href="../assets/tools.css" />
+    </head>
+    <body>
+        <nav class="navbar navbar-expand-lg navbar-light" id="mainNav">
+            <div class="container px-4 px-lg-5">
+                <a class="navbar-brand" href="../">TETR.IO tools</a>
+                <button class="navbar-toggler" type="button" aria-controls="navbarResponsive" aria-expanded="false" aria-label="メニュー">Menu ☰</button>
+                <div class="collapse navbar-collapse" id="navbarResponsive">
+                    <ul class="navbar-nav ms-auto py-4 py-lg-0">
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../">Home</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../spin/">盤面回転</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../replay-edit/">盤面修正</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../replay-video/">MP4変換</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../bookmarklets/">QP OFFLINE・パッチ</a></li>
+                        <li class="nav-item"><button class="nav-link px-lg-3 py-3 py-lg-4" id="themeToggle" type="button">☾ ダーク</button></li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+        <header class="tools-band"></header>
+<main class="container px-4 px-lg-5 tools-main">
+  <section class="my-5">
+    <p class="text-uppercase text-primary fw-bold mb-2">Bookmarklet</p>
+    <h1 class="display-5 fw-bold">リプレイ → MP4 変換</h1>
+    <p class="lead">公式の <code>https://tetr.io/</code> で、リプレイファイル(<code>.ttr</code> / <code>.ttrm</code>)を <strong>1080p の MP4 動画</strong>にします。リプレイの入力からゲームを計算し直し、TETR.IO の画像・音を使って裏で描画します。画面には進み具合だけが出ます。</p>
+    <div class="alert alert-info">ファイルはどこにも送りません(読み込み・変換・保存はすべてブラウザの中です)。TETR.IO の画像・音楽・効果音は、実行時に tetr.io から読み込みます。</div>
+  </section>
+  <section class="card shadow-sm mb-4"><div class="card-body p-4">
+    <h2 class="h4">登録</h2>
+    <p>下のボタンを<strong>ブックマークバーへドラッグ</strong>してください(このページでクリックしても動きません)。</p>
+    <p><a id="bmA" class="btn btn-primary" href="#">MP4変換</a></p>
+    <p class="small text-muted">上が動かないときの代替: <a id="bmB" class="btn btn-outline-primary" href="#">MP4変換(fetch版)</a></p>
+    <p><button id="copy" class="btn btn-outline-primary" type="button">ブックマークコードをコピー</button> <span id="copy-status" aria-live="polite"></span></p>
+    <details class="mt-2"><summary class="small">コードを手動でコピーする</summary><textarea id="manual" class="code-box mt-2" readonly>Loading…</textarea></details>
+  </div></section>
+  <section class="card shadow-sm mb-4"><div class="card-body p-4">
+    <h2 class="h4">使い方(PC)</h2>
+    <ol>
+      <li><code>https://tetr.io/</code> を開き、ブックマークをクリックします。右下に「リプレイ → MP4」のパネルが出ます。</li>
+      <li>「リプレイを選ぶ」で <code>.ttr</code> / <code>.ttrm</code> を選びます。</li>
+      <li>ラウンド(全ラウンド/1ラウンドだけ)、フレームレート(60 / 30fps)、画質を選んで「MP4 を作る」を押します。</li>
+      <li>終わったら「MP4 を保存」で保存します。保存しないままページを閉じると消えます。</li>
+    </ol>
+    <ul class="small mb-0">
+      <li>変換中も TETR.IO の画面はそのままです。タブを閉じたりリロードしたりすると中止になります。</li>
+      <li>見た目は ULTRA 相当の固定設定です(自分の TETR.IO の設定は読み取るだけで、書き換えません)。</li>
+      <li>Chrome / Edge などの WebCodecs(動画エンコード)に対応したブラウザで使ってください。</li>
+    </ul>
+  </div></section>
+  <section class="card shadow-sm mb-5"><div class="card-body p-4">
+    <h2 class="h4">対応しているリプレイ</h2>
+    <ul class="mb-0">
+      <li>TETRA LEAGUE・ルーム対戦(.ttrm)、40L・BLITZ など(.ttr)。</li>
+      <li>QUICK PLAY(ZENITH)。MOD 付き(リバース MOD を含む)も計算できます。DUO は一部だけの対応です。</li>
+      <li>QP の画面(高度メーターなど)はまだ通常の盤面で描いています。</li>
+    </ul>
+  </div></section>
+</main>
+        <footer class="border-top tools-footer">
+            <div class="container px-4 px-lg-5">
+                <div class="small text-center text-muted fst-italic">Copyright &copy; Kei's HomePages 2025</div>
+            </div>
+        </footer>
+        <script>
+          const url = new URL('tetrio-replay-video.js', location.href).href;
+          const a = "javascript:(()=>{if(location.hostname!=='tetr.io')return alert('https://tetr.io/ で実行してください');const s=document.createElement('script');s.src='" + url + "?v='+Date.now();s.onerror=()=>alert('load failed');document.head.appendChild(s)})();";
+          const b = "javascript:(()=>{if(location.hostname!=='tetr.io')return alert('https://tetr.io/ で実行してください');fetch('" + url + "?v='+Date.now()).then(r=>r.text()).then(t=>(0,eval)(t)).catch(e=>alert('load failed: '+e))})();";
+          document.getElementById('bmA').href = a;
+          document.getElementById('bmB').href = b;
+          document.getElementById('manual').value = a;
+          for (const id of ['bmA', 'bmB']) document.getElementById(id).addEventListener('click', e => { e.preventDefault(); alert('ブックマークバーへドラッグして登録し、tetr.io で実行してください。'); });
+          document.getElementById('copy').onclick = async () => {
+            const status = document.getElementById('copy-status');
+            try { await navigator.clipboard.writeText(a); status.textContent = 'コピーしました'; }
+            catch (e) { document.querySelector('details').open = true; document.getElementById('manual').select(); status.textContent = '自動コピーできませんでした。下の欄からコピーしてください。'; }
+          };
+        </script>
+    </body>
+</html>
