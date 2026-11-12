@@ -38,9 +38,28 @@ function qpReplayMp4Button(document, window) {
   b.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();run(download)},true);
   download.parentNode.insertBefore(b,download); // between X and download
  };
+ // Replays opened from a file: TETR.IO hides the whole REPLAY row (no replay id), so the MP4 button
+ // inside it is hidden too. Then show our own MP4 button on the screen (same capture, same tool).
+ const shown=e=>!!(e&&e.offsetParent!==null&&e.getBoundingClientRect().width>0);
+ const floating=()=>{
+  let f=document.getElementById('qp-mp4-float');
+  const views=[['results','downloadreplay_results','qp-mp4-results'],['multilogview','downloadreplay_multilog','qp-mp4-multilog']];
+  const v=views.find(([view,,inRow])=>shown(document.getElementById(view))&&!shown(document.getElementById(inRow)));
+  if(!v){if(f)f.style.display='none';return}
+  if(!f){
+   f=document.createElement('div');f.id='qp-mp4-float';f.title='このリプレイを MP4 動画にする';f.setAttribute('role','button');
+   // outside the REPLAY row TETR.IO's button styles do not apply: own look, under BACK, on top
+   f.style.cssText='position:fixed;left:16px;top:150px;z-index:2147483000;cursor:pointer;background:rgba(10,12,20,.82);color:#fff;border:2px solid rgba(255,255,255,.55);border-radius:4px;padding:4px 14px;font-family:HUN,sans-serif;font-size:20px;font-weight:900;letter-spacing:.04em;user-select:none';
+   f.textContent='\u25b6 MP4';
+   f.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();run(document.getElementById(f.dataset.download))},true);
+   document.body.appendChild(f);
+  }
+  f.dataset.download=v[1];f.style.display='';
+ };
  const install=()=>{
   button('qp-mp4-results',document.getElementById('downloadreplay_results'));
   button('qp-mp4-multilog',document.getElementById('downloadreplay_multilog'));
+  floating();
   if(!document.getElementById('qp-mp4-config')){
    const account=document.getElementById('config_account');
    const config=account?.closest?.('[data-menuview="config"]')||document.querySelector('[data-menuview="config"]');
@@ -59,6 +78,6 @@ function qpReplayMp4Button(document, window) {
   }
  };
  // CONFIG can be rebuilt by other patch entries: keep putting ours back (cheap id checks)
- const start=()=>{install();setInterval(install,1000)};
+ const start=()=>{install();setInterval(install,500)};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
 }

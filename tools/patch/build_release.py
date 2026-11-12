@@ -358,10 +358,14 @@ def add_duo_view(text):
 
 def add_mp4_button(text):
     """Online client runtime: MP4 button on the results REPLAY row + CONFIG entry (app-src/mp4-button.js)."""
+    src = (APP_SRC / 'mp4-button.js').read_text(encoding='utf-8')
     if MP4_BUTTON_MARK in text:
-        return text
+        # later builds: replace the embedded function with the current one
+        start = text.index('function qpReplayMp4Button(document, window) {')
+        end = text.index('\n}\n', start) + 3
+        return text[:start] + src.rstrip('\n') + '\n' + text[end:]
     text = replace_once(text, TAIL_END, "\\n;('+qpReplayMp4Button.toString()+')(document,window);" + TAIL_END, 'transform tail (mp4 button)')
-    return (APP_SRC / 'mp4-button.js').read_text(encoding='utf-8') + text
+    return src + text
 
 
 def add_updater(text):
