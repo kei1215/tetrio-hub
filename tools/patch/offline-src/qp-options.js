@@ -25,8 +25,10 @@
   //  - The Warlock (allspin_reversed): spinbonuses "all+" (non-T spins are full
   //    spins, T keeps the 3-corner rule) and b2bcharge_base 3. With all-mini+ the
   //    MP4 engine desyncs on both real Warlock replays; with all+ they match.
-  //  - All-Spin (allspin): no real replay checked yet, so it stays all-mini+.
-  if(mods.includes('allspin'))options.spinbonuses='all-mini+';
+  //  - All-Spin (allspin): all+ as well (non-T spins are full spins). The Warlock is the
+  //    reversed All-Spin and real Warlock replays carry all+; the native client also
+  //    turns on the same zenith_allspin handlers for both.
+  if(mods.includes('allspin'))options.spinbonuses='all+';
   if(mods.includes('allspin_reversed')){options.spinbonuses='all+';options.b2bcharge_base=3;options.gincrease=0;}
   options.display_hold=!mods.includes('nohold')&&!mods.includes('nohold_reversed');
   if(mods.includes('nohold_reversed')){

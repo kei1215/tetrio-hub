@@ -52,7 +52,8 @@
 ### Phase 1:既存機能の正常化
 - [ ] All Spin の判定と火力倍率(T 以外のミノのスピンが Mini になる問題)
   - Warlock(allspin_reversed)は 2026-11-12 に修正済み(all+、b2bcharge_base 3。実リプレイ2本で確認)。ゲーム内の確認はまだ。
-  - 通常の All-Spin(allspin)は未修正:実際の設定値が分からない。allspin MOD の実リプレイ(.ttr)が1本あれば、その中の spinbonuses で確定できる。
+  - 2026-11-13:通常の All-Spin も all+ にした(T 以外の Spin を Mini にしない。Warlock の実リプレイと同じ扱い。未ビルド)。
+  - (旧)通常の All-Spin(allspin)は未修正:実際の設定値が分からない。allspin MOD の実リプレイ(.ttr)が1本あれば、その中の spinbonuses で確定できる。
   - 2026-11-13 調べたこと:クライアントの allspin の処理は「同じ消し方を続けるとペナルティ(lastclearwasdupe)」とキャンセル疲労だけで、spinbonuses はサーバーが決める。オフライン版は all-mini+ のまま(通常の QP と同じ)。手元の実リプレイ 30 本に allspin のものはない → 未確定のまま。
   - Warlock の T-Spin Mini:実リプレイ2本の stats に minitspinsingles 21・16 がある → 本物の Warlock にも T の Mini はある。公式どおり(all+)のままにした。
 - [ ] B2B の失敗判定
@@ -76,6 +77,7 @@
 
 残り:
 - [x] AI の対局リプレイ(Node、ブラウザなし):tools/ai-sim/ai-selfplay-replay.mjs が vA の planner で MP4 ツールのエンジンを動かし、.ttr を書き出す(2026-11-13。verify-stats で ALL OK。~/Downloads/TETRIO-AI-replays-2026-11-13 に3本)。ゲーム内の Solo QP の BOT は入力をゲームに送るので、普通のローカル記録に残る作り(ゲーム内は未確認)
+- [ ] オフラインの TL/CUSTOM の .ttrm を MP4 エンジンで再生するとずれる(お邪魔の相殺の扱いが元クライアントと違う。調査中:tetrio-replay-video の src/replay.js confirmLocalGarbage)
 - [x] AI のルーム対戦(TL・CUSTOM)を1試合1つの .ttrm で保存(2026-11-13、未ビルド。形式は verify-stats で ALL OK、ゲーム内は未確認)
 - [x] 消去なしの Spin・穴埋めだけの Spin をやめる(allspin MOD なしのとき。Node 8シード×300ミノで 5.8 → 0.1 回)
 - [ ] 通常時の攻撃の 90% を T-Spin に(今 44%、TSD/TST に使えた T は 43 個中 14)。数値の調整では 50% 前後が上限。T-Spin の形(TSD の積み方)を決めて組む仕組みが要る。tPotK 6 で T 19/43 に増えるが、計算時間が増えるのでゲーム内の確認が必要
