@@ -447,6 +447,10 @@
     planner=LocalSpinPlanner.create(engine,{board:base.game.board,falling:base.game.falling.type,hold:LocalAIInformation.holdPiece(base.game.hold),queue:LocalAIInformation.known(base),
      holdAllowed:LocalAIInformation.holdAllowed(base,game._aiAllowHold!==false),b2b:base.game.stats?.btb||0,combo:base.game.stats?.combo||0},
      {width:Math.min(quick,!settings.realtime||budget>=40?24:budget>=28?16:10),...playerPlanOptions(base.game),
+      // Without All-Spin mods (2026-11-13, Node self-play, 8 seeds x 300 pieces):
+      // no zero-line / hole-filling spins (6 -> 0.1 per game), T kept for TSD/TST
+      // (T-Spin share of attack 33% -> 44%, TSD/TST 9 -> 14 of 43 T, APP 0.67 -> 0.71).
+      ...(zeroSpinUseful?{}:{zeroSpin:-20,wastedT:15,tFull:[0,10,45,60],tsdReady:24,tstReady:36}),
       // The room's rotation rules: kick table, 180 on/off, and high gravity
       // (one row a frame or more: every move ends on the floor).
       kickset:String(base.game.setoptions?.kickset||'SRS+'),allow180:rules0.allow180&&sandbox.options?.allow180!==false,
