@@ -325,6 +325,24 @@ def refresh_embedded(text, edit_src, counter_src):
     return text
 
 
+DUO_SAVE_MARK = 'qp-duo-save-v1'
+TAIL_END = "\\n/* qp-replay-edit-v1 */';"
+
+
+def add_duo_save(text, duo_src):
+    """Online client: QP DUO replay save (docs/duo-save), always on. Refreshes the source on later builds."""
+    line = 'const QP_DUO_SAVE_SRC=' + json.dumps(duo_src, ensure_ascii=False) + ';'
+    if DUO_SAVE_MARK in text:
+        pattern = re.compile(r'^const QP_DUO_SAVE_SRC=.*;$', re.M)
+        if len(pattern.findall(text)) != 1:
+            raise SystemExit('O/transform.js: QP_DUO_SAVE_SRC line not found exactly once')
+        return pattern.sub(lambda _m: line, text)
+    code = ("\\n;(function(window,document){try{if(window.location.protocol!==\"https:\")return;"
+            "window.__qpDuoSaveEmbedded=true;'+QP_DUO_SAVE_SRC+'\\n}catch(e){console.warn(\"[qp-duo-save]\",e)}})(window,document);")
+    text = replace_once(text, TAIL_END, code + TAIL_END, 'transform tail (duo save)')
+    return '/* ' + DUO_SAVE_MARK + ' */\n' + line + '\n' + text
+
+
 def add_updater(text):
     """Append (or refresh) the patch updater (main process) in O/music-main.js, present in every kind."""
     return replace_appended(text, UPDATER_MARK, APP_SRC / 'patch-updater.js')
@@ -338,7 +356,7 @@ def add_update_config(text):
     return (APP_SRC / 'update-config.js').read_text(encoding='utf-8') + text
 
 
-def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=False, offline=None, incremental=False, notes='', ai=None, port_ids=None):
+def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=False, offline=None, incremental=False, notes='', ai=None, port_ids=None, duo_src=None):
     offline = offline or {}
     ai = ai or {}
     out = io.BytesIO()
@@ -385,6 +403,8 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                     text = refresh_embedded(text, edit_src, counter_src)
                 if offline:
                     text = add_update_config(text)
+                if duo_src:
+                    text = add_duo_save(text, duo_src)
                 data = text.encode('utf-8')
             elif offline and name == 'O/music-main.js':
                 data = add_updater(data.decode('utf-8')).encode('utf-8')
@@ -479,6 +499,8 @@ def main():
         raise SystemExit('output folder already exists: ' + str(a.new_dir))
     edit_src = (a.hub / 'replay-edit/tetrio-replay-edit.js').read_text(encoding='utf-8')
     counter_src = (a.hub / 'counter/tetrio-spin-counter.js').read_text(encoding='utf-8')
+    duo_path = a.hub / 'duo-save/tetrio-qp-duo-save.js'
+    duo_src = duo_path.read_text(encoding='utf-8') if duo_path.exists() else None
     offline = load_offline_src(a.offline_src, edit_src, counter_src)
     ai = load_ai_src(a.ai_src)
     a.new_dir.mkdir(parents=True)
@@ -487,7 +509,7 @@ def main():
         old_zip = a.old_dir / f'QP-Patch-v{kind}4.{a.old}-Source.zip'
         new_zip = a.new_dir / f'QP-Patch-v{kind}4.{a.new}-Source.zip'
         old_sha = sha256(old_zip.read_bytes())
-        payload = build_zip(old_zip, new_zip, kind, a.old, a.new, edit_src, counter_src, a.port, offline, a.incremental, a.notes, ai if kind == 'A' else None, CLIENT_RENAMES_2026_11_10 if a.port1110 else CLIENT_RENAMES_2026_11_10B if a.port1110b else None)
+        payload = build_zip(old_zip, new_zip, kind, a.old, a.new, edit_src, counter_src, a.port, offline, a.incremental, a.notes, ai if kind == 'A' else None, CLIENT_RENAMES_2026_11_10 if a.port1110 else CLIENT_RENAMES_2026_11_10B if a.port1110b else None, duo_src)
         sums[new_zip.name] = sha256(payload)
         for osname, ext, flavor in OS_FILES:
             old_file = a.old_dir / f'tetrio-patch-{osname}-v{kind}4.{a.old}{ext}'

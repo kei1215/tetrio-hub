@@ -20,6 +20,7 @@
 - v4.8249–4.8253:AI のテンプレート学習・火力の先読み、オフライン版のリプレイ盤面修正。どれも公開していない。
 - v4.8254:上の全部を公開。
 - v4.8255:2026-11-10 の TETR.IO 再ビルドに対応(--port-2026-11-10b)。
+- v4.8256:QP DUO のリプレイ保存(オンラインは duo-save を常に有効、オフラインはローカル記録へ)、Warlock の Spin ルール(all+)。
 
 ### サイトとブックマークレット(docs/)
 - 盤面回転:
@@ -42,6 +43,7 @@
 - サイト全体を Clean Blog 風に作り直した(ナビバー「TETR.IO tools」)。
 - AI 版の取得ページに Discord のロール確認を付けた(auth.html)。
 - リプレイ → MP4 変換のブックマークレット(docs/replay-video/)。
+- QP DUO リプレイ保存のブックマークレット(docs/duo-save/)。gsm の受け口はリプレイ盤面修正・カウンターと共有(__rpe)。
 
 ## 2. 再発チェック(過去に壊れたもの)
 
@@ -60,6 +62,7 @@
 | ダークモードでナビバーの上に白い線が出る | tools.css で枠線を直した | ダークモードで線が出ない |
 | Warlock で T 以外のスピンが mini になる | qp-options.js が spinbonuses を all-mini+ にしていた。実リプレイの値 all+ にした | Warlock の実リプレイ(allspin_reversed)を MP4 エンジンで照合して ALL OK。ゲーム内で S/Z/L/J スピンが mini 表示にならない |
 | Duo の TTRM を開くと loadReplay で落ちる | 公式の形(replay.leaderboard と各プレイヤーの id・alive・stats)がなかった。duo() で公式と同じ形にした | 記録画面で ZENITH · DUO の REPLAY → LOCAL VS LOCAL PARTNER が出て、2人の盤面が再生される |
+| DUO 保存とリプレイ盤面修正・カウンターが同時に動かない | gsm の受け口を3つで共有する(set.__rpe と W.__rpeGames)。どれかが受け口を消さないこと | 3つを同時に入れても、DUO 保存・盤面修正・カウンターがそれぞれ動く |
 | AI 版が GitHub のリリースから誰でも取れる | 未解決。配布方法はユーザーが決める | — |
 
 ## 3. 守ること(ユーザーのルール)
