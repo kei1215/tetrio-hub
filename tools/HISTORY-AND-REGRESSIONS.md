@@ -49,6 +49,7 @@
 - サイト全体を Clean Blog 風に作り直した(ナビバー「TETR.IO tools」)。
 - AI 版の取得ページに Discord のロール確認を付けた(auth.html)。
 - リプレイ → MP4 変換のブックマークレット(docs/replay-video/)。
+- リプレイ → MP4(2026-11-13、未 push):裏 DUO(Bleeding Hearts)の倒れる・蘇生(盤面・NEXT・HOLD・B2B のリセット、せり上げ)・味方が倒れている間は自分に返る攻撃。2人分の .ttrm では相方の記録から蘇生時刻を補う(linkDuoRevives)。
 - リプレイ → MP4:合成した QP DUO の .ttrm を DUO 専用ボード(duoleft / duoright)で描く。TL 扱いにしない(開始演出 DUO、点数表示なし)。
 - QP DUO リプレイ保存のブックマークレット(docs/duo-save/)。gsm の受け口はリプレイ盤面修正・カウンターと共有(__rpe)。
 
@@ -78,6 +79,7 @@
 | テストでページの音を止めると MP4 が無音になる | AudioScheduledSourceNode.start を丸ごと止めていた。止めるのは OfflineAudioContext 以外だけにする | 作った MP4 に音がある |
 | ファイルから開いたリプレイ・ルーム・QP で MP4 ボタンが出ない | リプレイ ID がないと TETR.IO が REPLAY の行ごと隠す。行が隠れているときは BACK の下に自前の「▶ MP4」を出す | ファイルから TTRM/TTR を開いても左上に ▶ MP4 が出て、押すとパネルが開く |
 | AI が消去なしの Spin(穴埋めだけ)をする | planner の zeroSpin 減点が小さかった(-1.5)。allspin MOD なしでは -20(bot-ai.js) | ai-selfplay-replay.mjs を 8 シード×300 ミノで回し、zeroSpin が平均 0.5 未満 |
+| 裏 DUO の MP4 が1回目に倒れたところで止まる | エンジンに DUO の「倒れて蘇生を待つ」がなく、そのまま GAME OVER にしていた。倒れたときの盤面の黒化で rngex を1ブロック1回使う点、ロック中に自分に返る攻撃では押し上げをしない点も合わせた | 2人分の裏 DUO .ttrm を MATCH=1 の verify-stats で:相方 ALL OK、自分 622/629 以上。ほかの QP・TL・40L・Warlock・AI のリプレイも ALL OK |
 | AI 版が GitHub のリリースから誰でも取れる | 未解決。配布方法はユーザーが決める | — |
 
 ## 3. 守ること(ユーザーのルール)
