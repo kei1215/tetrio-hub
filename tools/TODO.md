@@ -50,6 +50,8 @@
 
 ### Phase 1:既存機能の正常化
 - [ ] All Spin の判定と火力倍率(T 以外のミノのスピンが Mini になる問題)
+  - Warlock(allspin_reversed)は 2026-11-12 に修正済み(all+、b2bcharge_base 3。実リプレイ2本で確認)。ゲーム内の確認はまだ。
+  - 通常の All-Spin(allspin)は未修正:実際の設定値が分からない。allspin MOD の実リプレイ(.ttr)が1本あれば、その中の spinbonuses で確定できる。
 - [ ] B2B の失敗判定
 - [ ] リバイブランのミッションの自動判定
 - [ ] オフライン版の GAMEOVER 表示

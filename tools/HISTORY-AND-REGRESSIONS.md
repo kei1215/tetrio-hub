@@ -37,6 +37,7 @@
 - ブラウザ版 QP OFFLINE:
   - 30日キャッシュの版を出した(v4.8235 → 4.8241)。
   - 2026-11-12 に v4.8255 を作り直した(2026-11-10 の tetrio.js、SHA 6b682a12…)。キャッシュ名 v4.8255-core6。何も保存していない状態からの起動と2回目の起動を Chrome で確認。公開(push)はまだ。
+- QP OFFLINE / vO の Warlock:Spin ルールを all-mini+ → all+(T 以外のスピンが mini になっていた)、b2bcharge_base 4 → 3(offline-src/qp-options.js。次のパッチ版に入る)。
 - サイト全体を Clean Blog 風に作り直した(ナビバー「TETR.IO tools」)。
 - AI 版の取得ページに Discord のロール確認を付けた(auth.html)。
 - リプレイ → MP4 変換のブックマークレット(docs/replay-video/)。
@@ -56,6 +57,7 @@
 | QP OFFLINE の2回目の起動で失敗する | キャッシュのキーに # を使っていた。?launcher-meta に変えた | 続けて2回起動できる |
 | ブラウザ版で裏HYPERSPEED曲が鳴らない | reverse-hyper-browser.js でサイトの曲に差し替える | 曲が鳴る |
 | ダークモードでナビバーの上に白い線が出る | tools.css で枠線を直した | ダークモードで線が出ない |
+| Warlock で T 以外のスピンが mini になる | qp-options.js が spinbonuses を all-mini+ にしていた。実リプレイの値 all+ にした | Warlock の実リプレイ(allspin_reversed)を MP4 エンジンで照合して ALL OK。ゲーム内で S/Z/L/J スピンが mini 表示にならない |
 | AI 版が GitHub のリリースから誰でも取れる | 未解決。配布方法はユーザーが決める | — |
 
 ## 3. 守ること(ユーザーのルール)
