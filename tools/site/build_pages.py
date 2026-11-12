@@ -215,7 +215,7 @@ def page_replay_video():
     </ul>''')
     body += '\n' + card('対応しているリプレイ', '''    <ul class="mb-0">
       <li>TETRA LEAGUE・ルーム対戦(.ttrm)、40L・BLITZ など(.ttr)。</li>
-      <li>QUICK PLAY(ZENITH)。MOD 付き(リバース MOD を含む)も計算できます。DUO は一部だけの対応です。</li>
+      <li>QUICK PLAY(ZENITH)。MOD 付き(リバース MOD を含む)も計算できます。<strong>DUO</strong> は、2人それぞれの <code>.ttr</code> を「QP DUO リプレイ保存」の「2人の TTR を合成」でまとめた <code>.ttrm</code> を読み込むと、DUO 専用のボード(左右で形が違う)で2人並べて描きます。裏 DUO は途中から少しずれることがあります。</li>
       <li>QP は QP 用の盤面スキン・高度メーター・予告ゴミのメーターで描き、背景は通常プレイと同じ塔の絵が高度に合わせて動きます(開始時は少し上から降りてきます)。BGM も本体と同じく階層ごとに切り替わります(HYPERSPEED の曲は MOD なしのときだけ)。</li>
     </ul>''')
     body += '\n' + card('TL の演出', '''    <ul class="mb-0">
