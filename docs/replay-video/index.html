@@ -49,6 +49,7 @@
       <li><code>https://tetr.io/</code> を開き、ブックマークをクリックします。右下に「リプレイ → MP4」のパネルが出ます。</li>
       <li>「リプレイを選ぶ」で <code>.ttr</code> / <code>.ttrm</code> を選びます。</li>
       <li>ラウンド(全ラウンド/1ラウンドだけ)、フレームレート(60 / 30fps)、画質を選んで「MP4 を作る」を押します。</li>
+      <li>2人対戦では「開始演出(TR)」「点数演出(TL の長さ)」を選べます。点数演出なしのときは「ラウンド間 ○ 秒」で間隔を決められます。</li>
       <li>終わったら「MP4 を保存」で保存します。保存しないままページを閉じると消えます。</li>
     </ol>
     <ul class="small mb-0">
@@ -57,12 +58,19 @@
       <li>Chrome / Edge などの WebCodecs(動画エンコード)に対応したブラウザで使ってください。</li>
     </ul>
   </div></section>
-  <section class="card shadow-sm mb-5"><div class="card-body p-4">
+  <section class="card shadow-sm mb-4"><div class="card-body p-4">
     <h2 class="h4">対応しているリプレイ</h2>
     <ul class="mb-0">
       <li>TETRA LEAGUE・ルーム対戦(.ttrm)、40L・BLITZ など(.ttr)。</li>
       <li>QUICK PLAY(ZENITH)。MOD 付き(リバース MOD を含む)も計算できます。DUO は一部だけの対応です。</li>
       <li>QP の画面(高度メーターなど)はまだ通常の盤面で描いています。</li>
+    </ul>
+  </div></section>
+  <section class="card shadow-sm mb-5"><div class="card-body p-4">
+    <h2 class="h4">TL の演出</h2>
+    <ul class="mb-0">
+      <li><strong>開始演出</strong>:GET READY・青/赤のカード・VS・FT。TR・ランク・順位(100位以内のみ。1位は紫、10位以内は金、100位以内は銀)は、TETRA CHANNEL から試合のときの値を取ります(見つからないときは今の値)。その人の TL 平均(APM・PPS・VS)もカードに出します。</li>
+      <li><strong>点数演出</strong>:ラウンドが決まった 1.5 秒後から 5 秒、点数が上がる画面(MATCH POINT・TIEBREAKER 付き)。ラウンドの間隔は TL と同じです。</li>
     </ul>
   </div></section>
 </main>
