@@ -46,6 +46,7 @@
 - サイト全体を Clean Blog 風に作り直した(ナビバー「TETR.IO tools」)。
 - AI 版の取得ページに Discord のロール確認を付けた(auth.html)。
 - リプレイ → MP4 変換のブックマークレット(docs/replay-video/)。
+- リプレイ → MP4:合成した QP DUO の .ttrm を DUO 専用ボード(duoleft / duoright)で描く。TL 扱いにしない(開始演出 DUO、点数表示なし)。
 - QP DUO リプレイ保存のブックマークレット(docs/duo-save/)。gsm の受け口はリプレイ盤面修正・カウンターと共有(__rpe)。
 
 ## 2. 再発チェック(過去に壊れたもの)
@@ -67,6 +68,7 @@
 | Duo の TTRM を開くと loadReplay で落ちる | 公式の形(replay.leaderboard と各プレイヤーの id・alive・stats)がなかった。duo() で公式と同じ形にした | 記録画面で ZENITH · DUO の REPLAY → LOCAL VS LOCAL PARTNER が出て、2人の盤面が再生される |
 | DUO 保存とリプレイ盤面修正・カウンターが同時に動かない | gsm の受け口を3つで共有する(set.__rpe と W.__rpeGames)。どれかが受け口を消さないこと | 3つを同時に入れても、DUO 保存・盤面修正・カウンターがそれぞれ動く |
 | QP の DUO 保存が何も保存しない | QP では塔のほかのプレイヤーのゲームも受け口に入り、件数で古い順に捨てると自分のゲームが消えた。自分のゲームは mine に持ち、終わったほかの人のゲームだけを外す | 診断ログに自分(keyboard)の state と end・saved が出る。ほかの人は others の件数だけ |
+| 合成した DUO の .ttrm が MP4 で TL として描かれる | leaderboard が2人なので TL と判定していた。zenith_duo があれば TL にしない | 開始演出が DUO、上に点数表示が出ない |
 | AI 版が GitHub のリリースから誰でも取れる | 未解決。配布方法はユーザーが決める | — |
 
 ## 3. 守ること(ユーザーのルール)
