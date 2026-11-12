@@ -166,7 +166,7 @@
   return a;
  }
  const DEFAULTS={width:24,sealed:9,tuck:1.5,tuckReady:1,bump:.8,bumpSq:.3,height:2,peak:4,safePeak:8,top:12,topPeak:12,dead:1.5,tsdReady:16,tstReady:30,tssReady:3,slotReady:1.5,miniReady:1.2,
-  tFull:[0,16,38,52],tMini:[0,1,3,4],mini:[0,1,8,14],quad:14,breakClear:-30,dangerPeak:15,depthDecay:.97,zeroSpin:-1.5,wastedT:7,tPotK:3,perFirst:3,breakPerB2B:0,breakDangerPerB2B:0,outlook:5,outlookCap:4,well:2,tMiniWasted:true,comboCashAt:3,comboCashMin:8,comboScale:.25,cancelLoss:1,combo:true,trap:4,atk:2,charging:false,chargeAt:4,chargeBase:3,cashout:Infinity,incoming:0,cancelW:0,tpl:10,colWeight:[.8,.86,.95,1,1,1,1,.95,.86,.8]};
+  tFull:[0,16,38,52],tMini:[0,1,3,4],mini:[0,1,8,14],quad:14,breakClear:-30,dangerPeak:15,depthDecay:.97,zeroSpin:-1.5,wastedT:7,tPotK:3,perFirst:3,breakPerB2B:0,breakDangerPerB2B:0,outlook:5,outlookCap:4,well:2,tMiniWasted:true,comboCashAt:3,comboCashMin:8,comboScale:.25,cancelLoss:1,atkOther:1,combo:true,trap:4,atk:2,charging:false,chargeAt:4,chargeBase:3,cashout:Infinity,incoming:0,cancelW:0,tpl:10,colWeight:[.8,.86,.95,1,1,1,1,.95,.86,.8]};
  /* create(engine,state,options) → a time-sliced planner: step(ms) runs for
     about ms and returns true when done; result() is the first placement of
     the best line {x,y,r,type,hold,spin,value}, or null. A whole plan costs
@@ -215,7 +215,9 @@
        // The surge only counts where cashing the chain is wanted; otherwise
        // a long chain would always look like a reason to break it.
        const cashOk=surge>0&&(node.b2b>=P.cashout||danger||(node.incoming||0)>0&&P.cancelW>=4);
-       if(cashOk)atk+=surge;gain+=P.atk*atk;
+       if(cashOk)atk+=surge;
+       // Attack that is not a full T-Spin can count for less (T-Spin style).
+       gain+=P.atk*atk*(type==='t'&&p.spin===2?1:P.atkOther);
        // Garbage waiting is cancelled first (automatic in TETR.IO). With little
        // room that is the point; with room it only spends attack that would
        // otherwise be sent (and in QP climb), so take the garbage instead.

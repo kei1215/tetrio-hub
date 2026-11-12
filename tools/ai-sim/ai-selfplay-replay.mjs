@@ -5,6 +5,7 @@
 // Build: cd ~/Downloads/tetrio-replay-video && npx --prefix tools esbuild <this> --bundle
 //   --platform=node --format=esm --alias:chalk=./vendor/triangle/chalk-stub.js --outfile=/tmp/x.mjs
 // Run:   PARAMS='{"zeroSpin":-20}' node /tmp/x.mjs <template QP solo .ttr> <out.ttr> [pieces] [seed]
+// GARB=amt,period adds seeded incoming garbage (TL-like); the .ttr keeps it as ige events.
 // Check: test/verify-stats.mjs <out.ttr> (bundled the same way) must print ALL OK.
 import fs from "node:fs";
 import { parseReplayFile, resolveOptions, createEngine } from "/Users/kurashinakei/Downloads/tetrio-replay-video/src/replay.js";
@@ -68,9 +69,27 @@ function path(rows, t, sx, sy, sr, target, allow180) {
 
 let frame = 1;
 const events = rep.events;
-function tick(evs) { e.tick(evs.map((x) => ({ ...x, frame }))); for (const x of evs) events.push({ frame, ...x }); frame++; }
+function tick(evs) { evs = [...garbageTick(), ...evs]; e.tick(evs.map((x) => ({ ...x, frame }))); for (const x of evs) events.push({ frame, ...x }); frame++; }
+// GARB="amt,period": an opponent sends 1..2*amt-1 lines every ~period frames (seeded),
+// like a TL / QP match, so the planner's cancel / take logic is exercised.
+const [gAmt, gPer] = (process.env.GARB || "").split(",").map(Number);
+let gSeed = (Number(seedArg) || 1) * 7919 + 13, gNext = gPer || Infinity, gIid = 0;
+const gRnd = () => ((gSeed = (Math.imul(gSeed, 1103515245) + 12345) >>> 0) / 4294967296);
+function garbageTick() {
+  if (frame < gNext) return [];
+  gNext = frame + Math.round(gPer * (0.5 + gRnd()));
+  gIid++;
+  return [{ type: "ige", data: { id: "sim-" + gIid, type: "interaction", data: { type: "garbage", gameid: 9999, username: "SIM", iid: gIid, ackiid: gIid, amt: 1 + Math.floor(gRnd() * (2 * gAmt - 1)), zthalt: e.stats.zenith?.altitude ?? 0, x: 4.5, y: 30 } } }];
+}
+const incoming = () => (e.zenith?.impendingdamage || []).reduce((n, d) => n + (d.active === false ? 0 : d.amt || 0), 0);
+// Same rule as bot-ai.js playerPlanOptions (no series estimate here).
+function cancelOf() {
+  const inc = incoming(), b = boardOf(); stats.maxInc = Math.max(stats.maxInc || 0, inc); let peak = 0; for (let y = 0; y < b.length; y++) if (b[y].some(Boolean)) { peak = b.length - y; break; }
+  const margin = 20 - (peak + inc);
+  return { incoming: inc, cancelW: !inc ? 0 : margin < 4 ? 4 + 0.5 * peak : margin < 8 ? 1.5 : 0 };
+}
 function tap(k) { tick([{ type: "keydown", data: { key: k, subframe: 0 } }, { type: "keyup", data: { key: k, subframe: 0.5 } }]); }
-const stats = { pieces: 0, miss: 0, noplan: 0, spins: {}, zeroSpin: 0, attack: 0 };
+const stats = { recv: 0, pieces: 0, miss: 0, noplan: 0, spins: {}, zeroSpin: 0, attack: 0 };
 const allow180 = o.allow180 !== false;
 const P = { ...JSON.parse(process.env.PARAMS || "{}"), charging: true, chargeAt: o.b2bcharge_at ?? 4, chargeBase: o.b2bcharge_base ?? 3, combo: true };
 for (let i = 0; i < 60; i++) tick([]); // countdown-free start: let the first piece spawn
@@ -78,7 +97,7 @@ let lastLines = 0, topped = false;
 while (stats.pieces < Number(maxPieces)) {
   if (topped) break;
   const f = e.falling, t = String(f.symbol).toLowerCase();
-  const plan = SP.plan(null, { board: boardOf(), falling: t, hold: e.held ? String(e.held).toLowerCase() : null, queue: e.queue.slice(0, 5).map((q) => String(q).toLowerCase()), holdAllowed: true, b2b: Math.max(0, e.stats.b2b || 0), combo: Math.max(0, e.stats.combo || 0) }, { ...P, allow180 });
+  const plan = SP.plan(null, { board: boardOf(), falling: t, hold: e.held ? String(e.held).toLowerCase() : null, queue: e.queue.slice(0, 5).map((q) => String(q).toLowerCase()), holdAllowed: true, b2b: Math.max(0, e.stats.b2b || 0), combo: Math.max(0, e.stats.combo || 0) }, { ...P, ...cancelOf(), allow180 });
   if (!plan) { stats.noplan++; tap("hardDrop"); stats.pieces++; continue; }
   if (plan.hold) tap("hold");
   const g = e.falling, gt = String(g.symbol).toLowerCase();
@@ -114,5 +133,5 @@ const results = { aggregatestats: { apm: +(stats.attack / secs * 60).toFixed(2),
 const out = { id: null, gamemode: tplFile.gamemode, ts: tplFile.ts, users: [{ ...tplFile.users[0], username: "VA-AI" }], replay: { frames, events, options, results }, version: tplFile.version };
 fs.writeFileSync(outPath, JSON.stringify(out));
 const tf = ((stats.cat?.tfull || 0) / Math.max(1, stats.attack) * 100).toFixed(0);
-console.log(JSON.stringify({ app: (stats.attack / Math.max(1, stats.pieces)).toFixed(2), tShare: tf + "%", tGood: (stats.tGood || 0) + "/" + (stats.tPieces || 0), cat: stats.cat, zeroSpin: stats.zeroSpin, miss: stats.miss, topped, lines: e.stats.lines, b2b: e.stats.b2b }));
+console.log(JSON.stringify({ app: (stats.attack / Math.max(1, stats.pieces)).toFixed(2), tShare: tf + "%", tGood: (stats.tGood || 0) + "/" + (stats.tPieces || 0), cat: stats.cat, zeroSpin: stats.zeroSpin, recv: e.stats.garbage?.receive ?? 0, maxInc: stats.maxInc, miss: stats.miss, topped, lines: e.stats.lines, b2b: e.stats.b2b }));
 if (0) console.log(JSON.stringify({ ...stats, lines: e.stats.lines, frames, topped, b2b: e.stats.b2b }));

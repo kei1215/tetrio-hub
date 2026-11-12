@@ -296,6 +296,12 @@
  // fills them); covered cells that nothing can reach are sealed holes. A
  // one-wide open column deeper than two rows can only be filled by a straight
  // I, which is never a spin, so those rows are dead for a spin chain.
+ // Spin B2B planner settings without All-Spin mods (T-Spin style). Node self-play,
+ // 8 seeds x 300 pieces (tools/ai-sim): T-Spin share of attack 45% -> 62%, TSD/TST
+ // 115 -> 169 of ~340 T; with incoming garbage (GARB=4,120) 45% -> 55%, no top-outs.
+ // Non-T attack counts 0.3, non-T mini spins little, TST slots most; tPotK 6 scans
+ // T slots on twice as many boards (plan ~1.6x slower, still time-sliced).
+ const T_STYLE={wastedT:30,tFull:[0,10,45,90],tsdReady:40,tstReady:90,mini:[0,0,2,4],tPotK:6,atkOther:.3};
  const B2BP=window.__b2bParams||(window.__b2bParams={});
  const bp=(k,d)=>B2BP[k]??d;
  function spinTerrain(board){
@@ -430,7 +436,12 @@
   const dangerPeak=Math.max(8,(base.game.setoptions?.boardheight||20)-6);
   // A zero-line spin only adds inputs, except where it scores by itself
   // (All-Spin / Warlock mod) or a revive mission asks for it.
-  const zeroSpinUseful=(base.game.setoptions?.zenith_mods||[]).some(m=>m==='allspin'||m==='allspin_reversed')||!!botPolicy?.prompt;
+  // 2026-11-13: only The Warlock (allspin_reversed) pays for one (a zero-line spin with a
+  // charged B2B adds B2B there); under All-Spin a zero-line spin sends nothing (a real QP
+  // replay had 160 of them in 3589 pieces).
+  const zenMods=base.game.setoptions?.zenith_mods||[],allSpinMod=zenMods.some(m=>m==='allspin'||m==='allspin_reversed');
+  const zeroSpinUseful=zenMods.includes('allspin_reversed')||!!botPolicy?.prompt;
+  const tStyle=!allSpinMod&&!botPolicy?.prompt;
   const rules0=rotationRules(base.game.setoptions);
   const rootLimit=settings.realtime?(settings.humanActive?5:Math.max(5,Math.min(12,Math.floor((Number(settings.rootBudget)||24)/3)))):Infinity;
   // The plan runs in time slices inside step(), so a live frame never stalls
@@ -450,7 +461,7 @@
       // Without All-Spin mods (2026-11-13, Node self-play, 8 seeds x 300 pieces):
       // no zero-line / hole-filling spins (6 -> 0.1 per game), T kept for TSD/TST
       // (T-Spin share of attack 33% -> 44%, TSD/TST 9 -> 14 of 43 T, APP 0.67 -> 0.71).
-      ...(zeroSpinUseful?{}:{zeroSpin:-20,wastedT:15,tFull:[0,10,45,60],tsdReady:24,tstReady:36}),
+      ...(zeroSpinUseful?{}:{zeroSpin:-20}),...(tStyle?T_STYLE:{}),
       // The room's rotation rules: kick table, 180 on/off, and high gravity
       // (one row a frame or more: every move ends on the floor).
       kickset:String(base.game.setoptions?.kickset||'SRS+'),allow180:rules0.allow180&&sandbox.options?.allow180!==false,
@@ -483,6 +494,9 @@
     const pieces=[state.falling?.type,LocalAIInformation.holdPiece(state.hold),...LocalAIInformation.known(base)];
     const ctx=T.ctxOf?T.ctxOf(state.setoptions):'normal';
     out.templates=T.match(state.board,pieces,8,ctx);
+    // Without All-Spin mods only the player's TSD / TST builds steer the plan: their
+    // mini / S-spin / Quad builds pulled the AI away from T-Spins (2026-11-13).
+    if(ctx==='normal')out.templates=out.templates.filter(t=>t.kind==='T2'||t.kind==='T3');
     game._localTemplateMatches=(game._localTemplateMatches||0)+(out.templates.length?1:0);
     const st=T.style(ctx);
     if(st){

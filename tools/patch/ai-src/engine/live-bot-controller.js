@@ -40,8 +40,9 @@
   game._aiMimicTiming=!!profile.mimicPlay;
   // Spin B2B mode (vA option panel): read again every piece so the checkbox
   // applies without restarting the room.
-  // ON unless the player turned it off; solo boards only (a TL / CUSTOM versus room sets _localTLPeer).
-  const syncB2B=()=>{let on=true;try{on=localStorage.getItem('qp-local-ai-tspin-b2b')!=='false'}catch{}game._aiTSpinB2B=on&&!game._localTLPeer};syncB2B();
+  // ON unless the player turned it off. Also in TL / CUSTOM versus rooms (2026-11-13: with the
+  // normal evaluation there the AI made no T-Spins at all in a real 6-round TL replay).
+  const syncB2B=()=>{let on=true;try{on=localStorage.getItem('qp-local-ai-tspin-b2b')!=='false'}catch{}game._aiTSpinB2B=on};syncB2B();
   game._aiNextCount=profile.nextCount??null;
   game._localTLMatch=!!game._localTLPeer;
   game._rlState=game._rlState||model.reinforcement();
