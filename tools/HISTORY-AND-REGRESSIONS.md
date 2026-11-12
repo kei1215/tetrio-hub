@@ -72,6 +72,8 @@
 | 合成した DUO の .ttrm が MP4 で TL として描かれる | leaderboard が2人なので TL と判定していた。zenith_duo があれば TL にしない | 開始演出が DUO、上に点数表示が出ない |
 | DUO 表示の書き換えがパッチ版で効かない | パッチのリプレイ演出が先に盤面の位置を -.4/.4 に変えていた。位置の数字を正規表現で受ける | 合成した DUO の .ttrm を本体で開くと2人が寄って並び、背景が塔になる。TL のリプレイは今までどおり |
 | CONFIG の QP DUO REPLAYS が消える | ほかの項目が CONFIG を作り直すと消えた。1秒ごとに付け直す | CONFIG > QP PATCH TOOLS に QP DUO REPLAYS と REPLAY → MP4 が出続ける |
+| MP4 の DUO で盤面が離れすぎ・高度メーターの位置・MOD アイコンがない | DUO は TETR.IO の位置 ±0.32(17.07 マス間隔、中央、少し下)。メーターは左盤面の右 3.15 マスに台座つき。MOD アイコンを盤面の絵から描く | 左の NEXT の下に右の HOLD が収まる。メーターが2枚の間。DUO アイコンが左右の盤面の下 |
+| テストでページの音を止めると MP4 が無音になる | AudioScheduledSourceNode.start を丸ごと止めていた。止めるのは OfflineAudioContext 以外だけにする | 作った MP4 に音がある |
 | AI 版が GitHub のリリースから誰でも取れる | 未解決。配布方法はユーザーが決める | — |
 
 ## 3. 守ること(ユーザーのルール)
