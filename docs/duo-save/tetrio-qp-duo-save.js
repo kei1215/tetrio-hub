@@ -7,7 +7,7 @@
  */
 (() => {
   'use strict';
-  const W = window, D = document, TAG = '[qp-duo-save]', VER = 3;
+  const W = window, D = document, TAG = '[qp-duo-save]', VER = 4;
   if (W.__qpDuoSave) { W.__qpDuoSave.open(); return; }
 
   // ---- 診断ログ(メモリに最大 3000 件。終わるたびに端末内へも残す) ----
@@ -143,6 +143,47 @@
     download(JSON.stringify(out, null, 1), `qp-duo-log-${stamp()}.json`);
   };
 
+  // ---- 2人の .ttr を 1つの .ttrm にまとめる(各自が保存した自分の分を持ち寄る) ----
+  // 形は公式の対戦リプレイと同じ(leaderboard + rounds)。入力・シード・設定は書き換えない。
+  const mergeTwo = (x, y) => {
+    const one = d => {
+      if (!d || typeof d !== 'object' || Array.isArray(d.replay?.rounds)) throw Error('1人分の .ttr を選んでください');
+      const r = d.replay;
+      if (!r?.options || !Array.isArray(r.events) || !(r.frames > 0)) throw Error('リプレイの中身が読めません');
+      if (!r.options.zenith_duo) throw Error('QP DUO のリプレイではありません: ' + (r.options.username || '?'));
+      return r;
+    };
+    const a = one(x), b = one(y), ao = a.options, bo = b.options;
+    if (ao.seed !== bo.seed) throw Error('2本のシードが違います(同じ DUO のリプレイを選んでください)');
+    if (String(ao.username).toLowerCase() === String(bo.username).toLowerCase()) throw Error('同じプレイヤーの2本です。相方の .ttr を選んでください');
+    const mods = o => (o.zenith_mods || []).slice().sort().join(',');
+    if (mods(ao) !== mods(bo)) throw Error('2本の MOD が違います');
+    const user = (o, other, d) => ({ id: String(other.zenith_ally?.[0] || d.users?.[0]?.id || '0'.repeat(24)), username: String(o.username || d.users?.[0]?.username || 'PLAYER'),
+      avatar_revision: 0, banner_revision: 0, flags: 0, country: null });
+    const users = [user(ao, bo, x), user(bo, ao, y)], plays = [JSON.parse(JSON.stringify(a)), JSON.parse(JSON.stringify(b))];
+    const stat = p => { const agg = p.results?.aggregatestats || {}, st = p.results?.stats || {};
+      return { apm: agg.apm || 0, pps: agg.pps || 0, vsscore: agg.vsscore || 0, garbagesent: st.garbage?.sent || 0, garbagereceived: st.garbage?.received || 0, kills: st.kills || 0,
+        altitude: st.zenith?.altitude || 0, rank: st.zenith?.rank || 1, targetingfactor: st.zenith?.targetingfactor || 3, targetinggrace: st.zenith?.targetinggrace || 0, btb: st.btb || 0, revives: st.zenith?.revives || 0 }; };
+    const base = (u, i) => ({ id: u.id, username: u.username, active: true, naturalorder: i, shadows: [], shadowedBy: [null, null] });
+    return { id: null, version: 1, gamemode: 'zenith', ts: x.ts || y.ts || new Date().toISOString(), users,
+      replay: { leaderboard: users.map((u, i) => ({ ...base(u, i), wins: 0, stats: stat(plays[i]) })),
+        rounds: [users.map((u, i) => ({ ...base(u, i), alive: false, lifetime: Math.round(plays[i].frames / 60 * 1000), stats: stat(plays[i]), replay: plays[i] }))] } };
+  };
+  const pickMerge = () => {
+    const input = el('input', { type: 'file', accept: '.ttr,.json', multiple: true });
+    input.onchange = async () => {
+      try {
+        const files = [...(input.files || [])];
+        if (files.length !== 2) throw Error('.ttr を2つ選んでください(自分の分と相方の分)');
+        const [x, y] = await Promise.all(files.map(async f => JSON.parse(await f.text())));
+        const data = mergeTwo(x, y);
+        download(JSON.stringify(data), `qp-duo-${String(data.ts).replace(/[^0-9]/g, '').slice(0, 14)}-${safe(data.users[0].username)}-${safe(data.users[1].username)}.ttrm`);
+        log('merged', { a: data.users[0].username, b: data.users[1].username });
+      } catch (e) { alert('合成できません: ' + (e.message || e)); log('merge-error', { msg: String(e.message || e) }); }
+    };
+    input.click();
+  };
+
   // ---- 画面(保存の知らせ・一覧・CONFIG の入口) ----
   const css = D.createElement('style');
   css.textContent = `#qp-duo-save{position:fixed;right:16px;bottom:16px;z-index:2147483000;width:350px;max-height:60vh;overflow:auto;background:rgba(16,18,28,.95);color:#eee;font:13px/1.45 system-ui,sans-serif;border:1px solid #556;border-radius:8px;padding:10px 12px;box-shadow:0 6px 24px rgba(0,0,0,.5)}
@@ -163,7 +204,7 @@
   }
   async function open() {
     const b = shell('QP DUO リプレイ(この端末だけに保存)');
-    b.append(el('div', { className: 'row' }, el('button', { textContent: '診断ログ ↓', title: 'うまく保存できないときに出力してください', onclick: downloadLog })));
+    b.append(el('div', { className: 'row' }, el('button', { textContent: '2人の TTR を合成', title: '自分と相方がそれぞれ保存した .ttr を2つ選ぶと、1つの .ttrm にします', onclick: pickMerge }), el('button', { textContent: '診断ログ ↓', title: 'うまく保存できないときに出力してください', onclick: downloadLog })));
     let a = [];
     try { a = await list(); } catch (e) { b.append(el('div', { textContent: '読み込めません: ' + e.message })); return; }
     if (!a.length) b.append(el('div', { className: 'muted', textContent: 'まだありません。DUO が終わると、自分のリプレイが自動で保存されます。' }));
@@ -195,7 +236,7 @@
   };
   let tries = 0; const iv = setInterval(() => { try { if (installConfig() || ++tries > 120) clearInterval(iv); } catch (e) { clearInterval(iv); } }, 1000);
 
-  W.__qpDuoSave = { open, list, tick, downloadLog, log: LOG };
+  W.__qpDuoSave = { open, list, tick, downloadLog, mergeTwo, log: LOG };
   if (!W.__qpDuoSaveEmbedded) open();
   console.log(TAG, 'ready v' + VER);
 })();
