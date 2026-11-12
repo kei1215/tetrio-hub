@@ -38,6 +38,7 @@
   - 30日キャッシュの版を出した(v4.8235 → 4.8241)。
   - 2026-11-12 に v4.8255 を作り直した(2026-11-10 の tetrio.js、SHA 6b682a12…)。キャッシュ名 v4.8255-core6。何も保存していない状態からの起動と2回目の起動を Chrome で確認。公開(push)はまだ。
 - QP OFFLINE / vO の Warlock:Spin ルールを all-mini+ → all+(T 以外のスピンが mini になっていた)、b2bcharge_base 4 → 3(offline-src/qp-options.js。次のパッチ版に入る)。
+- オフライン版 QP Duo:終了時に左右2人を TTRM(leaderboard + rounds)で自動保存(offline-src/local-replays.js, test-qp.js)。
 - サイト全体を Clean Blog 風に作り直した(ナビバー「TETR.IO tools」)。
 - AI 版の取得ページに Discord のロール確認を付けた(auth.html)。
 - リプレイ → MP4 変換のブックマークレット(docs/replay-video/)。
@@ -58,6 +59,7 @@
 | ブラウザ版で裏HYPERSPEED曲が鳴らない | reverse-hyper-browser.js でサイトの曲に差し替える | 曲が鳴る |
 | ダークモードでナビバーの上に白い線が出る | tools.css で枠線を直した | ダークモードで線が出ない |
 | Warlock で T 以外のスピンが mini になる | qp-options.js が spinbonuses を all-mini+ にしていた。実リプレイの値 all+ にした | Warlock の実リプレイ(allspin_reversed)を MP4 エンジンで照合して ALL OK。ゲーム内で S/Z/L/J スピンが mini 表示にならない |
+| Duo の TTRM を開くと loadReplay で落ちる | 公式の形(replay.leaderboard と各プレイヤーの id・alive・stats)がなかった。duo() で公式と同じ形にした | 記録画面で ZENITH · DUO の REPLAY → LOCAL VS LOCAL PARTNER が出て、2人の盤面が再生される |
 | AI 版が GitHub のリリースから誰でも取れる | 未解決。配布方法はユーザーが決める | — |
 
 ## 3. 守ること(ユーザーのルール)
