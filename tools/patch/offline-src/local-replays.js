@@ -21,7 +21,25 @@
   const round=users.map((user,i)=>({...base(user,i),alive:false,lifetime:Math.round(plays[i].frames/60*1000),stats:stat(plays[i]),replay:plays[i]}));
   return {version:1,gamemode:file.gamemode,ts:file.ts,users,replay:{leaderboard,rounds:[round]},local:{...file.local,duoSide:null,duoMerged:true,source:'auto-duo',frames:Math.max(plays[0].frames,plays[1].frames),requiresPatch:true}};
  };
- const api=window.LocalReplayLibrary={portable,duo,
+ // AI room / TL match: every finished round goes into one TTRM (official multi-round shape).
+ const matchFile=match=>{
+  const users=match.names.map((name,i)=>({id:'0'.repeat(23)+(i+2),username:String(name).slice(0,32),avatar_revision:0,banner_revision:0,flags:0,country:null}));
+  const stat=play=>{const agg=play.results?.aggregatestats||{},st=play.results?.stats||{};return {apm:agg.apm||0,pps:agg.pps||0,vsscore:agg.vsscore||0,garbagesent:st.garbage?.sent||0,garbagereceived:st.garbage?.received||0,kills:st.kills||0,altitude:0,rank:1,targetingfactor:3,targetinggrace:0,btb:st.btb||0,revives:0}};
+  const base=(user,i)=>({id:user.id,username:user.username,active:true,naturalorder:i,shadows:[],shadowedBy:[null,null]});
+  const avg=i=>{const all=match.rounds.map(r=>stat(r.replays[i])),n=all.length||1,out=stat({});for(const k of ['apm','pps','vsscore'])out[k]=all.reduce((a,s)=>a+s[k],0)/n;for(const k of ['garbagesent','garbagereceived','kills'])out[k]=all.reduce((a,s)=>a+s[k],0);return out};
+  const leaderboard=users.map((user,i)=>({...base(user,i),wins:match.wins[i],stats:avg(i)})).sort((a,b)=>b.wins-a.wins);
+  const rounds=match.rounds.map(r=>users.map((user,i)=>({...base(user,i),alive:i===r.winner,lifetime:Math.round(r.replays[i].frames/60*1000),stats:stat(r.replays[i]),replay:structuredClone(r.replays[i])})));
+  return {version:1,gamemode:match.mode,ts:new Date().toISOString(),users,replay:{leaderboard,rounds},local:{source:'ai-room',matchKey:match.key,ai:match.ai,wins:[...match.wins],frames:Math.max(...match.rounds.map(r=>Math.max(r.replays[0].frames,r.replays[1].frames))),requiresPatch:false}};
+ };
+ const api=window.LocalReplayLibrary={portable,duo,matchFile,
+  saveMatch(match,reason){
+   const file=matchFile(match);
+   // Replace the previous save of the same match so the list keeps one TTRM per match.
+   if(match.recordId)try{QPLocalZen.deleteRecord(match.recordId)}catch(error){console.warn('[AI room] old match record',error)}
+   QPLocalZen.record(match.mode,{localMatch:{key:match.key,names:match.names,wins:[...match.wins],rounds:match.rounds.length},localEndReason:reason},file);
+   const mine=QPLocalZen.records().filter(r=>r.result?.localMatch?.key===match.key);match.recordId=mine.length?mine[mine.length-1].id:null;
+   return file;
+  },
   save(game,reason){
    const replay=game.replay.Export();if(!(replay.frames>0))return;
    const gamemode=mode(game),mods=game.options.zenith_mods||[];
@@ -53,14 +71,14 @@
    if(!records.length){const empty=document.createElement('div');empty.className='scroller_block';empty.textContent='ローカル記録はまだありません。';host.appendChild(empty)}
    for(const record of records){
     const row=document.createElement('div');row.className='scroller_block';row.dataset.recordId=record.id;
-    const heading=document.createElement('h2');heading.textContent=record.mode.toUpperCase()+(record.replay?.local?.duoMerged?' · DUO':record.replay?.local?.duoSide==='partner'?' · PARTNER':'');
+    const heading=document.createElement('h2');const lm=record.result?.localMatch;heading.textContent=record.mode.toUpperCase()+(lm?' · '+lm.names.join(' vs ')+' '+lm.wins.join('-'):record.replay?.local?.duoMerged?' · DUO':record.replay?.local?.duoSide==='partner'?' · PARTNER':'');
     const date=document.createElement('p');date.textContent=new Date(record.date).toLocaleString();row.append(heading,date);
     if(record.replay?.local?.requiresPatch){const note=document.createElement('p');note.textContent='ローカル拡張ルール使用：完全再現には対応パッチが必要です。';row.appendChild(note)}
     const controls=document.createElement('div');controls.className='control_group flex-row';row.appendChild(controls);
     function button(text,action){const node=document.createElement('button');node.className='control_button';node.textContent=text;node.onclick=async()=>{try{await action()}catch(error){LocalUIHealth.fail('ローカル記録',error)}};controls.appendChild(node);return node}
     if(record.replay){
      button('REPLAY',()=>play(QPLocalZen.replay(record)));
-     const multi=!!record.replay?.local?.duoMerged;button(multi?'↓ TTRM':'↓ TTR',()=>{const data=portable(QPLocalZen.replay(record)),ext=Array.isArray(data.replay?.rounds)?'ttrm':'ttr',url=URL.createObjectURL(new Blob([JSON.stringify(data)],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download=window.__qpReplayDownloadName?window.__qpReplayDownloadName(data,ext):'local-'+record.mode+'-'+record.id+'.'+ext;link.click();setTimeout(()=>URL.revokeObjectURL(url),10000)});
+     const multi=!!record.replay?.local?.duoMerged||!!record.result?.localMatch;button(multi?'↓ TTRM':'↓ TTR',()=>{const data=portable(QPLocalZen.replay(record)),ext=Array.isArray(data.replay?.rounds)?'ttrm':'ttr',url=URL.createObjectURL(new Blob([JSON.stringify(data)],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download=window.__qpReplayDownloadName?window.__qpReplayDownloadName(data,ext):'local-'+record.mode+'-'+record.id+'.'+ext;link.click();setTimeout(()=>URL.revokeObjectURL(url),10000)});
     }
     const remove=button('🗑',()=>{if(!confirm('このローカル記録とTTRを削除しますか？'))return;QPLocalZen.deleteRecord(record.id);api.show(host,play,filter)});remove.setAttribute('aria-label','記録とTTRを削除');remove.title='記録とTTRを削除';
     host.appendChild(row);

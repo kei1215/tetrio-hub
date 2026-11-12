@@ -75,7 +75,8 @@
 - 火力と B2B の先読み
 
 残り:
-- [x] AI の対局リプレイ(Node、ブラウザなし):tools/ai-sim/ai-selfplay-replay.mjs が vA の planner で MP4 ツールのエンジンを動かし、.ttr を書き出す(2026-11-13。verify-stats で ALL OK。~/Downloads/TETRIO-AI-replays-2026-11-13 に3本)。ゲーム内の Solo QP の BOT は入力をゲームに送るので、普通のローカル記録に残る作り(TL 対戦は保存対象外。ゲーム内は未確認)
+- [x] AI の対局リプレイ(Node、ブラウザなし):tools/ai-sim/ai-selfplay-replay.mjs が vA の planner で MP4 ツールのエンジンを動かし、.ttr を書き出す(2026-11-13。verify-stats で ALL OK。~/Downloads/TETRIO-AI-replays-2026-11-13 に3本)。ゲーム内の Solo QP の BOT は入力をゲームに送るので、普通のローカル記録に残る作り(ゲーム内は未確認)
+- [x] AI のルーム対戦(TL・CUSTOM)を1試合1つの .ttrm で保存(2026-11-13、未ビルド。形式は verify-stats で ALL OK、ゲーム内は未確認)
 - [x] 消去なしの Spin・穴埋めだけの Spin をやめる(allspin MOD なしのとき。Node 8シード×300ミノで 5.8 → 0.1 回)
 - [ ] 通常時の攻撃の 90% を T-Spin に(今 44%、TSD/TST に使えた T は 43 個中 14)。数値の調整では 50% 前後が上限。T-Spin の形(TSD の積み方)を決めて組む仕組みが要る。tPotK 6 で T 19/43 に増えるが、計算時間が増えるのでゲーム内の確認が必要
 - [ ] QP と TL の AI の挙動の統一

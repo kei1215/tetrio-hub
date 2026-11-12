@@ -53,6 +53,8 @@
 - リプレイ → MP4:合成した QP DUO の .ttrm を DUO 専用ボード(duoleft / duoright)で描く。TL 扱いにしない(開始演出 DUO、点数表示なし)。
 - QP DUO リプレイ保存のブックマークレット(docs/duo-save/)。gsm の受け口はリプレイ盤面修正・カウンターと共有(__rpe)。
 
+- 2026-11-13(未ビルド):AI のルーム対戦(TL・CUSTOM)を1試合1つの .ttrm で保存。ラウンドごとに上書きし、ローカル記録に「名前 vs 名前 勝ち数」で出す(ai-src/engine/local-ai-room.js、offline-src/local-replays.js)。
+
 ## 2. 再発チェック(過去に壊れたもの)
 
 | 壊れたこと | 原因と直し方 | 確かめ方 |
@@ -81,6 +83,7 @@
 | AI が消去なしの Spin(穴埋めだけ)をする | planner の zeroSpin 減点が小さかった(-1.5)。allspin MOD なしでは -20(bot-ai.js) | ai-selfplay-replay.mjs を 8 シード×300 ミノで回し、zeroSpin が平均 0.5 未満 |
 | 裏 DUO の MP4 が1回目に倒れたところで止まる | エンジンに DUO の「倒れて蘇生を待つ」がなく、そのまま GAME OVER にしていた。倒れたときの盤面の黒化で rngex を1ブロック1回使う点、ロック中に自分に返る攻撃では押し上げをしない点も合わせた | 2人分の裏 DUO .ttrm を MATCH=1 の verify-stats で:相方 ALL OK、自分 622/629 以上。ほかの QP・TL・40L・Warlock・AI のリプレイも ALL OK |
 | AI 版が GitHub のリリースから誰でも取れる | 未解決。配布方法はユーザーが決める | — |
+| AI のルーム対戦が1人ずつの .ttr に分かれ、試合として見られない | 1試合を1つの .ttrm(公式と同じ rounds の形)にまとめる | 実 TL の .ttrm をこの形で作り直して verify-stats:ALL OK(8ラウンド×2人)。ゲーム内は未確認 |
 
 ## 3. 守ること(ユーザーのルール)
 - 旧サイト kei1215/kei1215.github.io は読み取り専用。
