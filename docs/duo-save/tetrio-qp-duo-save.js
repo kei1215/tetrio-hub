@@ -7,7 +7,7 @@
  */
 (() => {
   'use strict';
-  const W = window, D = document, TAG = '[qp-duo-save]', VER = 2;
+  const W = window, D = document, TAG = '[qp-duo-save]', VER = 3;
   if (W.__qpDuoSave) { W.__qpDuoSave.open(); return; }
 
   // ---- 診断ログ(メモリに最大 3000 件。終わるたびに端末内へも残す) ----
@@ -99,29 +99,39 @@
   };
 
   // ---- 見張り(1秒ごと) ----
+  // QP では塔のほかのプレイヤーのゲームも大量につかまる(数百)。自分のゲーム(keyboard の QP)は mine に入れて
+  // 絶対に手放さない。ほかの人のゲームはログに件数だけ残し、終わったものから受け口の一覧を軽くする。
+  const mine = new Set();
+  let others = 0, othersLogged = 0;
   const tick = async () => {
-    for (let i = games.length - 1; i >= 0; i--) {
-      const n = games[i];
+    for (const n of games) {
+      if (!n || !n.gsm || seen.has(n)) continue;
+      seen.add(n);
+      const so = n.gsm.setoptions || {};
+      if (so.zenith && typeOf(n) === 'keyboard') { mine.add(n); log('game', info(n)); } else others++;
+    }
+    if (others !== othersLogged && Date.now() - (tick.lastOthers || 0) > 30000) { tick.lastOthers = Date.now(); othersLogged = others; log('others', { count: others, list: games.length }); }
+    for (const n of mine) {
       try {
-        if (!n || !n.gsm) continue;
-        if (!seen.has(n)) { seen.add(n); log('game', info(n)); }
         const so = n.gsm.setoptions;
-        if (!so || !so.zenith) continue;
         const now = info(n), before = last.get(n);
-        // 様子が変わったとき(フレーム数は 5 秒ごと)だけ記録する
         if (!before || before.playing !== now.playing || before.allyRef !== now.allyRef || before.reason !== now.reason || Date.now() - before._t > 5000) {
           last.set(n, { ...now, _t: Date.now() });
           log('state', now);
         }
-        if (!so.zenith_duo || now.type !== 'keyboard' || n.__duoSaved || now.playing) continue;
-        n.__duoSaved = true;
+        if (now.playing) continue;
+        mine.delete(n);
         log('end', now);
+        if (!so.zenith_duo) continue;          // DUO のときだけ保存する(ソロは公式の保存がある)
         const rec = await saveSelf(n);
         if (rec) toast(rec);
         await keepLog('end');
       } catch (e) { log('tick-error', { msg: String(e && e.stack || e).slice(0, 400) }); }
     }
-    if (games.length > 200) games.splice(0, games.length - 200);
+    // 受け口の一覧が増えすぎないように、終わったほかの人のゲームだけを外す(自分・プレイ中のものは残す)
+    if (games.length > 300) {
+      for (let i = games.length - 1; i >= 0; i--) { const n = games[i]; if (!mine.has(n) && !n?.gsm?.playing) games.splice(i, 1); }
+    }
   };
   setInterval(() => { tick(); }, 1000);
 
