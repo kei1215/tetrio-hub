@@ -32,8 +32,8 @@
   <section class="my-5">
     <p class="text-uppercase text-primary fw-bold mb-2">Bookmarklet</p>
     <h1 class="display-5 fw-bold">QP DUO リプレイ保存</h1>
-    <p class="lead">公式の <code>https://tetr.io/</code> で、QUICK PLAY の <strong>DUO</strong> が終わったとき、自分と相方のリプレイを 1 つの <code>.ttrm</code> にまとめて保存します。</p>
-    <div class="alert alert-info">リプレイはこの端末の中だけに保存し、どこにも送りません。デスクトップ版パッチ(v4.8256 以降)には最初から入っています。</div>
+    <p class="lead">公式の <code>https://tetr.io/</code> で、QUICK PLAY の <strong>DUO</strong> が終わったとき、<strong>自分のリプレイ</strong>(<code>.ttr</code>)を保存します(相方の分は今後対応)。</p>
+    <div class="alert alert-info">リプレイはこの端末の中だけに保存し、どこにも送りません。デスクトップ版パッチ(v4.8257 以降)には最初から入っています(CONFIG > QP PATCH TOOLS > QP DUO REPLAYS)。</div>
   </section>
   <section class="card shadow-sm mb-4"><div class="card-body p-4">
     <h2 class="h4">登録</h2>
@@ -46,12 +46,13 @@
     <h2 class="h4">使い方</h2>
     <ol>
       <li><code>https://tetr.io/</code> を開いたら、<strong>DUO を始める前に</strong>ブックマークをクリックします(右下に一覧が出ます。× で閉じて構いません)。ページを読み込み直したら、もう一度クリックしてください。</li>
-      <li>DUO が終わると、右下に「QP DUO のリプレイを保存しました」と出ます。<strong>↓ TTRM</strong> を押すと、普通のリプレイと同じようにダウンロードできます(保存先は自分で選べます)。</li>
-      <li>押し忘れても、この端末の中に控えが残ります(新しい順に 50 件まで)。ブックマークをもう一度クリックすると一覧が出て、あとからダウンロード・削除できます。</li>
+      <li>DUO が終わると、右下に「QP DUO: 自分のリプレイを保存しました」と出ます。<strong>↓ TTR</strong> を押すと、普通のリプレイと同じようにダウンロードできます(保存先は自分で選べます)。</li>
+      <li>押し忘れても、この端末の中に控えが残ります(新しい順に 50 件まで)。ブックマークをもう一度クリックするか、パッチ版では CONFIG > QP PATCH TOOLS > <strong>QP DUO REPLAYS</strong> で一覧が出て、あとからダウンロード・削除できます。</li>
+      <li>うまく保存できないときは、一覧の「<strong>診断ログ ↓</strong>」で記録を JSON に出力してください(自動では送りません)。</li>
     </ol>
     <ul class="small mb-0">
-      <li>保存した <code>.ttrm</code> は、TETR.IO のリプレイとして開けます(2人の盤面が並んで再生されます)。</li>
-      <li>同じプレイは 1 回だけ保存します。2人だけの部屋のときに、TETR.IO が端末内で記録している相方の入力を使います。</li>
+      <li>保存した <code>.ttr</code> は、TETR.IO のリプレイとして開けます。</li>
+      <li>同じプレイは 1 回だけ保存します。</li>
       <li>ブラウザのサイトデータを消すと、端末内の控えも消えます。</li>
     </ul>
   </div></section>

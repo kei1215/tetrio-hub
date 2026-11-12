@@ -11,7 +11,7 @@ import re, sys
 from pathlib import Path
 
 DOCS = Path(sys.argv[1])
-PATCH = '4.8256'
+PATCH = '4.8257'
 OFFLINE = '4.8255'
 REL = f'https://github.com/kei1215/tetrio-hub/releases/download/patch-v{PATCH}/'
 
@@ -94,7 +94,7 @@ def page_index():
         tool_card('spin/', '盤面回転', '回転入れの判定が出たときだけ、その向きへ盤面を回すブックマークレット(中心はプレイ範囲の真ん中)。', 'SOLO・リプレイ・ルームで使えます。2人以上は「それぞれ回す/まとめて回す」を選べます。'),
         tool_card('replay-edit/', 'リプレイ盤面修正', 'リプレイを止めると、その場面から自分で操作できるブックマークレット(再生すると元に戻る)。', '火力は表示だけで相手に送りません。fumen 書き出し・2人の左右入れ替え・スピンカウンター付き。'),
         tool_card('replay-video/', 'リプレイ → MP4 変換', 'リプレイ(.ttr / .ttrm)を 1080p の MP4 動画にするブックマークレット。', 'TETR.IO の画面はそのままで、裏で計算・描画します。TL・QP(MOD 付きも)・40L など。'),
-        tool_card('duo-save/', 'QP DUO リプレイ保存', 'QP の DUO が終わったら、自分と相方のリプレイを 1 つの .ttrm にまとめて保存するブックマークレット。', '端末の中だけに保存。↓ TTRM で普通にダウンロードできます。パッチ版には最初から入っています。'),
+        tool_card('duo-save/', 'QP DUO リプレイ保存', 'QP の DUO が終わったら、自分のリプレイを保存するブックマークレット(相方の分は今後対応)。', '端末の中だけに保存。↓ TTR で普通にダウンロード。診断ログも出せます。パッチ版には最初から入っています。'),
         tool_card('bookmarklets/', 'QP OFFLINE', 'TETR.IO 上で、別タブに OFFLINE 版を起動するブックマークレット(30日キャッシュ版)。', 'QP・ZEN・ローカルリプレイ・端末内保存。'),
         tool_card('bookmarklets/#desktop', 'デスクトップ版パッチ', f'Mac・Windows・Linux の TETR.IO に入れるパッチ v{PATCH}(O形式・R形式・A形式)。', 'ミッションエディタ・機能基準書もこちら。'),
     ]) + '\n  </div></section>'
@@ -256,20 +256,21 @@ def page_auth():
 
 
 def page_duo_save():
-    body = hero('Bookmarklet', 'QP DUO リプレイ保存', '公式の <code>https://tetr.io/</code> で、QUICK PLAY の <strong>DUO</strong> が終わったとき、自分と相方のリプレイを 1 つの <code>.ttrm</code> にまとめて保存します。',
-                'リプレイはこの端末の中だけに保存し、どこにも送りません。デスクトップ版パッチ(v4.8256 以降)には最初から入っています。')
+    body = hero('Bookmarklet', 'QP DUO リプレイ保存', '公式の <code>https://tetr.io/</code> で、QUICK PLAY の <strong>DUO</strong> が終わったとき、<strong>自分のリプレイ</strong>(<code>.ttr</code>)を保存します(相方の分は今後対応)。',
+                'リプレイはこの端末の中だけに保存し、どこにも送りません。デスクトップ版パッチ(v4.8257 以降)には最初から入っています(CONFIG > QP PATCH TOOLS > QP DUO REPLAYS)。')
     body += '\n' + card('登録', '''    <p>下のボタンを<strong>ブックマークバーへドラッグ</strong>してください(このページでクリックしても動きません)。</p>
     <p><a id="bmA" class="btn btn-primary" href="#">DUO保存</a></p>
     <p><button id="copy" class="btn btn-outline-primary" type="button">ブックマークコードをコピー</button> <span id="copy-status" aria-live="polite"></span></p>
     <details class="mt-2"><summary class="small">コードを手動でコピーする</summary><textarea id="manual" class="code-box mt-2" readonly>Loading…</textarea></details>''')
     body += '\n' + card('使い方', '''    <ol>
       <li><code>https://tetr.io/</code> を開いたら、<strong>DUO を始める前に</strong>ブックマークをクリックします(右下に一覧が出ます。× で閉じて構いません)。ページを読み込み直したら、もう一度クリックしてください。</li>
-      <li>DUO が終わると、右下に「QP DUO のリプレイを保存しました」と出ます。<strong>↓ TTRM</strong> を押すと、普通のリプレイと同じようにダウンロードできます(保存先は自分で選べます)。</li>
-      <li>押し忘れても、この端末の中に控えが残ります(新しい順に 50 件まで)。ブックマークをもう一度クリックすると一覧が出て、あとからダウンロード・削除できます。</li>
+      <li>DUO が終わると、右下に「QP DUO: 自分のリプレイを保存しました」と出ます。<strong>↓ TTR</strong> を押すと、普通のリプレイと同じようにダウンロードできます(保存先は自分で選べます)。</li>
+      <li>押し忘れても、この端末の中に控えが残ります(新しい順に 50 件まで)。ブックマークをもう一度クリックするか、パッチ版では CONFIG > QP PATCH TOOLS > <strong>QP DUO REPLAYS</strong> で一覧が出て、あとからダウンロード・削除できます。</li>
+      <li>うまく保存できないときは、一覧の「<strong>診断ログ ↓</strong>」で記録を JSON に出力してください(自動では送りません)。</li>
     </ol>
     <ul class="small mb-0">
-      <li>保存した <code>.ttrm</code> は、TETR.IO のリプレイとして開けます(2人の盤面が並んで再生されます)。</li>
-      <li>同じプレイは 1 回だけ保存します。2人だけの部屋のときに、TETR.IO が端末内で記録している相方の入力を使います。</li>
+      <li>保存した <code>.ttr</code> は、TETR.IO のリプレイとして開けます。</li>
+      <li>同じプレイは 1 回だけ保存します。</li>
       <li>ブラウザのサイトデータを消すと、端末内の控えも消えます。</li>
     </ul>''', mb=5)
     script = '''        <script>
