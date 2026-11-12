@@ -213,17 +213,16 @@ OFFLINE_CLIENT_FIXES = [
 ]
 
 
-# The Warlock (user request 2026-11-13): no "T-SPIN MINI" popup / spin sound. The native
-# rules already count a T mini as a plain clear there (c = spin || non-T mini), so only the
-# client-side presentation is dropped. Idempotent, so incremental builds can apply it.
+# v4.8264 hid the T-SPIN MINI popup under The Warlock; that was wrong (the real Warlock shows
+# T minis; only the spin rule differs). Undo it on incremental builds. Idempotent.
 WARLOCK_MINI_OLD = 'r&&(e.c.OnClient((()=>{if(e.sfx.Play("spinend"),'
 WARLOCK_MINI_NEW = 'r&&(e.c.OnClient((()=>{if(l&&"t"===t.falling.type&&t.setoptions.zenith_mods.includes("allspin_reversed"))return;if(e.sfx.Play("spinend"),'
 
 
 def fix_warlock_mini(text):
-    if WARLOCK_MINI_NEW in text:
+    if WARLOCK_MINI_NEW not in text:
         return text
-    return replace_once(text, WARLOCK_MINI_OLD, WARLOCK_MINI_NEW, 'O/offline/client.js warlock T mini popup')
+    return replace_once(text, WARLOCK_MINI_NEW, WARLOCK_MINI_OLD, 'O/offline/client.js warlock T mini popup (undo)')
 
 
 def fix_offline_client(text):
