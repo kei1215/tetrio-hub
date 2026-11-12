@@ -20,11 +20,14 @@
    options.garbagecapmax=2;
   }
   options.invisible=mods.includes('invisible');options.master_invisible=mods.includes('invisible_reversed');
-  // Keep the official QUICK PLAY spin detector.  The native all-spin and
-  // Warlock branches are selected by zenith_allspin/zenith_mods; replacing
-  // spinbonuses with generic "all" or "all+" changes mini and kick rules.
-  if(mods.includes('allspin')||mods.includes('allspin_reversed'))options.spinbonuses='all-mini+';
-  if(mods.includes('allspin_reversed')){options.b2bcharge_base=4;options.gincrease=0;}
+  // Spin rule per MOD, taken from real TETR.IO replays (options in the .ttr):
+  //  - no MOD: all-mini+ (server default; non-T spins are minis).
+  //  - The Warlock (allspin_reversed): spinbonuses "all+" (non-T spins are full
+  //    spins, T keeps the 3-corner rule) and b2bcharge_base 3. With all-mini+ the
+  //    MP4 engine desyncs on both real Warlock replays; with all+ they match.
+  //  - All-Spin (allspin): no real replay checked yet, so it stays all-mini+.
+  if(mods.includes('allspin'))options.spinbonuses='all-mini+';
+  if(mods.includes('allspin_reversed')){options.spinbonuses='all+';options.b2bcharge_base=3;options.gincrease=0;}
   options.display_hold=!mods.includes('nohold')&&!mods.includes('nohold_reversed');
   if(mods.includes('nohold_reversed')){
    options.nextcount=1;
