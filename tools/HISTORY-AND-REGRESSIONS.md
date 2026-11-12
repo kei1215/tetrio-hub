@@ -25,6 +25,7 @@
 - v4.8259:QP DUO の「2人の TTR を合成」(各自が保存した .ttr → 1つの .ttrm)。
 - v4.8258:DUO 保存が自分のゲームを見失っていたのを修正(QP は塔の数百人のゲームもつかまり、200件で古い順に捨てていた)。自分のゲームは別に持つ。
 - v4.8257:オンライン DUO はまず自分の分だけ保存(.ttr)。相方を待つ処理で保存されなかったため。診断ログと CONFIG > QP DUO REPLAYS を追加。
+- 2026-11-13(未ビルド・ai-src):AI(allspin MOD なし)は消去なし Spin をしない・T を TSD/TST に残す。Node の自己対局で .ttr を作る tools/ai-sim/ai-selfplay-replay.mjs。
 - v4.8256:QP DUO のリプレイ保存(オンラインは duo-save を常に有効、オフラインはローカル記録へ)、Warlock の Spin ルール(all+)。
 
 ### サイトとブックマークレット(docs/)
@@ -76,6 +77,7 @@
 | MP4 の DUO で盤面が離れすぎ・高度メーターの位置・MOD アイコンがない | DUO は TETR.IO の位置 ±0.32(17.07 マス間隔、中央、少し下)。メーターは左盤面の右 3.15 マスに台座つき。MOD アイコンを盤面の絵から描く | 左の NEXT の下に右の HOLD が収まる。メーターが2枚の間。DUO アイコンが左右の盤面の下 |
 | テストでページの音を止めると MP4 が無音になる | AudioScheduledSourceNode.start を丸ごと止めていた。止めるのは OfflineAudioContext 以外だけにする | 作った MP4 に音がある |
 | ファイルから開いたリプレイ・ルーム・QP で MP4 ボタンが出ない | リプレイ ID がないと TETR.IO が REPLAY の行ごと隠す。行が隠れているときは BACK の下に自前の「▶ MP4」を出す | ファイルから TTRM/TTR を開いても左上に ▶ MP4 が出て、押すとパネルが開く |
+| AI が消去なしの Spin(穴埋めだけ)をする | planner の zeroSpin 減点が小さかった(-1.5)。allspin MOD なしでは -20(bot-ai.js) | ai-selfplay-replay.mjs を 8 シード×300 ミノで回し、zeroSpin が平均 0.5 未満 |
 | AI 版が GitHub のリリースから誰でも取れる | 未解決。配布方法はユーザーが決める | — |
 
 ## 3. 守ること(ユーザーのルール)

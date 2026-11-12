@@ -1,6 +1,6 @@
 > 変更予定(やることリスト)です。GitHub の編集ボタン(鉛筆)から誰でも変更を提案できます。完了したら HISTORY-AND-REGRESSIONS.md に移します。
 
-# TETR.IO tools / QP-Patch やることリスト(2026-11-12 時点)
+# TETR.IO tools / QP-Patch やることリスト(2026-11-13 時点)
 
 対象:
 - サイト https://kei1215.github.io/tetrio-hub/(リポジトリ kei1215/tetrio-hub)
@@ -53,6 +53,8 @@
 - [ ] All Spin の判定と火力倍率(T 以外のミノのスピンが Mini になる問題)
   - Warlock(allspin_reversed)は 2026-11-12 に修正済み(all+、b2bcharge_base 3。実リプレイ2本で確認)。ゲーム内の確認はまだ。
   - 通常の All-Spin(allspin)は未修正:実際の設定値が分からない。allspin MOD の実リプレイ(.ttr)が1本あれば、その中の spinbonuses で確定できる。
+  - 2026-11-13 調べたこと:クライアントの allspin の処理は「同じ消し方を続けるとペナルティ(lastclearwasdupe)」とキャンセル疲労だけで、spinbonuses はサーバーが決める。オフライン版は all-mini+ のまま(通常の QP と同じ)。手元の実リプレイ 30 本に allspin のものはない → 未確定のまま。
+  - Warlock の T-Spin Mini:実リプレイ2本の stats に minitspinsingles 21・16 がある → 本物の Warlock にも T の Mini はある。公式どおり(all+)のままにした。
 - [ ] B2B の失敗判定
 - [ ] リバイブランのミッションの自動判定
 - [ ] オフライン版の GAMEOVER 表示
@@ -73,6 +75,9 @@
 - 火力と B2B の先読み
 
 残り:
+- [x] AI の対局リプレイ(Node、ブラウザなし):tools/ai-sim/ai-selfplay-replay.mjs が vA の planner で MP4 ツールのエンジンを動かし、.ttr を書き出す(2026-11-13。verify-stats で ALL OK。~/Downloads/TETRIO-AI-replays-2026-11-13 に3本)。ゲーム内の Solo QP の BOT は入力をゲームに送るので、普通のローカル記録に残る作り(TL 対戦は保存対象外。ゲーム内は未確認)
+- [x] 消去なしの Spin・穴埋めだけの Spin をやめる(allspin MOD なしのとき。Node 8シード×300ミノで 5.8 → 0.1 回)
+- [ ] 通常時の攻撃の 90% を T-Spin に(今 44%、TSD/TST に使えた T は 43 個中 14)。数値の調整では 50% 前後が上限。T-Spin の形(TSD の積み方)を決めて組む仕組みが要る。tPotK 6 で T 19/43 に増えるが、計算時間が増えるのでゲーム内の確認が必要
 - [ ] QP と TL の AI の挙動の統一
 - [ ] TL 直近20戦の取得と学習
 - [ ] 敗因の解析と表示(MP4 ツールとは分ける)
@@ -91,7 +96,7 @@
 
 ## 5. 今の公開状態
 
-- **デスクトップ版パッチ**:最新は v4.8257(QP DUO は自分の分を保存・診断ログ)。
+- **デスクトップ版パッチ**:最新は v4.8261(DUO 表示・MP4 ボタン)。AI の 2026-11-13 の変更は次の版に入る(ai-src。未ビルド)。
   - Mac / Windows / Linux × vA / vO / vR。
   - CONFIG の「PATCH UPDATE」から更新できる。
   - vA・vO には、別に TETRIO-Resources-1.0.zip(TETR.IO の素材。Discord で配布)が必要。
