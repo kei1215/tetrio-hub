@@ -231,10 +231,10 @@
     let footer = D.getElementById('qp-patch-tools-footer');
     if (!footer) { footer = el('div', { id: 'qp-patch-tools-footer', className: 'scroller_block zero' }, el('h2', { className: 'ns', textContent: 'QP PATCH TOOLS' })); footer.firstChild.style.cssText = 'margin:.8em 0 .25em;color:#ff9866'; config.append(footer); }
     footer.after(node);
-    log('config-entry');
     return true;
   };
-  let tries = 0; const iv = setInterval(() => { try { if (installConfig() || ++tries > 120) clearInterval(iv); } catch (e) { clearInterval(iv); } }, 1000);
+  // CONFIG can be rebuilt by other patch entries: keep putting ours back (cheap id check)
+  const iv = setInterval(() => { try { installConfig(); } catch (e) { clearInterval(iv); } }, 1000);
 
   W.__qpDuoSave = { open, list, tick, downloadLog, mergeTwo, log: LOG };
   if (!W.__qpDuoSaveEmbedded) open();

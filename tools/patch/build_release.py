@@ -343,6 +343,27 @@ def add_duo_save(text, duo_src):
     return '/* ' + DUO_SAVE_MARK + ' */\n' + line + '\n' + text
 
 
+DUO_VIEW_MARK = 'qp-duo-replay-view-v1'
+MP4_BUTTON_MARK = 'qp-replay-mp4-button-v1'
+PATCH_CHAIN = "function patchQPReplay(src){return patchQPReplayNaming(patchQPReplayInternal(src))}"
+
+
+def add_duo_view(text):
+    """Online client source edit: TETR.IO's replay screen shows a 2-player QP DUO .ttrm as DUO (app-src/duo-replay-view.js)."""
+    if DUO_VIEW_MARK in text:
+        return text
+    text = replace_once(text, PATCH_CHAIN, "function patchQPReplay(src){return patchQPDuoReplayView(patchQPReplayNaming(patchQPReplayInternal(src)))}", 'patchQPReplay chain')
+    return (APP_SRC / 'duo-replay-view.js').read_text(encoding='utf-8') + text
+
+
+def add_mp4_button(text):
+    """Online client runtime: MP4 button on the results REPLAY row + CONFIG entry (app-src/mp4-button.js)."""
+    if MP4_BUTTON_MARK in text:
+        return text
+    text = replace_once(text, TAIL_END, "\\n;('+qpReplayMp4Button.toString()+')(document,window);" + TAIL_END, 'transform tail (mp4 button)')
+    return (APP_SRC / 'mp4-button.js').read_text(encoding='utf-8') + text
+
+
 def add_updater(text):
     """Append (or refresh) the patch updater (main process) in O/music-main.js, present in every kind."""
     return replace_appended(text, UPDATER_MARK, APP_SRC / 'patch-updater.js')
@@ -405,6 +426,8 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                     text = add_update_config(text)
                 if duo_src:
                     text = add_duo_save(text, duo_src)
+                if offline:
+                    text = add_duo_view(add_mp4_button(text))
                 data = text.encode('utf-8')
             elif offline and name == 'O/music-main.js':
                 data = add_updater(data.decode('utf-8')).encode('utf-8')
