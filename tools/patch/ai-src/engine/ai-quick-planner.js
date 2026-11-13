@@ -128,6 +128,18 @@
  // A piece-speed setting is a target cadence, not a command to stop
  // thinking after one frame. Budget the search in bounded native slices;
  // guarantee coverage of HOLD and spin routes before branching ahead.
+ /* Lockstep with the player (Tab: プレーヤーと同時に置く, TL / CUSTOM vs a
+    player): the BOT places one piece each time the player places one, so both
+    run at the same PPS; it plans while it waits. */
+ function syncPeer(game){
+  let on=false;try{on=localStorage.getItem('qp-ai-sync-player')==='true'}catch{}
+  const peer=game?._localTLPeer;if(!on||!peer||peer._localLiveBot||peer._localAIProfileId)return null;
+  try{if(!peer.isPlaying?.())return null}catch{return null}
+  const mine=()=>Number(game.state.stats?.piecesplaced)||0,theirs=()=>Number(peer.state.stats?.piecesplaced)||0;
+  // the player's own pace (frames per piece) sizes the plan
+  const pf=Number(peer.getFrame?.())||0,pp=theirs();
+  return {ahead:()=>theirs()>mine(),interval:pp>2?Math.max(3,Math.min(120,pf/pp)):30};
+ }
  function humanPlaying(game){
   const peer=game?._localTLPeer||game?.source?.self?.zthm?.duoOtherSideGame;
   if(peer?.isPlaying?.()&&!peer._localLiveBot&&!peer._localAIProfileId)return true;
@@ -164,7 +176,7 @@
    if(!game.isPlaying()||game.state.pause||game.state.zenith?.incapacitated)return;
    if(game.state.falling.flags&128)return;
    const frame=game.getFrame();if(frame===lastFrame)return;lastFrame=frame;
-   const pps=Math.min(20,Math.max(.1,Number(getPPS())||1));if(game._aiMimicTiming&&mimicPiece!==game.state.stats.piecesplaced){mimicPiece=game.state.stats.piecesplaced;mimicInterval=LocalAIBehavior.interval(game._aiBehavior,game.state)}const interval=game._aiMimicTiming&&mimicInterval!==null?mimicInterval:60/pps;
+   const pps=Math.min(20,Math.max(.1,Number(getPPS())||1));if(game._aiMimicTiming&&mimicPiece!==game.state.stats.piecesplaced){mimicPiece=game.state.stats.piecesplaced;mimicInterval=LocalAIBehavior.interval(game._aiBehavior,game.state)}const sync=syncPeer(game),interval=sync?sync.interval:game._aiMimicTiming&&mimicInterval!==null?mimicInterval:60/pps;const turnReady=(slack=0)=>sync?sync.ahead():frame-lastDropFrame>=interval-slack;
    if(lastDropFrame===null)lastDropFrame=frame;
    const deadline=timing(game),hurry=deadline.total<12,pace=pacing(interval,deadline.urgent),humanActive=humanPlaying(game);
    if(deadline.total<=2){releaseKeys(game,target);search?.dispose?.();search=null;expected=null;game._rlDecision=null;if(requestLock(game)){target=null;commanded=true;stats.emergencyDrops++;lastDropFrame=frame;game._localBotIntent='固定期限優先：探索・PPS待機を打ち切って配置'}return}
@@ -189,7 +201,7 @@
      // over forcing a giant native branch on the final gravity frames.
      if(game._useLocalBotLearning&&deadline.total<=6){const quick=createSearch({...game,_useLocalBotLearning:false},strategy);target={...quick.step(100).best,fast:true};
       if(!humanActive)search=window.LocalCombatAI.createSearch(game,strategy,{fast:true,rootOnly:true,realtime:true,rootBudget:8,beamWidth:1,stepBudgetMs:1})
-     }else search=createSearch(game,strategy,{realtime:true,humanActive,dueAt:lastDropFrame+interval,interval,rootBudget:humanActive?Math.min(16,pace.rootBudget):pace.rootBudget,beamWidth:humanActive?2:pace.beamWidth,stepBudgetMs:humanActive?1:pace.stepBudgetMs,maxDepth:Math.min(humanActive?3:pace.maxDepth,Math.max(focusTSpinForGame(game,strategy)?3:1,game._aiDepth==='visible'?1+LocalAIInformation.nextCount(game.options,game._aiNextCount):Number(game._aiDepth)||(interval>=30?3:2)))})
+     }else search=createSearch(game,strategy,{realtime:true,humanActive,get dueAt(){return sync?(sync.ahead()?game.getFrame():Infinity):lastDropFrame+interval},interval,rootBudget:humanActive?Math.min(16,pace.rootBudget):pace.rootBudget,beamWidth:humanActive?2:pace.beamWidth,stepBudgetMs:humanActive?1:pace.stepBudgetMs,maxDepth:Math.min(humanActive?3:pace.maxDepth,Math.max(focusTSpinForGame(game,strategy)?3:1,game._aiDepth==='visible'?1+LocalAIInformation.nextCount(game.options,game._aiNextCount):Number(game._aiDepth)||(interval>=30?3:2)))})
     }
     attempts=0;rotations=0;
    }
@@ -209,7 +221,7 @@
     // Preview reconstruction is optional UI work. Keep 60fps input more
     // important than redrawing the same plan for every search slice.
     if(!humanActive||result.done||frame%6===0)window.LocalAIPreview?.set(game,result.best,{searching:!result.done,choices:result.previewChoices});
-    const reserve=Math.min(8,Math.max(1,Math.floor(interval/4))),due=frame-lastDropFrame>=interval-reserve;
+    const reserve=Math.min(8,Math.max(1,Math.floor(interval/4))),due=turnReady(reserve);
     // Only commit an actually verified native route, never a theoretical
     // straight-drop estimate merely to satisfy the PPS clock.
     if(!result.done&&(hurry||due)&&result.best?.route){
@@ -282,7 +294,7 @@
      }
     }
     if(f.x!==target.final.x||f.r!==target.final.rotation||(ex.grounded&&Math.ceil(f.y)!==target.final.y)||(target.spin&&!(f.flags&8))){fail('最終位置');return}
-    const ready=frame-lastDropFrame>=interval,spinNow=!!(target.spin&&(f.flags&8)),fire=spinNow?{hold:false,urgent:true}:attackTiming(game,target,strategy,frame,ready);if(fire.hold){game._localBotIntent='TL: 火力待機（上限あり・被弾時解除）';return}
+    const ready=turnReady(),spinNow=!!(target.spin&&(f.flags&8)),fire=spinNow?{hold:false,urgent:true}:attackTiming(game,target,strategy,frame,ready);if(fire.hold){game._localBotIntent='TL: 火力待機（上限あり・被弾時解除）';return}
     if(ready||fire.urgent||deadline.total<=2){search?.dispose?.();search=null;if(!requestLock(game))return;expected=target?.final?{type:target.type,...target.final}:null;if(expected){stats.plannedDrops++;if(target?.hold)stats.holdPlannedDrops++}if(spinNow)stats.spinLocks++;if(target?.next?.path&&target?.snapshot?.game)forecastCache={plan:target.next,state:target.snapshot.game,knownNext:(target.snapshot._aiKnownNext||[]).slice(0,2)};game._rlDecision=target?.rl||null;commanded=true;lastDropFrame=frame;game._localBotIntent='vAI: '+(target.hold?'HOLD・':'')+(target.spin?'スピン・':'')+(game._aiSeedAccess?'シード参照ON・':'')+'NEXT '+target.depth+'手評価 / '+(target.features[10]?'サージ放出':target.features[9]?'B2B蓄積':'盤面構築');target=null}
     return;
    }
@@ -345,7 +357,7 @@
      }
     }
     if(target.turn&&(f.r!==target.final.rotation||f.x!==target.final.x||Math.ceil(f.y)!==target.final.y||(target.spin&&!(f.flags&8)))){if(target.spin)stats.spinRouteMisses++;target=null;lastPiece=-1;stats.routeFailures++;return}
-    const ready=frame-lastDropFrame>=interval,spinNow=!!(target.turn&&target.spin&&(f.flags&8)),fire=spinNow?{hold:false,urgent:true}:attackTiming(game,target,strategy,frame,ready);if(fire.hold){game._localBotIntent='TL: 火力待機（上限あり・被弾時解除）';return}
+    const ready=turnReady(),spinNow=!!(target.turn&&target.spin&&(f.flags&8)),fire=spinNow?{hold:false,urgent:true}:attackTiming(game,target,strategy,frame,ready);if(fire.hold){game._localBotIntent='TL: 火力待機（上限あり・被弾時解除）';return}
     if(ready||fire.urgent||deadline.total<=2){search?.dispose?.();search=null;if(!requestLock(game))return;expected=target?.final?{type:target.type,...target.final}:null;if(expected){stats.plannedDrops++;if(target?.hold)stats.holdPlannedDrops++}if(spinNow)stats.spinLocks++;if(target?.next?.pre&&target?.snapshot?.game)forecastCache={plan:target.next,state:target.snapshot.game,knownNext:(target.snapshot._aiKnownNext||[]).slice(0,2)};game._rlDecision=target?.rl||null;commanded=true;lastDropFrame=frame;game._localBotIntent='vAI: '+(target.hold?'HOLD・':'')+(target.spin?'スピン・':'')+(game._aiSeedAccess?'シード参照ON・':'')+'NEXT '+target.depth+'手評価 / '+(target.features[10]?'サージ放出':target.features[9]?'B2B蓄積':'盤面構築');target=null}
     return;
    }
@@ -354,7 +366,7 @@
     if(f.x<target.x){tap(game,'moveRight');return}
     if(f.x>target.x){tap(game,'moveLeft');return}
    }
-   if(deadline.total<=2||(!game._useLocalBotLearning&&frame-lastDropFrame>=interval)){
+   if(deadline.total<=2||(!game._useLocalBotLearning&&turnReady())){
     search?.dispose?.();search=null;expected=target?.final?{type:target.type,...target.final}:null;
     if(expected)stats.plannedDrops++;else stats.emergencyDrops++;
     game._rlDecision=target?.rl||null;if(!requestLock(game))return;commanded=true;lastDropFrame=frame;target=null;
