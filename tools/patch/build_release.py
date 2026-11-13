@@ -504,7 +504,7 @@ def build_launcher(old_file, new_file, flavor, old, new, old_sha, payload):
     new_sha = sha256(payload)
     header = header.replace(old_sha, new_sha).replace('4.' + old, '4.' + new).replace('4' + old, '4' + new)
     # The new payload SHA-256 may contain the old number by chance; check the rest only.
-    if old in header.replace(new_sha, ''):
+    if old != new and old in header.replace(new_sha, ''):  # old == new: local rebuild of the same version
         raise SystemExit('old version left in header of ' + old_file.name)
     b64 = base64.b64encode(payload).decode('ascii')
     prefix = '' if flavor == 'cmd' else '# '
