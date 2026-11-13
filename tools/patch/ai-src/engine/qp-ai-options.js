@@ -24,6 +24,15 @@
   flag('qp-win-gauge','対戦の勝率予測ゲージを表示（TL・CUSTOM。盤面から左右の勝率を予測）',true);
   const ppsLabel=document.createElement('label');ppsLabel.style.display='block';ppsLabel.append(document.createTextNode('BOT目標PPS（0.1〜20・ゲーム内時間基準）'));
   const pps=document.createElement('input');pps.type='number';pps.min='0.1';pps.max='20';pps.step='0.1';pps.value=localStorage.getItem('qp-local-bot-pps')||'2';pps.addEventListener('change',()=>{const value=Math.max(.1,Math.min(20,Number(pps.value)||2));pps.value=String(value);localStorage.setItem('qp-local-bot-pps',String(value))});ppsLabel.appendChild(pps);section.appendChild(ppsLabel);
+  // Compute power: auto measures this PC and fits the plan to the target PPS.
+  const powerLabel=document.createElement('label');powerLabel.style.display='block';powerLabel.textContent='計算量 ';
+  const powerSelect=document.createElement('select');powerSelect.setAttribute('aria-label','AIの計算量');
+  for(const [value,name] of [['auto','自動（PCの速さを測り、目標PPSに合わせる・既定）'],['low','低（軽いPC）'],['mid','中'],['high','高'],['max','最大（速いPC）']]){const option=document.createElement('option');option.value=value;option.textContent=name;powerSelect.appendChild(option)}
+  powerSelect.value=['low','mid','high','max'].includes(localStorage.getItem('qp-ai-power'))?localStorage.getItem('qp-ai-power'):'auto';
+  powerSelect.addEventListener('change',()=>localStorage.setItem('qp-ai-power',powerSelect.value));
+  const powerInfo=document.createElement('small');powerInfo.style.display='block';
+  const showPower=()=>{const sp=window.LocalAIPlanSpeed;powerInfo.textContent=sp?.samples?'この PC の計画速度：幅1あたり '+sp.msPerWidth.toFixed(1)+' ms（'+sp.samples+' 回測定）':'計画速度はBOTが動くと測ります。'};showPower();powerSelect.addEventListener('focus',showPower);
+  powerLabel.appendChild(powerSelect);section.appendChild(powerLabel);section.appendChild(powerInfo);
   const previewMode=document.createElement('label');previewMode.textContent='配置予測の表示 ';
   const previewSelect=document.createElement('select');previewSelect.setAttribute('aria-label','AI配置予測表示');
   for(const [value,name] of [['off','非表示（既定）'],['game','ゲーム中に表示'],['replay','リプレイ中のみ'],['both','ゲーム中とリプレイ中']]){const option=document.createElement('option');option.value=value;option.textContent=name;previewSelect.appendChild(option)}

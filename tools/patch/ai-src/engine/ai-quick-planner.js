@@ -189,7 +189,7 @@
      // over forcing a giant native branch on the final gravity frames.
      if(game._useLocalBotLearning&&deadline.total<=6){const quick=createSearch({...game,_useLocalBotLearning:false},strategy);target={...quick.step(100).best,fast:true};
       if(!humanActive)search=window.LocalCombatAI.createSearch(game,strategy,{fast:true,rootOnly:true,realtime:true,rootBudget:8,beamWidth:1,stepBudgetMs:1})
-     }else search=createSearch(game,strategy,{realtime:true,humanActive,rootBudget:humanActive?Math.min(16,pace.rootBudget):pace.rootBudget,beamWidth:humanActive?2:pace.beamWidth,stepBudgetMs:humanActive?1:pace.stepBudgetMs,maxDepth:Math.min(humanActive?3:pace.maxDepth,Math.max(focusTSpinForGame(game,strategy)?3:1,game._aiDepth==='visible'?1+LocalAIInformation.nextCount(game.options,game._aiNextCount):Number(game._aiDepth)||(interval>=30?3:2)))})
+     }else search=createSearch(game,strategy,{realtime:true,humanActive,dueAt:lastDropFrame+interval,interval,rootBudget:humanActive?Math.min(16,pace.rootBudget):pace.rootBudget,beamWidth:humanActive?2:pace.beamWidth,stepBudgetMs:humanActive?1:pace.stepBudgetMs,maxDepth:Math.min(humanActive?3:pace.maxDepth,Math.max(focusTSpinForGame(game,strategy)?3:1,game._aiDepth==='visible'?1+LocalAIInformation.nextCount(game.options,game._aiNextCount):Number(game._aiDepth)||(interval>=30?3:2)))})
     }
     attempts=0;rotations=0;
    }

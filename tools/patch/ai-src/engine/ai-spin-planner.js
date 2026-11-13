@@ -342,7 +342,7 @@
   if(!load(engine,kick))return null;
   const raw=rawBy[kick]||rawTables,w=raw&&getWorker();
   if(!w)return create(engine,state,options);
-  const id=++jobSeq,t0=performance.now();let done=false,result=null,fallback=null,spent=0;
+  const id=++jobSeq,t0=performance.now();let done=false,result=null,fallback=null,spent=0,stoppedEarly=false;
   const job={best:null,finish(r){if(done)return;done=true;result=r;spent=performance.now()-t0},fail(){if(!done)fallback=create(engine,state,options)}};
   jobs.set(id,job);
   // Options must survive structured clone: plain data only.
@@ -354,7 +354,7 @@
    step(ms=4){if(fallback)return fallback.step(ms);return done},
    result:()=>fallback?fallback.result():done?result:job.best,
    get done(){return fallback?fallback.done:done},get spent(){return fallback?fallback.spent:spent},
-   stop(){if(fallback)return fallback.stop();if(!done){done=true;result=job.best;jobs.delete(id);try{w.postMessage({cancel:id})}catch{}}return result},
+   get stopped(){return stoppedEarly},stop(){if(fallback)return fallback.stop();if(!done){done=true;stoppedEarly=true;result=job.best;jobs.delete(id);try{w.postMessage({cancel:id})}catch{}}return result},
   };
  }
  const api={attackOf,setTables,create,createAsync,plan,placements,place,boardValue,load,matchCells,DEFAULTS};

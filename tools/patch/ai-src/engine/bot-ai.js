@@ -95,18 +95,31 @@
   return {claim(human=false,urgent=false,who=null){
     const tick=Math.floor(clock()/16.666667);
     if(tick!==slot){slot=tick;spent=0;lastCount=Math.max(1,seen.size);seen=new Map()}
-    const total=human?1.7:4.5,remaining=total-spent;
+    const m=window.LocalAIPower?.mult?.()||1,total=(human?1.7:4.5)*m,remaining=total-spent;
     if(who&&!seen.has(who))seen.set(who,0);
     const mine=who?seen.get(who):0,share=total/lastCount;
     // own part first; the common rest only once every BOT had its turn
     const own=who?Math.max(0,share-mine):remaining;
     const room=Math.min(remaining,seen.size>=lastCount?remaining:own);
-    return room<.45?(urgent?.45:0):Math.max(.45,Math.min(human?1:2.4,room));
+    return room<.45?(urgent?.45:0):Math.max(.45,Math.min((human?1:2.4)*m,room));
    },account(ms,who=null){ms=Math.max(0,ms);spent+=ms;peak=Math.max(peak,ms);if(who)seen.set(who,(seen.get(who)||0)+ms)},
    status:()=>({slot,spent,peak,bots:lastCount}),
   };
  })();
  window.LocalAIFrameBudget=frameBudget;
+ /* Compute power (Tab: 計算量). 'auto' measures this PC: the worker plan time
+    per beam width is kept as a running average, and the width is chosen so a
+    plan fits the time one piece has at the target PPS (fast PC = wider, deeper
+    plans; high PPS = narrower ones instead of a lower PPS). Fixed levels cap
+    the width / main-thread time. */
+ const POWER={low:{maxW:10,mult:.6},mid:{maxW:24,mult:1},high:{maxW:40,mult:1.6},max:{maxW:64,mult:2.4},auto:{maxW:48,mult:1}};
+ const power=()=>{let v='auto';try{v=localStorage.getItem('qp-ai-power')||'auto'}catch{}return POWER[v]?v:'auto'};
+ const speed=window.LocalAIPlanSpeed??(window.LocalAIPlanSpeed={msPerWidth:8,samples:0,
+  note(ms,width){if(!(ms>0)||!(width>0))return;const v=ms/width;this.msPerWidth=this.samples?this.msPerWidth*.85+v*.15:v;this.samples++},
+  width(intervalFrames,quick){const lvl=POWER[power()],avail=Number.isFinite(intervalFrames)?Math.max(20,intervalFrames*16.67*.7):Infinity;
+   const fit=Number.isFinite(avail)?Math.floor(avail/Math.max(.5,this.msPerWidth)):lvl.maxW;
+   return Math.max(6,Math.min(lvl.maxW,quick,power()==='auto'?fit:lvl.maxW))}});
+ window.LocalAIPower={get level(){return power()},levels:Object.keys(POWER),mult:()=>POWER[power()].mult,speed};
 
 
  // A hold is a normal placement-order choice, not a panic button or a free reward.
@@ -454,7 +467,7 @@
   const rootLimit=settings.realtime?(settings.humanActive?5:Math.max(5,Math.min(12,Math.floor((Number(settings.rootBudget)||24)/3)))):Infinity;
   // The plan runs in time slices inside step(), so a live frame never stalls
   // on it; the native root candidates are built once it is done.
-  let spinPlan=null,planner=null,planSlices=0,planFrameCap=Infinity;
+  let spinPlan=null,planner=null,planSlices=0,planFrameCap=Infinity,planWidth=24;
   // vA private builds: an outside engine decides (see below); public builds have none.
   const externalPlan=!!window.LocalExternalAI?.active?.(game)&&!!base.game.falling?.type&&!settings.fast;
   if(tspinB2B&&!externalPlan&&window.LocalSpinPlanner&&base.game.falling?.type&&!settings.fast){
@@ -467,7 +480,7 @@
     planFrameCap=Number.isFinite(left)?Math.max(4,Math.floor(left/3)):Infinity;
     planner=(settings.realtime&&LocalSpinPlanner.createAsync?LocalSpinPlanner.createAsync:LocalSpinPlanner.create)(engine,{board:base.game.board,falling:base.game.falling.type,hold:LocalAIInformation.holdPiece(base.game.hold),queue:LocalAIInformation.known(base),
      holdAllowed:LocalAIInformation.holdAllowed(base,game._aiAllowHold!==false),b2b:base.game.stats?.btb||0,combo:base.game.stats?.combo||0},
-     {width:Math.min(quick,!settings.realtime||budget>=40||LocalSpinPlanner.createAsync&&typeof Worker!=='undefined'?24:budget>=28?16:10),...playerPlanOptions(base.game),
+     {width:planWidth=(!settings.realtime?24:LocalSpinPlanner.createAsync&&typeof Worker!=='undefined'?speed.width(Number(settings.interval),quick===24?64:quick):Math.min(quick,budget>=40?24:budget>=28?16:10)),...playerPlanOptions(base.game),
       // Without All-Spin mods (2026-11-13, Node self-play, 8 seeds x 300 pieces):
       // no zero-line / hole-filling spins (6 -> 0.1 per game), T kept for TSD/TST
       // (T-Spin share of attack 33% -> 44%, TSD/TST 9 -> 14 of 43 T, APP 0.67 -> 0.71).
@@ -627,7 +640,12 @@
     // A worker plan (createAsync) costs this thread nothing: only the lock time
     // and the frame cap stop it, not the slice budget meant for in-thread plans.
     if(!planner.done&&(planSlices>=planFrameCap||!planner.async&&planSlices>=(settings.realtime?bp('planSlices',(Number(settings.rootBudget)||40)>=40?20:(Number(settings.rootBudget)||40)>=28?10:6):Infinity)||left<bp('planStopFrames',22)))planner.stop();
+    // A worker plan stops at the PPS clock with its deepest finished level, so a
+    // high target PPS is met instead of waiting for the whole plan.
+    if(!planner.done&&planner.async&&Number.isFinite(settings.dueAt)&&typeof game.getFrame==='function'&&game.getFrame()>=settings.dueAt-Math.max(1,Math.min(4,Math.floor(Number(settings.interval)/4)))&&planner.result())planner.stop();
     if(!planner.done){planSlices++;planner.step(settings.realtime?stepBudgetMs:1e9);return {done:false,best:null,previewChoices:[]}}
+    // a plan cut by the clock only tells that this PC is at least that slow
+    if(planner.async)(planner.stopped?(planner.spent/planWidth>speed.msPerWidth&&speed.note(planner.spent,planWidth)):speed.note(planner.spent,planWidth));
     // Native root candidates in the next slice, not in the same one.
     buildRoot();if(settings.realtime)return {done:false,best:null,previewChoices:[]};
    }

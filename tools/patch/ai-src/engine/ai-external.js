@@ -114,7 +114,8 @@
 #qp-ext-ai .p{display:none;margin-top:6px;background:#1b1830ee;border:1px solid #6d5fb5;border-radius:8px;padding:10px;width:300px}
 #qp-ext-ai.open .p{display:block}#qp-ext-ai.float>button{display:inline-block}#qp-ext-ai label{display:block;margin:4px 0}#qp-ext-ai select,#qp-ext-ai input[type=number]{width:100%;background:#0f0d1c;color:#fff;border:1px solid #555;border-radius:4px;padding:3px}
 #qp-ext-ai .row{display:flex;gap:6px;margin-top:8px}#qp-ext-ai .row button{flex:1;padding:5px;border-radius:4px;border:1px solid #777;background:#2a2547;color:#fff;cursor:pointer}
-#qp-ext-ai .s{margin-top:6px;opacity:.85;white-space:pre-wrap}#qp-ext-ai .n{opacity:.7;margin-top:4px}`;
+#qp-ext-ai .s{margin-top:6px;opacity:.85;white-space:pre-wrap}#qp-ext-ai .n{opacity:.7;margin-top:4px}
+#qp-ext-ai.intab{position:static;z-index:auto}#qp-ext-ai.intab>button{display:none!important}#qp-ext-ai.intab .p{display:block;width:auto;margin-top:4px}`;
  function sideOptions() {
   const out = [['player', 'プレイヤー(キーボード)']];
   for (const p of window.LocalBotLearning?.profiles?.() || []) out.push(['ai:' + p.id, 'vA AI: ' + p.name]);
@@ -147,7 +148,21 @@
    try { const f = localStorage.getItem('qp-local-ai-ext-ft'); if (f) $('input[data-k="ft"]').value = f; } catch {}
    const id = extOf($('select[data-k="right"]').value) || extOf($('select[data-k="left"]').value); $('input[data-k="str"]').value = id ? (strength(id) ?? '') : '';
   };
-  $('button').onclick = async () => { root.classList.toggle('open'); if (root.classList.contains('open')) { fill(); try { await window.LocalAI?.load?.(); fill(); } catch {} } };
+  // In the Tab panel (2026-11-13): the same controls as a section under the vAI
+  // test settings; the floating panel stays only where there is no Tab panel.
+  let docked = null;
+  const dock = () => {
+   const tab = document.getElementById('local-panel'); if (!tab || docked) return !!docked;
+   docked = document.createElement('details'); docked.id = 'qp-ext-ai-tab';
+   const sum = document.createElement('summary'); sum.textContent = '外部AI対戦'; docked.appendChild(sum);
+   root.classList.add('intab'); root.classList.remove('float'); docked.appendChild(root);
+   const after = document.getElementById('qp-ai-test-settings') || document.getElementById('local-ai-quick');
+   if (after && after.parentNode === tab) after.after(docked); else tab.appendChild(docked);
+   docked.addEventListener('toggle', async () => { if (!docked.open) return; fill(); try { await window.LocalAI?.load?.(); fill(); } catch {} });
+   return true;
+  };
+  if (!dock()) { const mo = new MutationObserver(() => { if (dock()) mo.disconnect(); }); mo.observe(document.documentElement, { childList: true, subtree: true }); }
+  $('button').onclick = async () => { if (docked) { docked.open = true; docked.scrollIntoView?.({ block: 'nearest' }); return; } root.classList.toggle('open'); if (root.classList.contains('open')) { fill(); try { await window.LocalAI?.load?.(); fill(); } catch {} } };
   $('[data-a="stop"]').onclick = () => { try { window.LocalAIRoom?.stop?.(); status('終了しました'); } catch (e) { status(e.message); } };
   $('[data-a="add"]').onclick = () => $('input[data-k="files"]').click();
   $('input[data-k="files"]').onchange = async ev => { try { const ids = await addFiles(ev.target.files); fill(); status('読み込みました: ' + ids.map(id => defs[id].label || id).join(', ')); } catch (e) { status('読み込めません: ' + e.message); } ev.target.value = ''; };
