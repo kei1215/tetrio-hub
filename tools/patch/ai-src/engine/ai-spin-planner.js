@@ -258,6 +258,10 @@
   // pointless): danger relaxes the plan only if the board is in danger now, or garbage
   // taken inside the plan put it there - never a stack the plan itself builds up.
   let rootH=0;for(let y=0;y<H;y++)if(rows[y]){rootH=H-y;break}
+  // v4.8275 (user: 20+ lines coming - chip it and run a combo before it lands, part of it is
+  // expected to be cancelled): with a big wave waiting, every cancelled line and every clear in
+  // a row is worth it, whatever the height.
+  const bigWave=P.bigWave>0&&start.incoming>=P.bigWave;
   const rootDanger=rootH+.5*start.incoming+.5*(P.threat||0)>=P.dangerPeak;
   // Player templates that fit this board: their placements (exact cells) are
   // preferred while the build is in progress (until the first clear).
@@ -307,7 +311,7 @@
        // otherwise be sent (and in QP climb), so take the garbage instead.
        // Take or cancel by height: low board -> take it and keep the attack;
        // a board that would not survive the garbage -> cancel (P.takeMax rows).
-       if(inc>0){const c=Math.min(inc,atk);if(P.cancelW>0)gain+=P.cancelW*c;else if(P.takeMax&&heightBefore+inc+(P.threat||0)>P.takeMax)gain+=(P.cancelHi||4)*c;else gain-=P.atk*P.cancelLoss*c;inc-=c;gi+=c}
+       if(inc>0){const c=Math.min(inc,atk);if(P.cancelW>0)gain+=P.cancelW*c;else if(bigWave)gain+=P.bigCancel*c;else if(P.takeMax&&heightBefore+inc+(P.threat||0)>P.takeMax)gain+=(P.cancelHi||4)*c;else gain-=P.atk*P.cancelLoss*c;inc-=c;gi+=c}
        if(p.spin){let g=(type==='t'?(p.spin===2?P.tFull:P.tMini):P.mini)[Math.min(3,res.lines)];
         // Where the player makes spins (centre / edge), from their own data.
         if(colW&&g>0){const cells=tables.shapes[type][p.r];const cx=Math.round(cells.reduce((a,[x])=>a+x,0)/4+p.x);g*=colW[Math.max(0,Math.min(W-1,cx))]}
@@ -329,6 +333,7 @@
         // send P.digRebuild+ (20) in this line: the penalty is paid back then.
         if(P.digRebuild&&pen<0)brk={at:node.attack||0,r:-pen};
         b2b=0}
+       if(bigWave&&(node.incoming||0)>0)gain+=(P.bigCombo||0)*Math.min(6,combo);
        if(res.rows.every(v=>v===0))gain+=12;
        tplOff=true;
       }else{pendS=pendR=0;if(p.spin&&!p.plain)gain+=P.zeroSpin}
@@ -354,6 +359,7 @@
       const acc=node.acc+gain*Math.pow(P.depthDecay,d),key=hash+':'+(nextCur||'');
       if(seen.has(key))continue;seen.add(key);
       const child={rows:rowsOut,cur:nextCur,hold,qi:qi+1,acc,tplOff,incoming:inc,gi,pendS,pendR,combo:res.lines?(node.combo||0)+1:0,attack:attackNow,brk,first:node.first||{x:p.x,y:p.y,r:p.r,hold:held,spin:p.spin,type},b2b,spins:node.spins+(p.spin&&res.lines?1:0)};
+      if(P.trace)child.seq=[...(node.seq||[]),attackNow-(node.attack||0)];
       child.value=acc+boardValue(rowsOut,P);
       children.push(child);
      }
@@ -385,7 +391,7 @@
    for(const c of leaves){let n=0;for(const t of ['s','z','l','j','i','o']){for(const p of placements(c.rows,t,4,19,2)){if(p.spin&&place(c.rows,t,p).lines){n++;break}}}c.value+=P.outlook*Math.min(P.outlookCap,n);yield}
    leaves.sort((a,b)=>b.value-a.value);best=leaves[0];
   }
-  return best?{...best.first,value:best.value,spins:best.spins}:null;
+  return best?{...best.first,value:best.value,spins:best.spins,seq:best.seq}:null;
  }
  function create(engine,state,options={}){
   const P={...DEFAULTS,...(root.__spinPlannerParams||{}),...options};
@@ -403,6 +409,15 @@
   };
  }
  function plan(engine,state,options={}){const p=create(engine,state,options);if(!p)return null;while(!p.step(50));return p.result()}
+ /* v4.8275 (user: think where the opponent will place a few pieces ahead): read the opponent's
+    board + NEXT with a light search of our own and return the attack its best line sends
+    piece by piece (seq) and in the next n pieces (soon). Their own waiting garbage eats it first. */
+ function predictAttack(engine,state,options={},n=3){
+  const r=plan(engine,state,{...options,trace:true,width:options.predWidth||6,maxDepth:options.predDepth||4,incoming:0,threat:0,templates:[],outlook:0});
+  if(!r||!r.seq)return null;let soon=0;for(let i=0;i<Math.min(n,r.seq.length);i++)soon+=r.seq[i];
+  const total=r.seq.reduce((a,b)=>a+b,0),eat=Math.max(0,Number(state.incoming)||0);
+  return {seq:r.seq,soon:Math.max(0,soon-eat),total:Math.max(0,total-eat)};
+ }
  function setTables(t){rawTables={shapes:t.shapes,kicks:t.kicks,ikicks:t.ikicks,corner:t.corner};tables=withBits({...t})}
  /* An outside engine (vA private builds: Cold Clear 2) names a placement by its
     cells; find the reachable placement with exactly those cells, in planner
@@ -481,6 +496,6 @@
    get stopped(){return stoppedEarly},stop(){if(fallback)return fallback.stop();if(!done){done=true;stoppedEarly=true;result=job.best;if(jobs.delete(id))w.load=Math.max(0,w.load-1);try{w.postMessage({cancel:id})}catch{}}return result},
   };
  }
- const api={attackOf,setTables,create,createAsync,plan,placements,place,boardValue,load,matchCells,tShapeKeys,tShapeValue,predictHoles,DEFAULTS};
+ const api={attackOf,setTables,create,createAsync,plan,placements,place,boardValue,load,matchCells,tShapeKeys,tShapeValue,predictHoles,predictAttack,DEFAULTS};
  if(typeof module!=='undefined')module.exports=api;else root.LocalSpinPlanner=api;
 })(typeof window==='undefined'?globalThis:window);
