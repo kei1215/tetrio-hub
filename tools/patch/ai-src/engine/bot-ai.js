@@ -332,7 +332,7 @@
  // garbage while height + incoming <= 14 else cancel (no forced B2B break),
  // value an open dig column, no 1-line non-T minis. APP 0.71 -> 0.80, wins 2 -> 3-4 of 32.
  const T_STYLE={wastedT:30,tFull:[0,10,45,90],tsdReady:40,tstReady:90,mini:[0,0,8,14],tPotK:6,atkOther:1,tShape:10,
-  sealed:14,trap:7.4,tuck:6,tuckReady:-2.8,bump:3.7,bumpSq:.33,height:-1.7,peak:5.1,top:6.4,dead:-.7,well:-4.1,takeMax:14,dig:4,cancelW:0,gHole:3,surviveNoClear:8,surviveCombo:2};
+  sealed:14,trap:7.4,tuck:6,tuckReady:-2.8,bump:3.7,bumpSq:.33,height:-1.7,peak:5.1,top:6.4,dead:-.7,well:-4.1,takeMax:14,dig:4,cancelW:0,gHole:3,surviveNoClear:8,surviveCombo:2,digRebuild:20};
  const B2BP=window.__b2bParams||(window.__b2bParams={});
  const bp=(k,d)=>B2BP[k]??d;
  function spinTerrain(board){

@@ -168,8 +168,15 @@
   // cells stacked in the hole column of the top garbage groups bury the dig.
   let gCover=0;if(P.gHole&&P.gRows>0){const seg=[];let y=H-1;for(;y>=Math.max(0,H-P.gRows);y--){const e=~rows[y]&FULL;if(!rows[y]||e&(e-1))break;const c=31-Math.clz32(e);if(!seg.length||seg[seg.length-1]!==c)seg.push(c)}
    if(seg.length){const top=y,wk=[1,.6,.3];for(let k=0;k<3&&k<seg.length;k++){const bit=1<<seg[seg.length-1-k];let n=0;for(let yy=top;yy>=0;yy--)if(rows[yy]&bit)n++;gCover+=wk[k]*Math.min(6,n)}}}
+  // Terrain that forces a B2B break (v4.8275, user: the mistake is usually the board that
+  // makes you throw B2B to get the T-Spin): rows one cell short with that cell open from
+  // above get finished by any piece -> a plain clear. A straight run of 4+ such rows in one
+  // column is a Quad well and is fine; a covered gap (T-Spin slot) is fine.
+  let loose=0;if(P.loose){let run=0,col=-1,acc=0;for(let y=0;y<H-(P.gRows||0);y++){const e=~rows[y]&FULL;const one=rows[y]&&e&&!(e&(e-1));const x=one?31-Math.clz32(e):-1;
+    if(one&&H-heights[x]>y){if(x===col)run++;else{if(run&&run<4)acc+=run;run=1;col=x}}else{if(run&&run<4)acc+=run;run=0;col=-1}}
+   if(run&&run<4)acc+=run;loose=Math.min(6,acc)}
   const tShape=P.tShape?P.tShape*tShapeValue(rows,P.tShapeTable||root.LocalTShapeTable):0;
- return -(P.gHole||0)*gCover+tShape-P.sealed*sealed-P.trap*trap-P.tuck*tuck+P.tuckReady*tuckReady-P.bump*bump-P.bumpSq*bumpSq-P.height*sum/W-P.peak*Math.max(0,peak-P.safePeak)-P.top*Math.max(0,peak-P.topPeak)-P.dead*dead+P.well*well-(P.edgeCave||0)*edgeCave+(P.dig||0)*dig+(P.ren||0)*ren-(P.tuckSparse||0)*tuckSparse-(P.own||0)*ownOver*ownOver;
+ return -(P.loose||0)*loose-(P.gHole||0)*gCover+tShape-P.sealed*sealed-P.trap*trap-P.tuck*tuck+P.tuckReady*tuckReady-P.bump*bump-P.bumpSq*bumpSq-P.height*sum/W-P.peak*Math.max(0,peak-P.safePeak)-P.top*Math.max(0,peak-P.topPeak)-P.dead*dead+P.well*well-(P.edgeCave||0)*edgeCave+(P.dig||0)*dig+(P.ren||0)*ren-(P.tuckSparse||0)*tuckSparse-(P.own||0)*ownOver*ownOver;
  }
  /* T-Spin terrain sense (2026-11-13): shape patterns learned from real TL
     replays (the user and 5han), scored by how often a TSD / TST followed within
@@ -308,7 +315,9 @@
        else if(res.lines===4){gain+=(danger?6:P.quad)*(P.comboScale&&combo>1?1+P.comboScale*(combo-1):1);b2b++}
        // Breaking is fine near top-out, under attack when the surge is needed,
        // or once the chain is as long as the player usually cashes it in.
-       else{const pen=danger||cashOk?-2:P.breakClear-P.breakPerB2B*Math.min(60,node.b2b);gain+=pen;
+       // v4.8275 (user): breaking is also fine with 20+ garbage rows to dig (board + waiting):
+       // dig Quads rebuild the chain at once.
+       else{const pen=danger||cashOk||P.digRebuild&&(P.gRows||0)>=P.digRebuild?-2:P.breakClear-P.breakPerB2B*Math.min(60,node.b2b);gain+=pen;
         // Break -> combo -> finisher: keep the charge pending; it is paid only
         // if the clears keep coming (see above), never for a lone break.
         if(!danger&&!cashOk&&surge>0&&node.b2b>=P.comboCashMin){pendS=P.atk*surge;pendR=-pen}
