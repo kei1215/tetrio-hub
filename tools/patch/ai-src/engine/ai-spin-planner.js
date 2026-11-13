@@ -356,7 +356,7 @@
    // Keep different first moves alive so the beam is not one idea.
    const next=[],firsts=new Map();
    for(const c of children){const f=c.first,id=f.x+','+f.y+','+f.r+','+f.hold;const n=firsts.get(id)||0;if(n>=P.perFirst)continue;firsts.set(id,n+1);next.push(c);if(next.length>=P.width)break}
-   best=next[0]||best;leaves=next;if(best)out.best={...best.first,value:best.value,spins:best.spins};
+   best=next[0]||best;leaves=next;if(best)out.best={...best.first,value:best.value,spins:best.spins,depth:d+1};
    beam=next.filter(c=>c.cur);
    if(!beam.length)break;
    yield;

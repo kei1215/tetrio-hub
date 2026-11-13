@@ -593,7 +593,7 @@
     // v4.8271: a worker plan cut before its first level gave no plan at all, and the
     // piece went to the plain search (QP at speed: a tall, holed stack). Then a small
     // plan on this thread, a few ms.
-    if(!p&&planner.async&&planArgs){try{const t0=performance.now();p=LocalSpinPlanner.plan(planArgs[0],planArgs[1],{...planArgs[2],width:8,maxDepth:2});ps.rescue=(ps.rescue||0)+1;ps.ms+=performance.now()-t0}catch{}}spinPlan=p?{...p,key:cellKey(p.type,p.x,p.y,p.r)}:null;if(!p)ps.noPlan++;planner=null}
+    if(!p&&planner.async&&planArgs){try{const t0=performance.now();p=LocalSpinPlanner.plan(planArgs[0],planArgs[1],{...planArgs[2],width:8,maxDepth:4});ps.rescue=(ps.rescue||0)+1;ps.ms+=performance.now()-t0}catch{}}spinPlan=p?{...p,key:cellKey(p.type,p.x,p.y,p.r)}:null;if(!p)ps.noPlan++;planner=null}
    game._localSpinPlan=spinPlan;
    queue=nodeChoices(base,!botPolicy?.ownDanger||tspinB2B,rootLimit,spinPlan);
    if(spinPlan&&!queue.some(c=>c.planned))ps.notFound++;
@@ -708,7 +708,7 @@
     if(!planner.done&&(planner.external?left<8:planSlices>=planFrameCap||!planner.async&&!planner.external&&planSlices>=(settings.realtime?bp('planSlices',(Number(settings.rootBudget)||40)>=40?20:(Number(settings.rootBudget)||40)>=28?10:6):Infinity)||!planner.external&&left<bp('planStopFrames',22))){planner._cut=true;planner.stop()}
     // A worker plan stops at the PPS clock with its deepest finished level, so a
     // high target PPS is met instead of waiting for the whole plan.
-    if(!planner.done&&(planner.async||planner.external)&&Number.isFinite(settings.dueAt)&&typeof game.getFrame==='function'&&game.getFrame()>=settings.dueAt-Math.max(1,Math.min(4,Math.floor(Number(settings.interval)/4)))&&(planner.external||planner.result())){planner._cut=true;planner.stop()}
+    if(!planner.done&&(planner.async||planner.external)&&Number.isFinite(settings.dueAt)&&typeof game.getFrame==='function'&&game.getFrame()>=settings.dueAt-Math.max(1,Math.min(4,Math.floor(Number(settings.interval)/4)))&&(planner.external||planner.result()&&(planner.result().depth||9)>=4||game.getFrame()>=settings.dueAt+Number(settings.interval||20))){planner._cut=true;planner.stop()}
     if(!planner.done){planSlices++;planner.step(settings.realtime?stepBudgetMs:1e9);return {done:false,best:null,previewChoices:[]}}
     // a plan cut by the clock only tells that this PC is at least that slow
     if(planner.async)(planner.stopped?(planner.spent/planWidth>speed.msPerWidth&&speed.note(planner.spent,planWidth)):speed.note(planner.spent,planWidth));
