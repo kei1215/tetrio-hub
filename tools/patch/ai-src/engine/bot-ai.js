@@ -477,7 +477,7 @@
   const rootLimit=settings.realtime?(settings.humanActive?5:Math.max(5,Math.min(12,Math.floor((Number(settings.rootBudget)||24)/3)))):Infinity;
   // The plan runs in time slices inside step(), so a live frame never stalls
   // on it; the native root candidates are built once it is done.
-  let spinPlan=null,planner=null,planSlices=0,planFrameCap=Infinity,planWidth=24,rootQueue=null;
+  let planArgs=null,spinPlan=null,planner=null,planSlices=0,planFrameCap=Infinity,planWidth=24,rootQueue=null;
   // vA private builds: an outside engine decides (see below); public builds have none.
   const externalPlan=!!window.LocalExternalAI?.active?.(game)&&!!base.game.falling?.type&&!settings.fast;
   if(tspinB2B&&!externalPlan&&window.LocalSpinPlanner&&base.game.falling?.type&&!settings.fast){
@@ -488,13 +488,17 @@
     const quick=left<bp('quickFrames',45)?10:left<bp('mediumFrames',70)?16:24;
     // The piece keeps falling while the plan runs; its keys must still work.
     planFrameCap=Number.isFinite(left)?Math.max(4,Math.floor(left/3)):Infinity;
-    planner=(settings.realtime&&LocalSpinPlanner.createAsync?LocalSpinPlanner.createAsync:LocalSpinPlanner.create)(engine,{board:base.game.board,falling:base.game.falling.type,hold:LocalAIInformation.holdPiece(base.game.hold),queue:LocalAIInformation.known(base),
+    planner=((e,st,o)=>{planArgs=[e,st,o];return (settings.realtime&&LocalSpinPlanner.createAsync?LocalSpinPlanner.createAsync:LocalSpinPlanner.create)(e,st,o)})(engine,{board:base.game.board,falling:base.game.falling.type,hold:LocalAIInformation.holdPiece(base.game.hold),queue:LocalAIInformation.known(base),
      holdAllowed:LocalAIInformation.holdAllowed(base,game._aiAllowHold!==false),b2b:base.game.stats?.btb||0,combo:base.game.stats?.combo||0},
      {syncWidth:Math.min(quick,16),width:planWidth=(!settings.realtime?24:LocalSpinPlanner.createAsync&&typeof Worker!=='undefined'?Math.min(tStyle?24:64,speed.width(Number(settings.interval),quick===24?64:quick)):Math.min(quick,budget>=40?24:budget>=28?16:10)),...playerPlanOptions(base.game),
       // Without All-Spin mods (2026-11-13, Node self-play, 8 seeds x 300 pieces):
       // no zero-line / hole-filling spins (6 -> 0.1 per game), T kept for TSD/TST
       // (T-Spin share of attack 33% -> 44%, TSD/TST 9 -> 14 of 43 T, APP 0.67 -> 0.71).
       ...(zeroSpinUseful?{}:{zeroSpin:-20}),...(tStyle?T_STYLE:{}),
+      // Solo (QP, no opponent, v4.8271): T_STYLE's height / well / dead terms came from
+      // TL games, where garbage keeps the board low; alone they let the stack grow
+      // (QP 2026-11-13: mean height 8.3 -> 12, 10311 m -> 2099 m). Keep the board low.
+      ...(tStyle&&!game._localTLPeer?{height:2,dead:1.5,well:2}:{}),
       // Weight self-tuning (Tab: vAI 重みの自動調整): the incumbent or the candidate under test.
       ...(tStyle&&window.LocalAITuner?.params(T_STYLE)||{}),
       // The room's rotation rules: kick table, 180 on/off, and high gravity
@@ -572,7 +576,11 @@
    // often the spin plan exists, was cut by the clock, is reachable natively and
    // is actually played.
    const ps=game._aiPlanStats??={plans:0,noPlan:0,cut:0,notFound:0,played:0,spinMismatch:0,ms:0,width:0,async:0};
-   let planMs=0;if(planner){planMs=planner.spent;ps.plans++;ps.ms+=planMs;ps.width+=planWidth;if(planner.async)ps.async++;const cut=!planner.done||planner._cut;const p=planner.done?planner.result():planner.stop();if(cut)ps.cut++;spinPlan=p?{...p,key:cellKey(p.type,p.x,p.y,p.r)}:null;if(!p)ps.noPlan++;planner=null}
+   let planMs=0;if(planner){planMs=planner.spent;ps.plans++;ps.ms+=planMs;ps.width+=planWidth;if(planner.async)ps.async++;const cut=!planner.done||planner._cut;let p=planner.done?planner.result():planner.stop();if(cut)ps.cut++;
+    // v4.8271: a worker plan cut before its first level gave no plan at all, and the
+    // piece went to the plain search (QP at speed: a tall, holed stack). Then a small
+    // plan on this thread, a few ms.
+    if(!p&&planner.async&&planArgs){try{const t0=performance.now();p=LocalSpinPlanner.plan(planArgs[0],planArgs[1],{...planArgs[2],width:8,maxDepth:2});ps.rescue=(ps.rescue||0)+1;ps.ms+=performance.now()-t0}catch{}}spinPlan=p?{...p,key:cellKey(p.type,p.x,p.y,p.r)}:null;if(!p)ps.noPlan++;planner=null}
    game._localSpinPlan=spinPlan;
    queue=nodeChoices(base,!botPolicy?.ownDanger||tspinB2B,rootLimit,spinPlan);
    if(spinPlan&&!queue.some(c=>c.planned))ps.notFound++;
