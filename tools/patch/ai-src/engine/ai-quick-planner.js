@@ -154,6 +154,9 @@
    stepLimit:frames<=5?12:frames<=12?20:32,
    maxDepth:7};
  }
+ // Board after the garbage lines already rising (their holes are known).
+ function futureKey(state){const en=state?.garbageareentries||[],b=state?.board;if(!en.length||!b)return boardKey(b);const W=b[0]?.length||10;
+  const rows=en.map(e=>{const r=new Array(W).fill('gb'),c=Number(e.column)||0,z=Math.max(1,Number(e.size)||1);for(let x=c;x<c+z&&x<W;x++)r[x]=null;return r});return boardKey(b.slice(rows.length).concat(rows))}
  function boardKey(board){return board?.map(row=>row.map(c=>c===null?'0':'1').join('')).join('|')||''}
  function cachedNextMatches(game,cache){
   if(!cache?.plan?.pre||!cache?.plan?.route||!cache?.state)return false;
@@ -193,9 +196,9 @@
    // v4.8272 (user: spins fail while garbage rises): rising garbage lines move the
    // board under a route planned on the old one. Wait for the rise before planning
    // (bounded by the lock deadline), and drop a plan whose board has changed.
-   {const rising=(game.state.garbageareentries||[]).length>0;
-    if(rising&&deadline.total>24&&!target?.exec?.grounded){if(target)releaseKeys(game,target);target=null;search?.dispose?.();search=null;lastPiece=-1;stats.waitRise=(stats.waitRise||0)+1;game._localBotIntent='ゴミのせり上がり待ち';return}
-    const bk=boardKey(game.state.board);if(target&&!target.boardKey)target.boardKey=bk;
+   // v4.8273: the plan is made on the board after the rise (bot-ai), so moving in
+   // the air goes on; only a drop waits until the rise is done (see 'drop' below).
+   {const bk=futureKey(game.state);if(target&&!target.boardKey)target.boardKey=bk;
     if(target&&target.boardKey!==bk){releaseKeys(game,target);stats.boardMoved=(stats.boardMoved||0)+1;target=null;search?.dispose?.();search=null;lastPiece=-1}}
    if(game.state.stats.piecesplaced!==lastPiece){
     releaseKeys(game,target);
@@ -292,6 +295,7 @@
       else return;
      }else if(step.kind==='drop'){
       ex.wait++;
+
       if(Math.ceil(f.y)<step.to.y&&ex.wait<=150)return;
       game.source.Push('keyup',{key:'softDrop',subframe:0});
       if(!matches(step.to,true)){fail('ソフトドロップ');return}
@@ -303,13 +307,15 @@
      if(step.kind==='tap'){if(tap(game,step.key))ex.pending=step;return}
      if(step.kind==='hold'){game.source.Push('keydown',{key:step.key,subframe:0});game._aiHeldKey=step.key;ex.pending={...step,released:false};ex.wait=0;return}
      if(step.kind==='drop'){
+      // rising garbage moves the floor: soft drop only after the rise
+      if((game.state.garbageareentries||[]).length&&deadline.total>12){stats.waitRise=(stats.waitRise||0)+1;game._localBotIntent='ゴミのせり上がり待ち（落下前）';return}
       if(window.LocalAIPlayerSettings?.canUse?.(game,'softDrop')===false||game._aiAllowSoftDrop===false){fail('ソフトドロップ不可');return}
       game.source.Push('keydown',{key:'softDrop',subframe:0});ex.pending=step;ex.wait=0;return;
      }
     }
     if(f.x!==target.final.x||f.r!==target.final.rotation||(ex.grounded&&Math.ceil(f.y)!==target.final.y)||(target.spin&&!(f.flags&8))){fail('最終位置');return}
     const ready=turnReady(),spinNow=!!(target.spin&&(f.flags&8)),fire=spinNow?{hold:false,urgent:true}:attackTiming(game,target,strategy,frame,ready);if(fire.hold){game._localBotIntent='TL: 火力待機（上限あり・被弾時解除）';return}
-    if(ready||fire.urgent||deadline.total<=2){search?.dispose?.();search=null;if(!requestLock(game))return;expected=target?.final?{type:target.type,...target.final}:null;if(expected){stats.plannedDrops++;if(target?.hold)stats.holdPlannedDrops++}if(spinNow)stats.spinLocks++;if(target?.next?.path&&target?.snapshot?.game)forecastCache={plan:target.next,state:target.snapshot.game,knownNext:(target.snapshot._aiKnownNext||[]).slice(0,2)};game._rlDecision=target?.rl||null;commanded=true;lastDropFrame=frame;game._localBotIntent='vAI: '+(target.hold?'HOLD・':'')+(target.spin?'スピン・':'')+(game._aiSeedAccess?'シード参照ON・':'')+'NEXT '+target.depth+'手評価 / '+(target.features[10]?'サージ放出':target.features[9]?'B2B蓄積':'盤面構築');target=null}
+    if((ready||fire.urgent)&&!((game.state.garbageareentries||[]).length&&deadline.total>12)||deadline.total<=2){search?.dispose?.();search=null;if(!requestLock(game))return;expected=target?.final?{type:target.type,...target.final}:null;if(expected){stats.plannedDrops++;if(target?.hold)stats.holdPlannedDrops++}if(spinNow)stats.spinLocks++;if(target?.next?.path&&target?.snapshot?.game)forecastCache={plan:target.next,state:target.snapshot.game,knownNext:(target.snapshot._aiKnownNext||[]).slice(0,2)};game._rlDecision=target?.rl||null;commanded=true;lastDropFrame=frame;game._localBotIntent='vAI: '+(target.hold?'HOLD・':'')+(target.spin?'スピン・':'')+(game._aiSeedAccess?'シード参照ON・':'')+'NEXT '+target.depth+'手評価 / '+(target.features[10]?'サージ放出':target.features[9]?'B2B蓄積':'盤面構築');target=null}
     return;
    }
    if(target?.pre){ // legacy route format (fast/cached plans)
@@ -372,7 +378,7 @@
     }
     if(target.turn&&(f.r!==target.final.rotation||f.x!==target.final.x||Math.ceil(f.y)!==target.final.y||(target.spin&&!(f.flags&8)))){if(target.spin)stats.spinRouteMisses++;target=null;lastPiece=-1;stats.routeFailures++;return}
     const ready=turnReady(),spinNow=!!(target.turn&&target.spin&&(f.flags&8)),fire=spinNow?{hold:false,urgent:true}:attackTiming(game,target,strategy,frame,ready);if(fire.hold){game._localBotIntent='TL: 火力待機（上限あり・被弾時解除）';return}
-    if(ready||fire.urgent||deadline.total<=2){search?.dispose?.();search=null;if(!requestLock(game))return;expected=target?.final?{type:target.type,...target.final}:null;if(expected){stats.plannedDrops++;if(target?.hold)stats.holdPlannedDrops++}if(spinNow)stats.spinLocks++;if(target?.next?.pre&&target?.snapshot?.game)forecastCache={plan:target.next,state:target.snapshot.game,knownNext:(target.snapshot._aiKnownNext||[]).slice(0,2)};game._rlDecision=target?.rl||null;commanded=true;lastDropFrame=frame;game._localBotIntent='vAI: '+(target.hold?'HOLD・':'')+(target.spin?'スピン・':'')+(game._aiSeedAccess?'シード参照ON・':'')+'NEXT '+target.depth+'手評価 / '+(target.features[10]?'サージ放出':target.features[9]?'B2B蓄積':'盤面構築');target=null}
+    if((ready||fire.urgent)&&!((game.state.garbageareentries||[]).length&&deadline.total>12)||deadline.total<=2){search?.dispose?.();search=null;if(!requestLock(game))return;expected=target?.final?{type:target.type,...target.final}:null;if(expected){stats.plannedDrops++;if(target?.hold)stats.holdPlannedDrops++}if(spinNow)stats.spinLocks++;if(target?.next?.pre&&target?.snapshot?.game)forecastCache={plan:target.next,state:target.snapshot.game,knownNext:(target.snapshot._aiKnownNext||[]).slice(0,2)};game._rlDecision=target?.rl||null;commanded=true;lastDropFrame=frame;game._localBotIntent='vAI: '+(target.hold?'HOLD・':'')+(target.spin?'スピン・':'')+(game._aiSeedAccess?'シード参照ON・':'')+'NEXT '+target.depth+'手評価 / '+(target.features[10]?'サージ放出':target.features[9]?'B2B蓄積':'盤面構築');target=null}
     return;
    }
    if(target&&attempts++<24){const f=game.state.falling;

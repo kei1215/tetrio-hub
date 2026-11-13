@@ -377,6 +377,14 @@
   if(game.options.version!==19)throw Error('vAIは現バージョン専用です');
   window.LocalSpinLibrary?.scheduleValidation?.(game);
   const sandbox=LocalNative.createAISandbox(game),base=LocalAIInformation.prepare({...game.ejectState(),_aiSeedAccess:game._aiSeedAccess===true},game._aiNextCount),engine=sandbox.source.self,weights=game._aiWeights||window.LocalBotLearning?.combatWeights?.(game)||DEFAULT;
+  // v4.8273 (user: move while garbage rises): lines already rising have known
+  // holes; plan on the board they will make, so the BOT can move in the air and
+  // only the drop waits for the rise (ai-quick-planner). Not when the piece is
+  // already near the stack.
+  try{const g0=base.game,en=g0.garbageareentries||[];if(en.length&&g0.board&&g0.falling){
+   const W=g0.board[0]?.length||10,rows=en.map(e=>{const r=new Array(W).fill('gb'),c=Number(e.column)||0,z=Math.max(1,Number(e.size)||1);for(let x=c;x<c+z&&x<W;x++)r[x]=null;return r});
+   const nb=g0.board.slice(rows.length).concat(rows),top=nb.findIndex(r=>r.some(c=>c!==null));
+   if(top<0||top>Math.ceil(g0.falling.y)+2){g0.board=nb;g0.garbageareentries=[]}}}catch{}
   const network=Object.hasOwn(game,'_aiPolicy')?game._aiPolicy:window.LocalBotLearning?.combatPolicy?.(game)||null;
   // Unknown future garbage holes never enter candidate boards. Amounts remain
   // available for native cancellation; no live seed or hidden queue is scored.
