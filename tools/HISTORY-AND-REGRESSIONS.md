@@ -56,6 +56,7 @@
 - QP DUO リプレイ保存のブックマークレット(docs/duo-save/)。gsm の受け口はリプレイ盤面修正・カウンターと共有(__rpe)。
 
 - 2026-11-13(未ビルド):AI のルーム対戦(TL・CUSTOM)を1試合1つの .ttrm で保存。ラウンドごとに上書きし、ローカル記録に「名前 vs 名前 勝ち数」で出す(ai-src/engine/local-ai-room.js、offline-src/local-replays.js)。
+- 2026-11-13(v4.8266 ローカルビルド・未公開):vAI テスト設定を Tab パネルへ。対プレーヤー戦の AI を Web Worker で計画(人がいると 1〜2ms×6回で計画が終わらなかった)。BOT の持ち時間を左右均等に(左が先取りしていた)。TL/CUSTOM の勝率予測ゲージ(Tab で非表示可。Node 対戦 88 試合で学習、的中 71%)。Node 対戦ハーネス(private-ai/vA-cc2/versus.mjs、CC2 入りは非公開):同じ 4 PPS で vA は CC2 に 0勝16敗(APP 0.59 対 0.89)。
 
 ## 2. 再発チェック(過去に壊れたもの)
 
@@ -88,6 +89,8 @@
 | 裏 DUO の MP4 が1回目に倒れたところで止まる | エンジンに DUO の「倒れて蘇生を待つ」がなく、そのまま GAME OVER にしていた。倒れたときの盤面の黒化で rngex を1ブロック1回使う点、ロック中に自分に返る攻撃では押し上げをしない点も合わせた | 2人分の裏 DUO .ttrm を MATCH=1 の verify-stats で:相方 ALL OK、自分 622/629 以上。ほかの QP・TL・40L・Warlock・AI のリプレイも ALL OK |
 | AI 版が GitHub のリリースから誰でも取れる | 未解決。配布方法はユーザーが決める | — |
 | AI のルーム対戦が1人ずつの .ttr に分かれ、試合として見られない | 1試合を1つの .ttrm(公式と同じ rounds の形)にまとめる | 実 TL の .ttrm をこの形で作り直して verify-stats:ALL OK(8ラウンド×2人)。ゲーム内は未確認 |
+| 対プレーヤー戦で AI が極端に弱い | humanActive で planner が 1〜2ms×最大6スライス。Worker(createAsync)で最後まで計画 | Node の Worker 代替で同期版と同じ答え。ゲーム内は未確認 |
+| TL/CUSTOM で左の BOT が速く右が負けやすい | フレーム予算 4.5ms を先着順で配分(左が 2.4ms 取る)。BOT ごとに均等配分 | 2 BOT の模擬で 1350 対 1350 ms。ゲーム内は未確認 |
 
 ## 3. 守ること(ユーザーのルール)
 - 旧サイト kei1215/kei1215.github.io は読み取り専用。
