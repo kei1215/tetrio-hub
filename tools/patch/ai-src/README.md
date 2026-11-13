@@ -27,7 +27,7 @@ v4.8246 Spin B2B mode (vA option "BOT: Spin B2B モード", localStorage
   clears are avoided (Quad / any clear only near top-out). Zero-line spins are
   penalised in every mode except All-Spin / Warlock mods and revive missions.
   With the option OFF the evaluation is the v4.8245 one.
-- `engine/qp-ai-options.js`: the checkbox. `engine/live-bot-controller.js`:
+- `engine/qp-ai-options.js`: I5 / extra O in the QP settings; the vAI test settings (BOT mode, PPS, preview, TTR import) in the Tab panel. `engine/live-bot-controller.js`:
   reads it every piece into `game._aiTSpinB2B`.
 - `ai-loader.js`: loads `ai-spin-planner.js`.
 

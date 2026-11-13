@@ -1,18 +1,27 @@
-/* vA-only options shown inside the native QP settings panel.
-   These flags are read by the local version-19 game setup; they do not alter
-   online play or send any configuration to the network. */
+/* vA-only options. I5 / extra O stay in the native QP settings panel; the
+   vAI test settings (BOT mode, PPS, placement preview, TTR import) live in
+   the Tab panel (#local-panel), next to the AI target. These flags are read
+   by the local version-19 game setup; they do not alter online play or send
+   any configuration to the network. */
 (() => {
- const attach=()=>{
+ const flagIn=(section,key,label,defaultValue)=>{
+  const row=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.checked=localStorage.getItem(key)===null?defaultValue:localStorage.getItem(key)==='true';input.addEventListener('change',()=>localStorage.setItem(key,String(input.checked)));row.append(input,document.createTextNode(label));section.appendChild(row);return row;
+ };
+ const attachQP=()=>{
   const settings=document.getElementById('qp-local-settings');if(!settings||document.getElementById('qp-ai-options'))return;
   const section=document.createElement('div');section.id='qp-ai-options';
-  const heading=document.createElement('p');heading.textContent='vAI テスト設定（ローカルQPのみ）';section.appendChild(heading);
-  const flag=(key,label,defaultValue)=>{
-   const row=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.checked=localStorage.getItem(key)===null?defaultValue:localStorage.getItem(key)==='true';input.addEventListener('change',()=>localStorage.setItem(key,String(input.checked)));row.append(input,document.createTextNode(label));section.appendChild(row);
-  };
-  flag('qp-local-allow-i5','I5の出現を許可（元の発生条件に従う）',true);
-  flag('qp-local-extra-o','Oミノの増加を許可（元の発生条件に従う）',true);
+  flagIn(section,'qp-local-allow-i5','I5の出現を許可（元の発生条件に従う）',true);
+  flagIn(section,'qp-local-extra-o','Oミノの増加を許可（元の発生条件に従う）',true);
+  settings.appendChild(section);
+ };
+ const attach=()=>{
+  attachQP();
+  const panel=document.getElementById('local-panel');if(!panel||document.getElementById('qp-ai-test-settings'))return;
+  const section=document.createElement('details');section.id='qp-ai-test-settings';section.open=true;
+  const heading=document.createElement('summary');heading.textContent='vAI テスト設定（ローカルQPのみ）';section.appendChild(heading);
+  const flag=(key,label,defaultValue)=>{flagIn(section,key,label,defaultValue).style.display='block'};
   flag('qp-local-ai-tspin-b2b','BOT: Spin B2B モード（既定ON。QP・40L・TL・CUSTOMで、T-Spin多めのSpinだけでB2Bをつなぐ。攻撃が来たら相殺か受けるかを高さで決める）',true);
-  const ppsLabel=document.createElement('label');ppsLabel.append(document.createTextNode('BOT目標PPS（0.1〜20・ゲーム内時間基準）'));
+  const ppsLabel=document.createElement('label');ppsLabel.style.display='block';ppsLabel.append(document.createTextNode('BOT目標PPS（0.1〜20・ゲーム内時間基準）'));
   const pps=document.createElement('input');pps.type='number';pps.min='0.1';pps.max='20';pps.step='0.1';pps.value=localStorage.getItem('qp-local-bot-pps')||'2';pps.addEventListener('change',()=>{const value=Math.max(.1,Math.min(20,Number(pps.value)||2));pps.value=String(value);localStorage.setItem('qp-local-bot-pps',String(value))});ppsLabel.appendChild(pps);section.appendChild(ppsLabel);
   const previewMode=document.createElement('label');previewMode.textContent='配置予測の表示 ';
   const previewSelect=document.createElement('select');previewSelect.setAttribute('aria-label','AI配置予測表示');
@@ -34,7 +43,8 @@
   openings.textContent='記録した開幕配置: '+openingStats.length+'種類'+(openingStats.length?' / 最多'+openingStats[0].uses+'回':'');section.appendChild(openings);
   const previewNote=document.createElement('small');previewNote.textContent='プレイヤーの実際のSpin直前の構造から、壁・屋根と後続の回転候補を1案ずつ描きます（最大5案切替）。同じミノの配置違いで候補を埋めず、CURRENT/HOLD/NEXTで確定した2手と将来構想を区別します。Spin成功の保証はありません。学習データがなければ予測は表示しません。';section.appendChild(previewNote);
   const note=document.createElement('p');note.textContent='保存AI・相方AI・攻撃設定はAI管理の「プレイ・対戦」にあります。vOにはこの項目を表示しません。';section.appendChild(note);
-  settings.appendChild(section);
+  // Right under the AI target box at the top of the Tab panel.
+  const quick=document.getElementById('local-ai-quick');if(quick&&quick.parentNode===panel)quick.after(section);else panel.prepend(section);
  };
  new MutationObserver(attach).observe(document.documentElement,{childList:true,subtree:true});
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attach,{once:true});else attach();
