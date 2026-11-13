@@ -332,7 +332,7 @@
  // garbage while height + incoming <= 14 else cancel (no forced B2B break),
  // value an open dig column, no 1-line non-T minis. APP 0.71 -> 0.80, wins 2 -> 3-4 of 32.
  const T_STYLE={wastedT:30,tFull:[0,10,45,90],tsdReady:40,tstReady:90,mini:[0,0,8,14],tPotK:6,atkOther:1,tShape:10,
-  sealed:14,trap:7.4,tuck:6,tuckReady:-2.8,bump:3.7,bumpSq:.33,height:-1.7,peak:5.1,top:6.4,dead:-.7,well:-4.1,takeMax:14,dig:4,cancelW:0};
+  sealed:14,trap:7.4,tuck:6,tuckReady:-2.8,bump:3.7,bumpSq:.33,height:-1.7,peak:5.1,top:6.4,dead:-.7,well:-4.1,takeMax:14,dig:4,cancelW:0,gHole:3,surviveNoClear:8,surviveCombo:2};
  const B2BP=window.__b2bParams||(window.__b2bParams={});
  const bp=(k,d)=>B2BP[k]??d;
  function spinTerrain(board){
@@ -528,6 +528,14 @@
    out.incoming=incoming+(margin<8?Math.round(series):0);
    out.cancelW=!incoming?0:margin<4?4+.5*g.peak:margin<8?1.5:0;
    out.cashout=50;
+   // Where the waiting garbage will have its holes (garbage RNG copied, nothing changed).
+   try{const P=window.LocalSpinPlanner;if(P?.predictHoles&&state.rngex&&!o.zenith&&!Number(o.garbagefavor)&&incoming>0){
+    const f=typeof game.getFrame==='function'?game.getFrame():0,entries=(state.garbageareentries||[]).map(e=>e.column);
+    const items=(state.impendingdamage||[]).filter(d=>d.active!==false&&d.amt>0).map(d=>({amt:d.amt,column:d.column??null}));
+    out.garbageHoles=entries.concat(P.predictHoles({seed:state.rngex.seed,lastColumn:state.lastcolumn??null,changed:!!state.haschangedcolumn,
+     inner:Number(o.messiness_inner)||0,change:Number(o.messiness_change)||0,timeout:!!(o.messiness_timeout&&!state.haschangedcolumn&&f>=(state.lasttanktime||0)+o.messiness_timeout),
+     nosame:!!o.messiness_nosame,center:!!o.messiness_center,width:Math.max(1,(Number(o.boardwidth)||10)-((Number(o.garbageholesize)||1)-1)),items}));
+    if(Number(o.garbagecap))out.garbageCap=Number(o.garbagecap)}}catch{}
    // What the opponent can fire soon (2026-11-13, user: a cancel can be dodged, and two
    // attacks ready beat one cancel): their B2B charge if they break now, plus a typical
    // spin. Taking garbage must leave room for it; see takeMax / danger in the planner.

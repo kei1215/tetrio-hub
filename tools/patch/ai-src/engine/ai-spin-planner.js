@@ -164,8 +164,12 @@
   // exactly 9 cells, counted up from the floor.
   let ownOver=0;if(P.own){let g=0;for(let y=H-1;y>=0;y--){let f=0;for(let b=rows[y];b;b&=b-1)f++;if(f===W-1)g++;else break}ownOver=Math.max(0,sum/W-g-(P.ownCap||4))}
   let dig=0;if(P.dig){for(let x=0;x<W;x++){const bit=1<<x;let n=0;for(let y=H-heights[x]-1;y>=0&&n<4;y--){if((rows[y]|bit)===FULL&&!(rows[y]&bit))n++;else break}if(n>dig)dig=n}}
+  // Garbage holes to dig next (v4.8270, user: keep about 3 groups in mind): own
+  // cells stacked in the hole column of the top garbage groups bury the dig.
+  let gCover=0;if(P.gHole){const seg=[];let y=H-1;for(;y>=0;y--){const e=~rows[y]&FULL;if(!rows[y]||e&(e-1))break;const c=31-Math.clz32(e);if(!seg.length||seg[seg.length-1]!==c)seg.push(c)}
+   if(seg.length){const top=y,wk=[1,.6,.3];for(let k=0;k<3&&k<seg.length;k++){const bit=1<<seg[seg.length-1-k];let n=0;for(let yy=top;yy>=0;yy--)if(rows[yy]&bit)n++;gCover+=wk[k]*Math.min(6,n)}}}
   const tShape=P.tShape?P.tShape*tShapeValue(rows,P.tShapeTable||root.LocalTShapeTable):0;
- return tShape-P.sealed*sealed-P.trap*trap-P.tuck*tuck+P.tuckReady*tuckReady-P.bump*bump-P.bumpSq*bumpSq-P.height*sum/W-P.peak*Math.max(0,peak-P.safePeak)-P.top*Math.max(0,peak-P.topPeak)-P.dead*dead+P.well*well-(P.edgeCave||0)*edgeCave+(P.dig||0)*dig+(P.ren||0)*ren-(P.tuckSparse||0)*tuckSparse-(P.own||0)*ownOver*ownOver;
+ return -(P.gHole||0)*gCover+tShape-P.sealed*sealed-P.trap*trap-P.tuck*tuck+P.tuckReady*tuckReady-P.bump*bump-P.bumpSq*bumpSq-P.height*sum/W-P.peak*Math.max(0,peak-P.safePeak)-P.top*Math.max(0,peak-P.topPeak)-P.dead*dead+P.well*well-(P.edgeCave||0)*edgeCave+(P.dig||0)*dig+(P.ren||0)*ren-(P.tuckSparse||0)*tuckSparse-(P.own||0)*ownOver*ownOver;
  }
  /* T-Spin terrain sense (2026-11-13): shape patterns learned from real TL
     replays (the user and 5han), scored by how often a TSD / TST followed within
@@ -191,6 +195,26 @@
   if(!table)return 0;let m=-Infinity;const ks=tShapeKeys(rows),v=new Array(ks.length);
   for(let i=0;i<ks.length;i++){v[i]=table[ks[i]]||0;if(v[i]>m)m=v[i]}
   let z=0;for(const a of v)z+=Math.exp(a-m);return m+Math.log(z)-Math.log(ks.length);
+ }
+ // n garbage rows pushed under the stack; the hole stays where the bottom
+ // garbage row has it (TETR.IO keeps a column for a while), else column 0.
+ function withGarbage(rows,n,cols,gi){const b=rows[rows.length-1],hole=b&&((~b&FULL)&((~b&FULL)-1))===0&&(~b&FULL)?(~b&FULL):1;
+  const out=rows.slice(n);for(let i=0;i<n;i++){const c=cols?.[gi+i];out.push(FULL&~(c!=null?1<<c:hole))}return out}
+ /* Hole columns of the garbage waiting, in the order it enters (v4.8270, user: the seed may
+    be read so the BOT can dig what it takes). Same steps as TETR.IO's TakeAllDamage with
+    the garbage RNG copied: s = {seed, lastColumn, changed, inner, change, timeout, nosame,
+    center, width, items:[{amt, column}]}. Cancelling and the cap can shift it a little. */
+ function predictHoles(s){
+  let seed=s.seed%2147483647;if(seed<=0)seed=(seed+2147483646)||1;
+  const rnd=()=>(seed=16807*seed%2147483647,(seed-1)/2147483646),width=s.width||W;
+  let last=s.lastColumn??null,changed=!!s.changed;const out=[];
+  const reroll=()=>{const cb=s.center?Math.round(W/5):0;let n;if(s.nosame&&last!==null){n=cb+Math.floor(rnd()*(width-1-2*cb));if(n>=last)n++}else n=cb+Math.floor(rnd()*(width-2*cb));return last=n};
+  if(s.timeout&&!changed){reroll();changed=true}
+  for(const it of s.items||[])for(let a=it.amt;a>0&&out.length<40;a--){
+   let c=last;if(it.column!=null)c=it.column;else if(last===null||rnd()<(s.inner||0)){if(!changed){c=reroll();changed=true}}
+   out.push(c==null?0:c);changed=false;
+   if(a===1&&rnd()<(s.change||0)){reroll();changed=true}}
+  return out;
  }
  function tPotential(rows,P){
   let best=0;
@@ -247,7 +271,7 @@
     for(const [type,hold,qi,held] of options){
      for(const p of placements(node.rows,type)){
       const res=place(node.rows,type,p);
-      let gain=0,b2b=node.b2b,tplOff=node.tplOff,inc=node.incoming||0,pendS=node.pendS||0,pendR=node.pendR||0;
+      let gain=0,b2b=node.b2b,tplOff=node.tplOff,inc=node.incoming||0,gi=node.gi||0,pendS=node.pendS||0,pendR=node.pendR||0;
       if(tpl.size&&!tplOff){const cells=tables.shapes[type][p.r];const k=type+'|'+cells.map(([cx,cy])=>(p.x+cx)+','+(p.y+cy)).sort().join(';');const v=tpl.get(k);if(v)gain+=v}
       if(res.lines){
        const combo=(node.combo||0)+1;
@@ -270,7 +294,7 @@
        // otherwise be sent (and in QP climb), so take the garbage instead.
        // Take or cancel by height: low board -> take it and keep the attack;
        // a board that would not survive the garbage -> cancel (P.takeMax rows).
-       if(inc>0){const c=Math.min(inc,atk);if(P.cancelW>0)gain+=P.cancelW*c;else if(P.takeMax&&heightBefore+inc+(P.threat||0)>P.takeMax)gain+=(P.cancelHi||4)*c;else gain-=P.atk*P.cancelLoss*c;inc-=c}
+       if(inc>0){const c=Math.min(inc,atk);if(P.cancelW>0)gain+=P.cancelW*c;else if(P.takeMax&&heightBefore+inc+(P.threat||0)>P.takeMax)gain+=(P.cancelHi||4)*c;else gain-=P.atk*P.cancelLoss*c;inc-=c;gi+=c}
        if(p.spin){let g=(type==='t'?(p.spin===2?P.tFull:P.tMini):P.mini)[Math.min(3,res.lines)];
         // Where the player makes spins (centre / edge), from their own data.
         if(colW&&g>0){const cells=tables.shapes[type][p.r];const cx=Math.round(cells.reduce((a,[x])=>a+x,0)/4+p.x);g*=colW[Math.max(0,Math.min(W-1,cx))]}
@@ -293,15 +317,26 @@
        tplOff=true;
       }else{pendS=pendR=0;if(p.spin&&!p.plain)gain+=P.zeroSpin}
       // A piece that clears nothing lets the waiting garbage in.
-      if(!res.lines&&inc>0&&P.cancelW===0)inc=0;
+      // v4.8270: the garbage really rises under the stack (it used to vanish,
+      // so taking garbage looked free and a second batch topped the BOT out).
+      // Surviving (v4.8270, user: unless there is really none, pick pieces that keep
+      // clearing): while the waiting garbage would not fit, a clear holds it out
+      // (TETR.IO lets garbage in only on a lock that clears nothing), so a piece
+      // that clears nothing is bad and a run of clears is good.
+      if(P.surviveNoClear&&(node.incoming||0)>0&&heightBefore+(node.incoming||0)+(P.threat||0)>(P.takeMax||14)){
+       if(res.lines)gain+=(P.surviveCombo||0)*Math.min(6,(node.combo||0)+1);else gain-=P.surviveNoClear}
+      let rowsOut=res.rows;
+      if(!res.lines&&inc>0&&P.cancelW===0){const k=Math.min(inc,H,P.garbageCap||inc);rowsOut=withGarbage(res.rows,k,P.garbageHoles,gi);inc-=k;gi+=k;
+       let h=0;for(let y=0;y<H;y++)if(rowsOut[y]){h=H-y;break}
+       if(h>=(P.topOut||20))gain-=P.topOutPen??1000}
       if(type==='t'&&!(p.spin&&res.lines&&(p.spin===2||!P.tMiniWasted))&&!danger)gain-=P.wastedT;
       const nextCur=qi<queue.length?queue[qi]:null;
       // Transpositions (same board, same HOLD / next piece) waste the beam.
-      let hash=hold?hold.charCodeAt(0):1;for(let y=0;y<H;y++)hash=Math.imul(hash,31)+res.rows[y]|0;
+      let hash=hold?hold.charCodeAt(0):1;for(let y=0;y<H;y++)hash=Math.imul(hash,31)+rowsOut[y]|0;
       const acc=node.acc+gain*Math.pow(P.depthDecay,d),key=hash+':'+(nextCur||'');
       if(seen.has(key))continue;seen.add(key);
-      const child={rows:res.rows,cur:nextCur,hold,qi:qi+1,acc,tplOff,incoming:inc,pendS,pendR,combo:res.lines?(node.combo||0)+1:0,attack:(node.attack||0)+(res.lines?attackOf(type,p.spin,res.lines,node.b2b,P.combo?(node.combo||0)+1:1):0),first:node.first||{x:p.x,y:p.y,r:p.r,hold:held,spin:p.spin,type},b2b,spins:node.spins+(p.spin&&res.lines?1:0)};
-      child.value=acc+boardValue(res.rows,P);
+      const child={rows:rowsOut,cur:nextCur,hold,qi:qi+1,acc,tplOff,incoming:inc,gi,pendS,pendR,combo:res.lines?(node.combo||0)+1:0,attack:(node.attack||0)+(res.lines?attackOf(type,p.spin,res.lines,node.b2b,P.combo?(node.combo||0)+1:1):0),first:node.first||{x:p.x,y:p.y,r:p.r,hold:held,spin:p.spin,type},b2b,spins:node.spins+(p.spin&&res.lines?1:0)};
+      child.value=acc+boardValue(rowsOut,P);
       children.push(child);
      }
      yield;
@@ -428,6 +463,6 @@
    get stopped(){return stoppedEarly},stop(){if(fallback)return fallback.stop();if(!done){done=true;stoppedEarly=true;result=job.best;if(jobs.delete(id))w.load=Math.max(0,w.load-1);try{w.postMessage({cancel:id})}catch{}}return result},
   };
  }
- const api={attackOf,setTables,create,createAsync,plan,placements,place,boardValue,load,matchCells,tShapeKeys,tShapeValue,DEFAULTS};
+ const api={attackOf,setTables,create,createAsync,plan,placements,place,boardValue,load,matchCells,tShapeKeys,tShapeValue,predictHoles,DEFAULTS};
  if(typeof module!=='undefined')module.exports=api;else root.LocalSpinPlanner=api;
 })(typeof window==='undefined'?globalThis:window);
