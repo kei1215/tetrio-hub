@@ -23,6 +23,7 @@
   flag('qp-local-ai-tspin-b2b','BOT: Spin B2B モード（既定ON。QP・40L・TL・CUSTOMで、T-Spin多めのSpinだけでB2Bをつなぐ。攻撃が来たら相殺か受けるかを高さで決める）',true);
   flag('qp-win-gauge','対戦の勝率予測ゲージを表示（TL・CUSTOM。盤面から左右の勝率を予測）',true);
   flag('qp-ai-sync-player','プレーヤーと同時に置く（TL・CUSTOM の対プレーヤー戦。プレーヤーが1つ置くたびにBOTも1つ置き、PPSを揃える）',false);
+  flag('qp-ai-misdrop','置きミスを再現する（既定OFF。ときどき1列ずれて置く。悪い手として扱い、学習や修正ツールの指摘には使わない）',false);
   const ppsLabel=document.createElement('label');ppsLabel.style.display='block';ppsLabel.append(document.createTextNode('BOT目標PPS（0.1〜20・ゲーム内時間基準）'));
   const pps=document.createElement('input');pps.type='number';pps.min='0.1';pps.max='20';pps.step='0.1';pps.value=localStorage.getItem('qp-local-bot-pps')||'2';pps.addEventListener('change',()=>{const value=Math.max(.1,Math.min(20,Number(pps.value)||2));pps.value=String(value);localStorage.setItem('qp-local-bot-pps',String(value))});ppsLabel.appendChild(pps);section.appendChild(ppsLabel);
   // Compute power: auto measures this PC and fits the plan to the target PPS.

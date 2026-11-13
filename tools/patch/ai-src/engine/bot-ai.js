@@ -469,7 +469,7 @@
   const rootLimit=settings.realtime?(settings.humanActive?5:Math.max(5,Math.min(12,Math.floor((Number(settings.rootBudget)||24)/3)))):Infinity;
   // The plan runs in time slices inside step(), so a live frame never stalls
   // on it; the native root candidates are built once it is done.
-  let spinPlan=null,planner=null,planSlices=0,planFrameCap=Infinity,planWidth=24;
+  let spinPlan=null,planner=null,planSlices=0,planFrameCap=Infinity,planWidth=24,rootQueue=null;
   // vA private builds: an outside engine decides (see below); public builds have none.
   const externalPlan=!!window.LocalExternalAI?.active?.(game)&&!!base.game.falling?.type&&!settings.fast;
   if(tspinB2B&&!externalPlan&&window.LocalSpinPlanner&&base.game.falling?.type&&!settings.fast){
@@ -542,9 +542,15 @@
    return out;
   }
   function buildRoot(){
-   let planMs=0;if(planner){planMs=planner.spent;const p=planner.done?planner.result():planner.stop();spinPlan=p?{...p,key:cellKey(p.type,p.x,p.y,p.r)}:null;planner=null}
+   // Diagnostics (saved with local TL / CUSTOM TTRMs as replay.aiDebug): how
+   // often the spin plan exists, was cut by the clock, is reachable natively and
+   // is actually played.
+   const ps=game._aiPlanStats??={plans:0,noPlan:0,cut:0,notFound:0,played:0,spinMismatch:0,ms:0,width:0,async:0};
+   let planMs=0;if(planner){planMs=planner.spent;ps.plans++;ps.ms+=planMs;ps.width+=planWidth;if(planner.async)ps.async++;const cut=!planner.done;const p=planner.done?planner.result():planner.stop();if(cut||planner.stopped)ps.cut++;spinPlan=p?{...p,key:cellKey(p.type,p.x,p.y,p.r)}:null;if(!p)ps.noPlan++;planner=null}
    game._localSpinPlan=spinPlan;
    queue=nodeChoices(base,!botPolicy?.ownDanger||tspinB2B,rootLimit,spinPlan);
+   if(spinPlan&&!queue.some(c=>c.planned))ps.notFound++;
+   rootQueue=queue;
    if(settings.fast)queue=queue.slice(0,6);
    rootBudget=queue.length;cursor=0;
    game._localSpinAudit={enumerated:queue.filter(c=>c.spin).length,generated:queue.length,checked:0,rootChecked:0,lookaheadChecked:0,rootBudget:queue.length,scriptTrials:0,nativeSpinHits:0,spinClears:0,selectedSpin:false,rules:rules0,plan:spinPlan,planMs};
@@ -628,7 +634,18 @@
       const result={...choice,structuralRisk,edgeAccess:edgeAfter,clearedRows,boardRows:before.board.length,route,routeStart:{x:before.falling.x,r:before.falling.r},type:before.falling.type,cells,pre,final,spinSteps,spinTrace,trace:spinTrace,path:route,features,input,score,snapshot:LocalAIInformation.after(sandbox.ejectState(),choice.start||snapshot),spin,nativeSpinClear,depth:1};return result;
   }
   function planAt(root,index){let plan=root;for(let i=0;i<index&&plan;i++)plan=plan.nextPlan||plan.next;return plan}
-  const previewChoices=()=>settings.humanActive?[]:roots.filter(r=>r&&r.score> -100000&&r.route&&Array.isArray(r.cells)).map(({cells,route,turn,spin,features,hold,type,score})=>({cells,route,turn,spin,features,hold,type,score})).sort((a,b)=>b.score-a.score).slice(0,24);function finish(){const priorityRoots=roots.filter(r=>r.score> -100000);if(priorityRoots.length&&!settings.collect){
+  /* Misdrops (Tab: 置きミスを再現, off by default). A human-like slip: the
+     chosen piece lands one column off (same piece, rotation and HOLD). They are
+     bad moves on purpose: nothing learns them as good terrain, and review tools
+     do not point them out. Rate: qp-ai-misdrop-rate (default 3%). */
+  function misdrop(){
+   let on=false,rate=.03;try{on=localStorage.getItem('qp-ai-misdrop')==='true';rate=Math.max(0,Math.min(.3,Number(localStorage.getItem('qp-ai-misdrop-rate')??.03)||0))}catch{}
+   if(!on||settings.collect||!best||!rootQueue?.length||Math.random()>=rate)return;
+   const dx=Math.random()<.5?-1:1,c=rootQueue.find(q=>q.type===best.type&&!!q.hold===!!best.hold&&q.rotation===best.rotation&&q.x===best.x+dx&&!q.spin)||rootQueue.find(q=>q.type===best.type&&!!q.hold===!!best.hold&&q.rotation===best.rotation&&q.x===best.x-dx&&!q.spin);
+   if(!c)return;const r=evaluate(c,base,true);if(!r||r.score<=-1e5)return;
+   r.misdrop=true;roots=[r];best=r;game._aiMisdrops=(game._aiMisdrops||0)+1;if(game._aiPlanStats)game._aiPlanStats.misdrops=(game._aiPlanStats.misdrops||0)+1;
+  }
+  const previewChoices=()=>settings.humanActive?[]:roots.filter(r=>r&&r.score> -100000&&r.route&&Array.isArray(r.cells)).map(({cells,route,turn,spin,features,hold,type,score})=>({cells,route,turn,spin,features,hold,type,score})).sort((a,b)=>b.score-a.score).slice(0,24);function finish(){misdrop();const priorityRoots=roots.filter(r=>r.score> -100000);if(priorityRoots.length&&!settings.collect){
     const effective=r=>{const future=Number(r.futureScore??r.score);const delta=Number(r.structuralRisk)||0;
      return future-Math.min(180,delta)*.65;
     };
@@ -668,7 +685,7 @@
      // Spin B2B mode: the planner reproduces the native rules exactly, so a
      // planned placement whose keys, kicks and spin flag the sandbox confirmed
      // is played as is (the remaining native checks only cost time).
-     if((tspinB2B||externalPlan)&&result.planned&&result.score>-1e5&&(!spinPlan?.spin||result.spin)){roots=[result];best=result;return finish()}}
+     if((tspinB2B||externalPlan)&&result.planned&&result.score>-1e5&&(!spinPlan?.spin||result.spin)){roots=[result];best=result;if(game._aiPlanStats)game._aiPlanStats.played++;return finish()}if(result.planned&&spinPlan?.spin&&!result.spin&&game._aiPlanStats)game._aiPlanStats.spinMismatch++;}
     else {if(result.score< -100000)continue;depth=Math.max(depth,phase+1);let combined=result.score*Math.pow(.65,phase),weight=Math.pow(.65,phase);for(let i=0;i<phase;i++){combined+=planAt(root,i).score*Math.pow(.65,i);weight+=Math.pow(.65,i)}combined/=weight;root.depthScores??={};if(combined>(root.depthScores[phase]??-Infinity)){root.depthScores[phase]=combined;const parent=planAt(root,phase-1);if(phase===1)parent.nextPlan=result;else parent.next=result;root.futureScore=combined;root.depth=phase+1}const winner=roots.reduce((a,b)=>(a.futureScore??a.score)>(b.futureScore??b.score)?a:b);best={...winner,lookaheadScore:winner.futureScore??winner.score,depth:winner.depth,next:winner.nextPlan}}
 
    }return {done:false,best,previewChoices:previewChoices()}},dispose(){planner=null;return finish()},get candidates(){return queue.length},get depth(){return depth}};
