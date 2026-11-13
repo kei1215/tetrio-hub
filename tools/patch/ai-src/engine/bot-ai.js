@@ -506,7 +506,7 @@
       // Solo (QP, no opponent, v4.8271): T_STYLE's height / well / dead terms came from
       // TL games, where garbage keeps the board low; alone they let the stack grow
       // (QP 2026-11-13: mean height 8.3 -> 12, 10311 m -> 2099 m). Keep the board low.
-      ...(tStyle&&!game._localTLPeer?{height:2,dead:1.5,well:2}:{}),
+      ...(tStyle&&!game._localTLPeer?{height:2,dead:1.5}:{}),
       // Weight self-tuning (Tab: vAI 重みの自動調整): the incumbent or the candidate under test.
       ...(tStyle&&window.LocalAITuner?.params(T_STYLE)||{}),
       // The room's rotation rules: kick table, 180 on/off, and high gravity
@@ -544,6 +544,9 @@
    out.incoming=incoming+(margin<8?Math.round(series):0);
    out.cancelW=!incoming?0:margin<4?4+.5*g.peak:margin<8?1.5:0;
    out.cashout=50;
+   // Real garbage rows (+ what is waiting): gHole only looks at those (v4.8274: in solo
+   // QP own 9-cell rows were taken for garbage and T-Spin overhangs were avoided).
+   out.gRows=(state.board||[]).filter(r=>r.some(c=>c==='gb')).length+incoming;
    // Where the waiting garbage will have its holes (garbage RNG copied, nothing changed).
    try{const P=window.LocalSpinPlanner;if(P?.predictHoles&&state.rngex&&!o.zenith&&!Number(o.garbagefavor)&&incoming>0){
     const f=typeof game.getFrame==='function'?game.getFrame():0,entries=(state.garbageareentries||[]).map(e=>e.column);

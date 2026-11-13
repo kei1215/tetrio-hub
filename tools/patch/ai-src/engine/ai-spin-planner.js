@@ -166,7 +166,7 @@
   let dig=0;if(P.dig){for(let x=0;x<W;x++){const bit=1<<x;let n=0;for(let y=H-heights[x]-1;y>=0&&n<4;y--){if((rows[y]|bit)===FULL&&!(rows[y]&bit))n++;else break}if(n>dig)dig=n}}
   // Garbage holes to dig next (v4.8270, user: keep about 3 groups in mind): own
   // cells stacked in the hole column of the top garbage groups bury the dig.
-  let gCover=0;if(P.gHole){const seg=[];let y=H-1;for(;y>=0;y--){const e=~rows[y]&FULL;if(!rows[y]||e&(e-1))break;const c=31-Math.clz32(e);if(!seg.length||seg[seg.length-1]!==c)seg.push(c)}
+  let gCover=0;if(P.gHole&&P.gRows>0){const seg=[];let y=H-1;for(;y>=Math.max(0,H-P.gRows);y--){const e=~rows[y]&FULL;if(!rows[y]||e&(e-1))break;const c=31-Math.clz32(e);if(!seg.length||seg[seg.length-1]!==c)seg.push(c)}
    if(seg.length){const top=y,wk=[1,.6,.3];for(let k=0;k<3&&k<seg.length;k++){const bit=1<<seg[seg.length-1-k];let n=0;for(let yy=top;yy>=0;yy--)if(rows[yy]&bit)n++;gCover+=wk[k]*Math.min(6,n)}}}
   const tShape=P.tShape?P.tShape*tShapeValue(rows,P.tShapeTable||root.LocalTShapeTable):0;
  return -(P.gHole||0)*gCover+tShape-P.sealed*sealed-P.trap*trap-P.tuck*tuck+P.tuckReady*tuckReady-P.bump*bump-P.bumpSq*bumpSq-P.height*sum/W-P.peak*Math.max(0,peak-P.safePeak)-P.top*Math.max(0,peak-P.topPeak)-P.dead*dead+P.well*well-(P.edgeCave||0)*edgeCave+(P.dig||0)*dig+(P.ren||0)*ren-(P.tuckSparse||0)*tuckSparse-(P.own||0)*ownOver*ownOver;
