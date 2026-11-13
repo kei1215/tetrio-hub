@@ -77,7 +77,7 @@
       const REDIRECT = 'https://kei1215.github.io/tetrio-hub/bookmarklets/auth.html';
       const CACHE = 'qp-ai-discord-v1';
       const KEEP_MS = 24 * 60 * 60 * 1000;
-      const BASE = 'https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.8273/';
+      const BASE = 'https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.8274/';
       const view = document.getElementById('view');
       const store = {
         get(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } },
@@ -106,7 +106,7 @@
         const ul = el('ul');
         for (const [os, ext] of [['Mac', '.command'], ['Windows', '.cmd'], ['Linux', '.sh']]) {
           const li = el('li');
-          li.append(el('a', `${os}(tetrio-patch-${os}-vA4.8273${ext})`, { href: BASE + `tetrio-patch-${os}-vA4.8273${ext}` }));
+          li.append(el('a', `${os}(tetrio-patch-${os}-vA4.8274${ext})`, { href: BASE + `tetrio-patch-${os}-vA4.8274${ext}` }));
           ul.append(li);
         }
         view.append(ul);
