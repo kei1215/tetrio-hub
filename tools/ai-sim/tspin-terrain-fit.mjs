@@ -1,5 +1,6 @@
 // Learn the vA T-Spin terrain table from replay pieces (tspin-terrain-data.mjs output).
-// Label of a board (after a lock): the same player fires a TSD / TST within the next K pieces.
+// Label of a board (after a lock): the same player fires a TSD / TST within the next K pieces
+// (LABEL=atk: sends at least ATK attack within the next K pieces).
 // Model: p = sigmoid(a + LSE_x(w[key_x]) - log 8) over the planner's tShapeKeys (shared weights).
 // Run: node tspin-terrain-fit.mjs <out ai-tshape-table.js> <train.jsonl,...> [--test file.jsonl] [K=6]
 import fs from "node:fs";
@@ -7,12 +8,17 @@ import { createRequire } from "node:module";
 const SP = createRequire(import.meta.url)("../patch/ai-src/engine/ai-spin-planner.js");
 const args = process.argv.slice(2);
 const out = args[0], trainFiles = args[1].split(","), ti = args.indexOf("--test"), testFile = ti > 0 ? args[ti + 1] : null;
-const K = Number(process.env.K || 6);
+const K = Number(process.env.K || 6), LABEL = process.env.LABEL || "tspin", ATK = Number(process.env.ATK || K);
 function load(f) {
-  const L = fs.readFileSync(f, "utf8").trim().split("\n").map(JSON.parse), data = [];
+  // Lines may come interleaved (several processes): order each game by frame.
+  const L = fs.readFileSync(f, "utf8").trim().split("\n").map(JSON.parse).map((l, i) => ((l.i = i), l))
+    .sort((a, b) => `${a.file}|${a.round}|${a.who}`.localeCompare(`${b.file}|${b.round}|${b.who}`) || (a.frame ?? a.i) - (b.frame ?? b.i) || a.i - b.i), data = [];
   for (let i = 0; i < L.length; i++) {
-    let y = 0;
-    for (let j = i + 1; j <= i + K && j < L.length; j++) { const l = L[j]; if (l.file !== L[i].file || l.round !== L[i].round || l.who !== L[i].who) break; if (l.mino === "t" && l.spin === "normal" && l.lines >= 2 && l.lines <= 3) { y = 1; break; } }
+    let y = 0, atk = 0;
+    for (let j = i + 1; j <= i + K && j < L.length; j++) { const l = L[j]; if (l.file !== L[i].file || l.round !== L[i].round || l.who !== L[i].who) break;
+      // LABEL=atk: attack sent in the next K pieces reaches ATK (default K) instead of a TSD / TST.
+      if (LABEL === "atk") { atk += l.atk || 0; if (atk >= ATK) { y = 1; break; } continue; }
+      if (l.mino === "t" && l.spin === "normal" && l.lines >= 2 && l.lines <= 3) { y = 1; break; } }
     if (L[i].lines > 4) continue; // desynced replay pieces
     data.push({ keys: SP.tShapeKeys(L[i].rows), y });
   }

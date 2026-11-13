@@ -1,6 +1,6 @@
 // T-Spin terrain data from real replays (vA AI): replays each round of the given players with the
 // MP4 tool's engine and writes one JSON line per locked piece:
-//   {rows: 40 row masks (y = 0 top), mino, spin, lines, file, round}
+//   {rows: 40 row masks (y = 0 top), pre (rows after the previous lock), cells (planner coords), mino, spin, lines, g (garbage rows), b2b, atk, frame, file, round, who}
 // A learner (tspin-terrain-fit.mjs) labels a board by what the player fired in the next pieces.
 // Build: cd ~/Downloads/tetrio-replay-video && npx --prefix tools esbuild <this> --bundle
 //   --platform=node --format=esm --alias:chalk=./vendor/triangle/chalk-stub.js --outfile=<out.mjs>
@@ -18,13 +18,15 @@ for (const file of files) {
     for (const p of round) {
       if (!names.has(String(p.username).toLowerCase()) || !p.replay?.events) continue;
       const sim = new PlayerSim(p.replay, { ts: p.ts });
-      const lines = [];
+      const lines = []; let prevRows = new Array(40).fill(0);
       for (let guard = 0; guard < 200000 && !sim.finished; guard++) {
         if (sim.step() === null) break;
         for (const lk of sim.frameLocks) {
-          const st = sim.engine.board.state, h = st.length, rows = [];
-          for (let y = 0; y < h; y++) { let m = 0; const row = st[h - 1 - y]; for (let x = 0; x < 10; x++) if (row[x]) m |= 1 << x; rows.push(m); }
-          lines.push(JSON.stringify({ rows, mino: String(lk.res.mino).toLowerCase(), spin: lk.res.spin || "none", lines: lk.res.lines || 0, file: file.split("/").pop(), round: ri, who: p.username }));
+          const st = sim.engine.board.state, h = st.length, rows = []; let gRows = 0;
+          for (let y = 0; y < h; y++) { let m = 0; const row = st[h - 1 - y]; for (let x = 0; x < 10; x++) if (row[x]) m |= 1 << x; rows.push(m); if (row.some((c) => c && c.mino === "gb")) gRows++; }
+          const cells = (lk.cells || []).map(([x, y]) => [x, h - 1 - y]); // planner coords (y = 0 top)
+          lines.push(JSON.stringify({ rows, pre: prevRows, cells, mino: String(lk.res.mino).toLowerCase(), spin: lk.res.spin || "none", lines: lk.res.lines || 0, g: gRows, b2b: sim.engine.stats?.b2b ?? -1, atk: (lk.res.rawGarbage || []).reduce((a, b) => a + b, 0), frame: sim.frame, file: file.split("/").pop(), round: ri, who: p.username }));
+          prevRows = rows;
         }
         if (sim.frame > sim.endFrame + 5) break;
       }

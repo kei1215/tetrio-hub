@@ -10,7 +10,7 @@
     'bot-learning-core.js', 'bot-learning.js', 'rl-launcher.js', 'ttr-learning-format.js',
     'ai-ranking-training.js', 'ttr-learning.js', 'reinforcement-ui.js',
     'reinforcement-charts.js', 'ai-manager.js',
-    'mode-capabilities.js', 'postgame-coach.js', 'qp-ai-options.js'
+    'mode-capabilities.js', 'postgame-coach.js', 'qp-ai-options.js', 'ai-weight-tuner.js'
   ];
   const state = { loaded: false, loading: null, enabled: false, model: null, engineVersion: 'vA-4.8232' };
   const script = src => new Promise((resolve, reject) => {

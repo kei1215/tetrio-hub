@@ -120,8 +120,11 @@
  /* Board value for the chain. Sealed holes (no piece can reach them) are the
     real damage; covered cells a piece can still slide into are spin targets.
     A one-wide open column deeper than two rows is only an I's, never a spin. */
+ const EDGE=0b1100000011;
+ // Sealed holes (empty, covered, not reachable from the top).
+ function sealedCount(rows){let reach=0,above=0,n=0;for(let y=0;y<rows.length;y++){const empty=~rows[y]&FULL;let r=y===0?empty:(reach&empty);for(let k=0;k<W;k++){const m=r|(((r<<1)|(r>>1))&empty);if(m===r)break;r=m}reach=r;for(let b=empty&above&~r;b;b&=b-1)n++;above|=rows[y]}return n}
  function boardValue(rows,P){
-  const H=rows.length,heights=new Array(W).fill(0);let reach=0,above=0,sealed=0,tuck=0,tuckReady=0,trap=0;
+  const H=rows.length,heights=new Array(W).fill(0);let reach=0,above=0,sealed=0,tuck=0,tuckReady=0,trap=0,edgeCave=0,tuckSparse=0;
   for(let y=0;y<H;y++){
    const row=rows[y],empty=~row&FULL;
    let r=(y===0?empty:(reach&empty));
@@ -129,7 +132,12 @@
    reach=r;
    const covered=empty&above;
    if(covered){let fill=0;for(let b=row;b;b&=b-1)fill++;
-    for(let b=covered;b;b&=b-1){const bit=b&-b;if(r&bit){tuck++;if(fill>=8)tuckReady++}else{sealed++;
+    for(let b=covered;b;b&=b-1){const bit=b&-b;if(r&bit){tuck++;if(fill>=8)tuckReady++;
+     // An overhang cave at the wall (cols 0-1 / 8-9): only a J / L back spin
+     // fills it, so the edge no longer takes a clean Quad later.
+     if(bit&EDGE)edgeCave++;
+     // An overhang over a sparse row (<7 filled) is no spin slot yet: a 'strange hole'.
+     if(fill<7)tuckSparse++}else{sealed++;
      // A sealed hole in an almost full row: no spin can finish that row, so
      // digging to it ends the chain (the 'hole at the bottom right').
      if(fill>=7)trap++}}}
@@ -146,8 +154,18 @@
     // rows are counted upward from the well floor
     well=Math.max(well,n)}}
   let bumpSq=0;for(let x=1;x<W;x++){const d=heights[x]-heights[x-1];bumpSq+=d*d}
+  // Dig readiness (any column): rows at the bottom full except one column
+  // that is open from the top, so an I digs them (garbage is dug by Quads).
+  // REN readiness: open rows that are nearly full (8-9 cells, gaps reachable
+  // from the top) are fuel for a combo after the dig / surge.
+  let ren=0;if(P.ren){let reach2=0;for(let y=0;y<H;y++){const empty=~rows[y]&FULL;let r=y===0?empty:(reach2&empty);for(let k=0;k<W;k++){const m=r|(((r<<1)|(r>>1))&empty);if(m===r)break;r=m}reach2=r;let f=0;for(let b=rows[y];b;b&=b-1)f++;if(f>=8&&f<W&&(empty&~r)===0)ren++}ren=Math.min(6,ren)}
+  // Own stack above the garbage (5han: keep it within about 4 lines; 4 lines
+  // are enough for T-Spins / mechanical hearts). Garbage = bottom rows with
+  // exactly 9 cells, counted up from the floor.
+  let ownOver=0;if(P.own){let g=0;for(let y=H-1;y>=0;y--){let f=0;for(let b=rows[y];b;b&=b-1)f++;if(f===W-1)g++;else break}ownOver=Math.max(0,sum/W-g-(P.ownCap||4))}
+  let dig=0;if(P.dig){for(let x=0;x<W;x++){const bit=1<<x;let n=0;for(let y=H-heights[x]-1;y>=0&&n<4;y--){if((rows[y]|bit)===FULL&&!(rows[y]&bit))n++;else break}if(n>dig)dig=n}}
   const tShape=P.tShape?P.tShape*tShapeValue(rows,P.tShapeTable||root.LocalTShapeTable):0;
- return tShape-P.sealed*sealed-P.trap*trap-P.tuck*tuck+P.tuckReady*tuckReady-P.bump*bump-P.bumpSq*bumpSq-P.height*sum/W-P.peak*Math.max(0,peak-P.safePeak)-P.top*Math.max(0,peak-P.topPeak)-P.dead*dead+P.well*well;
+ return tShape-P.sealed*sealed-P.trap*trap-P.tuck*tuck+P.tuckReady*tuckReady-P.bump*bump-P.bumpSq*bumpSq-P.height*sum/W-P.peak*Math.max(0,peak-P.safePeak)-P.top*Math.max(0,peak-P.topPeak)-P.dead*dead+P.well*well-(P.edgeCave||0)*edgeCave+(P.dig||0)*dig+(P.ren||0)*ren-(P.tuckSparse||0)*tuckSparse-(P.own||0)*ownOver*ownOver;
  }
  /* T-Spin terrain sense (2026-11-13): shape patterns learned from real TL
     replays (the user and 5han), scored by how often a TSD / TST followed within
@@ -248,13 +266,18 @@
        // Garbage waiting is cancelled first (automatic in TETR.IO). With little
        // room that is the point; with room it only spends attack that would
        // otherwise be sent (and in QP climb), so take the garbage instead.
-       if(inc>0){const c=Math.min(inc,atk);if(P.cancelW>0)gain+=P.cancelW*c;else gain-=P.atk*P.cancelLoss*c;inc-=c}
+       // Take or cancel by height: low board -> take it and keep the attack;
+       // a board that would not survive the garbage -> cancel (P.takeMax rows).
+       if(inc>0){const c=Math.min(inc,atk);if(P.cancelW>0)gain+=P.cancelW*c;else if(P.takeMax&&heightBefore+inc>P.takeMax)gain+=(P.cancelHi||4)*c;else gain-=P.atk*P.cancelLoss*c;inc-=c}
        if(p.spin){let g=(type==='t'?(p.spin===2?P.tFull:P.tMini):P.mini)[Math.min(3,res.lines)];
         // Where the player makes spins (centre / edge), from their own data.
         if(colW&&g>0){const cells=tables.shapes[type][p.r];const cx=Math.round(cells.reduce((a,[x])=>a+x,0)/4+p.x);g*=colW[Math.max(0,Math.min(W-1,cx))]}
         // The combo multiplier also scales the finisher: a spin after a run of
         // clears is worth more than the same spin fired at once.
         if(P.comboScale&&combo>1&&g>0)g*=1+P.comboScale*(combo-1);
+        // Donation: a T-Spin over a hole is fine only if the hole is still
+        // open after it; one that leaves it sealed buries the dig for good.
+        if(P.donateSeal&&type==='t'){const d=sealedCount(res.rows)-sealedCount(node.rows);if(d>0)g-=P.donateSeal*d}
         gain+=g;b2b++}
        else if(res.lines===4){gain+=(danger?6:P.quad)*(P.comboScale&&combo>1?1+P.comboScale*(combo-1):1);b2b++}
        // Breaking is fine near top-out, under attack when the surge is needed,
