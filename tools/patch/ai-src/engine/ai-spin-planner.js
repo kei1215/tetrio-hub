@@ -360,8 +360,8 @@
   if(!workers){
    if(typeof Worker==='undefined'||typeof Blob==='undefined'||typeof URL==='undefined'||!URL.createObjectURL){workerBroken=true;return null}
    const glue=';('+String(spinPlannerFactory)+')(self);'+WORKER_GLUE;
+   const fileUrl=!fileBroken&&typeof document!=='undefined'&&document.querySelector?.('script[src*="/engine/ai-spin-planner.js"]')?'/engine/ai-plan-worker.js':null;
    try{
-    const fileUrl=!fileBroken&&typeof document!=='undefined'&&document.querySelector?.('script[src*="/engine/ai-spin-planner.js"]')?'/engine/ai-plan-worker.js':null;
     const url=fileUrl||URL.createObjectURL(new Blob([glue],{type:'text/javascript'}));
     const n=Math.max(1,Math.min(4,((typeof navigator!=='undefined'&&navigator.hardwareConcurrency)||2)-1));
     workers=[];

@@ -324,7 +324,10 @@
  // T slots on twice as many boards (plan ~1.6x slower, still time-sliced).
  // tShape: learned T-Spin terrain table (ai-tshape-table.js, user + 5han TL replays).
  // vs Cold Clear 2 at 4 PPS (Node, 32 games): APP 0.59 -> 0.64, T-Spin share 47 -> 55%.
- const T_STYLE={wastedT:30,tFull:[0,10,45,90],tsdReady:40,tstReady:90,mini:[0,0,2,4],tPotK:6,atkOther:.3,tShape:10};
+ // All-Spin back (2026-11-13, user: it lost by never doing All-Spin): non-T attack
+ // counts fully and non-T mini spins keep their value (B2B). vs CC2, 32 games:
+ // wins 0 -> 3, APP 0.64 -> 0.68 (Cold Clear 2 made twice vA's All-Spin attack).
+ const T_STYLE={wastedT:30,tFull:[0,10,45,90],tsdReady:40,tstReady:90,mini:[0,1,8,14],tPotK:6,atkOther:1,tShape:10};
  const B2BP=window.__b2bParams||(window.__b2bParams={});
  const bp=(k,d)=>B2BP[k]??d;
  function spinTerrain(board){
