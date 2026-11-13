@@ -105,13 +105,13 @@
    // A non-realtime caller (step(1e9) in one synchronous loop) gets the full search.
    step(ms = 4) { return job.step(ms >= 1e6 ? 1e6 : Math.max(ms, 6)); },
    // An early finish with too little search returns no move (Cold Clear 2 needs
-   // ~60 ms in Node, more in the browser). Top it up first: at most 80 ms here,
-   // up to 150 ms of search in all, then finish early.
+   // ~60 ms in Node, more in the browser). Top it up first: at most 120 ms here,
+   // up to 250 ms of search in all, then finish early.
    stop() {
     if (!job.done) {
      stats.early++;
      const t0 = performance.now();
-     while (!job.done && (job.spent || 0) < 150 && performance.now() - t0 < 80) job.step(8);
+     while (!job.done && (job.spent || 0) < 250 && performance.now() - t0 < 120) job.step(8);
      if (!job.done) job.stop();
     }
     return convert();

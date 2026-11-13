@@ -661,7 +661,7 @@
     const left=settings.realtime?Number(window.LocalLegacyAI?.timing?.(game)?.total):Infinity;
     // A worker plan (createAsync) costs this thread nothing: only the lock time
     // and the frame cap stop it, not the slice budget meant for in-thread plans.
-    if(!planner.done&&(planSlices>=planFrameCap||!planner.async&&!planner.external&&planSlices>=(settings.realtime?bp('planSlices',(Number(settings.rootBudget)||40)>=40?20:(Number(settings.rootBudget)||40)>=28?10:6):Infinity)||left<bp('planStopFrames',22))){planner._cut=true;planner.stop()}
+    if(!planner.done&&(planner.external?left<8:planSlices>=planFrameCap||!planner.async&&!planner.external&&planSlices>=(settings.realtime?bp('planSlices',(Number(settings.rootBudget)||40)>=40?20:(Number(settings.rootBudget)||40)>=28?10:6):Infinity)||!planner.external&&left<bp('planStopFrames',22))){planner._cut=true;planner.stop()}
     // A worker plan stops at the PPS clock with its deepest finished level, so a
     // high target PPS is met instead of waiting for the whole plan.
     if(!planner.done&&(planner.async||planner.external)&&Number.isFinite(settings.dueAt)&&typeof game.getFrame==='function'&&game.getFrame()>=settings.dueAt-Math.max(1,Math.min(4,Math.floor(Number(settings.interval)/4)))&&(planner.external||planner.result())){planner._cut=true;planner.stop()}
