@@ -190,6 +190,13 @@
    if(task==='rotate'&&!strategy.ownDanger&&rotations<16&&frame%2===0){if(tap(game,'rotateCW'))rotations++;return}
    if(key!==policyKey){if(game.state.inputSoftdrop)game.source.Push('keyup',{key:'softDrop',subframe:.5});policyKey=key;lastPiece=-1;search?.dispose?.();search=null;target=null;forecastCache=null}
 
+   // v4.8272 (user: spins fail while garbage rises): rising garbage lines move the
+   // board under a route planned on the old one. Wait for the rise before planning
+   // (bounded by the lock deadline), and drop a plan whose board has changed.
+   {const rising=(game.state.garbageareentries||[]).length>0;
+    if(rising&&deadline.total>24&&!target?.exec?.grounded){if(target)releaseKeys(game,target);target=null;search?.dispose?.();search=null;lastPiece=-1;stats.waitRise=(stats.waitRise||0)+1;game._localBotIntent='ゴミのせり上がり待ち';return}
+    const bk=boardKey(game.state.board);if(target&&!target.boardKey)target.boardKey=bk;
+    if(target&&target.boardKey!==bk){releaseKeys(game,target);stats.boardMoved=(stats.boardMoved||0)+1;target=null;search?.dispose?.();search=null;lastPiece=-1}}
    if(game.state.stats.piecesplaced!==lastPiece){
     releaseKeys(game,target);
     lastPiece=game.state.stats.piecesplaced;search?.dispose?.();search=null;target=null;
