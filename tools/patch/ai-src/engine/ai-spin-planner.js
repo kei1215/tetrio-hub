@@ -374,7 +374,12 @@
    // P.reserve: when the opponent's ready attack would push this stack past
    // takeMax, a ready T-spin slot is ammunition to cancel with; value it more.
    for(let i=0;i<k;i++){const c=children[i];let m=1;if(P.reserve&&P.threat){let h=0;for(let y=0;y<H;y++)if(c.rows[y]){h=H-y;break}if(h+P.threat>(P.takeMax||14))m+=P.reserve}
-    c.value+=m*tPotential(c.rows,P);if(i%8===7)yield}
+    c.value+=m*tPotential(c.rows,P);
+    // v4.8275 (user: hold T or I - the one that can be used right away): a T in HOLD counts
+    // when a line-clearing T-Spin is open now, an I when a Quad is.
+    if(P.holdT&&c.hold==='t'){for(const p of placements(c.rows,'t',4,19,2))if(p.spin===2&&place(c.rows,'t',p).lines){c.value+=P.holdT;break}}
+    else if(P.holdI&&c.hold==='i'){for(const p of placements(c.rows,'i',4,19,2))if(place(c.rows,'i',p).lines===4){c.value+=P.holdI;break}}
+    if(i%8===7)yield}
    children.length=k;
    children.sort((a,b)=>b.value-a.value);
    // Keep different first moves alive so the beam is not one idea.
