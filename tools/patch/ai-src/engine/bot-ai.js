@@ -457,9 +457,9 @@
     const quick=left<bp('quickFrames',45)?10:left<bp('mediumFrames',70)?16:24;
     // The piece keeps falling while the plan runs; its keys must still work.
     planFrameCap=Number.isFinite(left)?Math.max(4,Math.floor(left/3)):Infinity;
-    planner=LocalSpinPlanner.create(engine,{board:base.game.board,falling:base.game.falling.type,hold:LocalAIInformation.holdPiece(base.game.hold),queue:LocalAIInformation.known(base),
+    planner=(settings.realtime&&LocalSpinPlanner.createAsync?LocalSpinPlanner.createAsync:LocalSpinPlanner.create)(engine,{board:base.game.board,falling:base.game.falling.type,hold:LocalAIInformation.holdPiece(base.game.hold),queue:LocalAIInformation.known(base),
      holdAllowed:LocalAIInformation.holdAllowed(base,game._aiAllowHold!==false),b2b:base.game.stats?.btb||0,combo:base.game.stats?.combo||0},
-     {width:Math.min(quick,!settings.realtime||budget>=40?24:budget>=28?16:10),...playerPlanOptions(base.game),
+     {width:Math.min(quick,!settings.realtime||budget>=40||LocalSpinPlanner.createAsync&&typeof Worker!=='undefined'?24:budget>=28?16:10),...playerPlanOptions(base.game),
       // Without All-Spin mods (2026-11-13, Node self-play, 8 seeds x 300 pieces):
       // no zero-line / hole-filling spins (6 -> 0.1 per game), T kept for TSD/TST
       // (T-Spin share of attack 33% -> 44%, TSD/TST 9 -> 14 of 43 T, APP 0.67 -> 0.71).
@@ -616,7 +616,9 @@
     // Live play: the plan never holds the piece past its lock time. With
     // little time left (high gravity) the deepest finished beam level is used.
     const left=settings.realtime?Number(window.LocalLegacyAI?.timing?.(game)?.total):Infinity;
-    if(!planner.done&&(planSlices>=planFrameCap||planSlices>=(settings.realtime?bp('planSlices',(Number(settings.rootBudget)||40)>=40?20:(Number(settings.rootBudget)||40)>=28?10:6):Infinity)||left<bp('planStopFrames',22)))planner.stop();
+    // A worker plan (createAsync) costs this thread nothing: only the lock time
+    // and the frame cap stop it, not the slice budget meant for in-thread plans.
+    if(!planner.done&&(planSlices>=planFrameCap||!planner.async&&planSlices>=(settings.realtime?bp('planSlices',(Number(settings.rootBudget)||40)>=40?20:(Number(settings.rootBudget)||40)>=28?10:6):Infinity)||left<bp('planStopFrames',22)))planner.stop();
     if(!planner.done){planSlices++;planner.step(settings.realtime?stepBudgetMs:1e9);return {done:false,best:null,previewChoices:[]}}
     // Native root candidates in the next slice, not in the same one.
     buildRoot();if(settings.realtime)return {done:false,best:null,previewChoices:[]};

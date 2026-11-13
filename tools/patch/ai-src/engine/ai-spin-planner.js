@@ -7,10 +7,10 @@
    mini). The plan is a beam search over CURRENT / HOLD / NEXT. It only
    suggests a first placement; the native sandbox still checks the exact
    keys, the kicks and the spin flag before anything is played. */
-(function(root){
+(function spinPlannerFactory(root){
  'use strict';
  const W=10,FULL=(1<<W)-1;
- let tables=null;const tablesBy={};
+ let tables=null,rawTables=null;const tablesBy={},rawBy={};
  // Room rules of the plan being computed: 180 rotations allowed, and whether
  // gravity is so high that every move ends on the floor (no mid-air moves or
  // rotations, as players do not make them there either).
@@ -21,7 +21,8 @@
   const c=engine.cm?.constants,ks=c?.kicksets?.[kick]||c?.kicksets?.['SRS+'];if(!ks||!engine.fm?.GetPieceDefinition)return null;
   const shapes={};
   for(const t of ['t','s','z','l','j','i','o']){shapes[t]=[];for(let r=0;r<4;r++){const d=engine.fm.GetPieceDefinition(t,r);shapes[t].push(d.data.map(([x,y])=>[x-d.dx,y-d.dy]))}}
-  tables=tablesBy[kick]=withBits({shapes,kicks:ks.kicks,ikicks:ks.i_kicks||ks.kicks,corner:c.cornerTable?.t||null});
+  rawBy[kick]={shapes,kicks:ks.kicks,ikicks:ks.i_kicks||ks.kicks,corner:c.cornerTable?.t||null};
+  tables=tablesBy[kick]=withBits({...rawBy[kick]});
   return tables;
  }
  // rows[y] is a 10-bit mask, y=0 is the top of the 40-row field.
@@ -295,7 +296,7 @@
   };
  }
  function plan(engine,state,options={}){const p=create(engine,state,options);if(!p)return null;while(!p.step(50));return p.result()}
- function setTables(t){tables=withBits({...t})}
+ function setTables(t){rawTables={shapes:t.shapes,kicks:t.kicks,ikicks:t.ikicks,corner:t.corner};tables=withBits({...t})}
  /* An outside engine (vA private builds: Cold Clear 2) names a placement by its
     cells; find the reachable placement with exactly those cells, in planner
     coordinates {x,y,r,spin}. cells: [x,y] with y=0 the top row of state.board. */
@@ -310,6 +311,52 @@
    return null;
   }finally{mode=prev}
  }
- const api={attackOf,setTables,create,plan,placements,place,boardValue,load,matchCells,DEFAULTS};
+ /* The same plan in a Web Worker (vA 2026-11-13): the live BOT used to get
+    only 1-2 ms a frame while a human played (TL / CUSTOM vs a player), so the
+    plan never finished and half-searched moves were played (a real TL: APP
+    0.23, 1 TSD in 316 pieces). In a worker the full plan runs beside the
+    game without costing the player frames. Same interface as create();
+    without Worker support (Node, blocked blob workers) it is create(). */
+ let worker=null,workerBroken=false,jobSeq=0;const jobs=new Map();
+ function getWorker(){
+  if(worker||workerBroken)return worker;
+  if(typeof Worker==='undefined'||typeof Blob==='undefined'||typeof URL==='undefined'||!URL.createObjectURL){workerBroken=true;return null}
+  const glue=';('+String(spinPlannerFactory)+')(self);const SP=self.LocalSpinPlanner;let job=null,running=false,kick=null;'+
+   'const ch=new MessageChannel();ch.port1.onmessage=run;const later=()=>ch.port2.postMessage(0);'+
+   'self.onmessage=e=>{const m=e.data;if(m.cancel){if(job&&job.id===m.cancel)job=null;return}'+
+   'if(m.kick!==kick){SP.setTables(m.tables);kick=m.kick}job={id:m.id,p:SP.create(null,m.state,m.P),last:null};if(!running){running=true;later()}};'+
+   'function run(){if(!job){running=false;return}const j=job;let fin=false;try{fin=j.p.step(8)}catch(err){fin=true}const b=j.p.result();'+
+   'if(fin){self.postMessage({id:j.id,done:true,result:b});if(job===j)job=null;running=false;if(job){running=true;later()}return}'+
+   'if(b&&b!==j.last){j.last=b;self.postMessage({id:j.id,best:b})}later()}';
+  try{
+   const url=URL.createObjectURL(new Blob([glue],{type:'text/javascript'}));
+   worker=new Worker(url);
+   worker.onmessage=e=>{const m=e.data,j=jobs.get(m.id);if(!j)return;if(m.done){jobs.delete(m.id);j.finish(m.result)}else j.best=m.best};
+   worker.onerror=()=>{workerBroken=true;worker=null;for(const j of jobs.values())j.fail();jobs.clear()};
+  }catch(error){workerBroken=true;worker=null}
+  return worker;
+ }
+ function createAsync(engine,state,options={}){
+  const P={...DEFAULTS,...(root.__spinPlannerParams||{}),...options};
+  const kick=String(P.kickset||'SRS+');
+  if(!load(engine,kick))return null;
+  const raw=rawBy[kick]||rawTables,w=raw&&getWorker();
+  if(!w)return create(engine,state,options);
+  const id=++jobSeq,t0=performance.now();let done=false,result=null,fallback=null,spent=0;
+  const job={best:null,finish(r){if(done)return;done=true;result=r;spent=performance.now()-t0},fail(){if(!done)fallback=create(engine,state,options)}};
+  jobs.set(id,job);
+  // Options must survive structured clone: plain data only.
+  const send={};for(const [k,v] of Object.entries(P))if(typeof v!=='function')send[k]=v;
+  try{w.postMessage({id,kick:kick+(raw===rawTables?':set':''),tables:raw,state:{board:state.board,falling:state.falling,hold:state.hold,queue:state.queue,holdAllowed:state.holdAllowed,b2b:state.b2b,combo:state.combo},P:send})}
+  catch(error){jobs.delete(id);return create(engine,state,options)}
+  return {
+   async:true,
+   step(ms=4){if(fallback)return fallback.step(ms);return done},
+   result:()=>fallback?fallback.result():done?result:job.best,
+   get done(){return fallback?fallback.done:done},get spent(){return fallback?fallback.spent:spent},
+   stop(){if(fallback)return fallback.stop();if(!done){done=true;result=job.best;jobs.delete(id);try{w.postMessage({cancel:id})}catch{}}return result},
+  };
+ }
+ const api={attackOf,setTables,create,createAsync,plan,placements,place,boardValue,load,matchCells,DEFAULTS};
  if(typeof module!=='undefined')module.exports=api;else root.LocalSpinPlanner=api;
 })(typeof window==='undefined'?globalThis:window);
