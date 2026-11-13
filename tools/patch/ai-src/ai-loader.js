@@ -6,7 +6,7 @@
   document.documentElement.dataset.qpPatchKind = 'A';
   const ENGINE = [
     'ai-policy-model.js', 'reinforcement-core.js', 'ai-behavior.js', 'ai-spin-templates.js', 'ai-preview.js',
-    'ai-routing.js', 'ai-movegen.js', 'ai-spin-planner.js', 'ai-templates.js', 'ai-information.js', 'ai-player-settings.js', 'ai-quick-planner.js', 'bot-ai.js', 'ai-external.js', 'local-ai-room.js', 'win-gauge.js', 'local-room-ui.js', 'live-bot-controller.js',
+    'ai-routing.js', 'ai-movegen.js', 'ai-tshape-table.js', 'ai-spin-planner.js', 'ai-templates.js', 'ai-information.js', 'ai-player-settings.js', 'ai-quick-planner.js', 'bot-ai.js', 'ai-external.js', 'local-ai-room.js', 'win-gauge.js', 'local-room-ui.js', 'live-bot-controller.js',
     'bot-learning-core.js', 'bot-learning.js', 'rl-launcher.js', 'ttr-learning-format.js',
     'ai-ranking-training.js', 'ttr-learning.js', 'reinforcement-ui.js',
     'reinforcement-charts.js', 'ai-manager.js',

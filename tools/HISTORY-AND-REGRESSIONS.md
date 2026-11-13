@@ -56,6 +56,7 @@
 - QP DUO リプレイ保存のブックマークレット(docs/duo-save/)。gsm の受け口はリプレイ盤面修正・カウンターと共有(__rpe)。
 
 - 2026-11-13(未ビルド):AI のルーム対戦(TL・CUSTOM)を1試合1つの .ttrm で保存。ラウンドごとに上書きし、ローカル記録に「名前 vs 名前 勝ち数」で出す(ai-src/engine/local-ai-room.js、offline-src/local-replays.js)。
+- 2026-11-13(未ビルド→v4.8266 に入れる):T-Spin の地形の見方。ユーザーと 5han の TL リプレイ(1.5万ミノ)から「数手以内に TSD/TST」になる地形パターン表を学習(ai-tshape-table.js、ユーザーの試合で AUC 0.74)。planner の tShape 10。CC2 戦(4 PPS・32試合)APP 0.59→0.64、T-Spin 割合 47→55%、勝ちはまだ 0〜1。
 - 2026-11-13(v4.8266 ローカルビルド・未公開。CC2 入りをユーザーのアプリに導入):vAI テスト設定と外部AI対戦を Tab パネルへ。計算量(自動=PC の速さを測り目標 PPS に合わせる)、計画は PPS の時刻で打ち切り。プレーヤーと同時に置くモード(TL/CUSTOM)。対プレーヤー戦の AI を Web Worker で計画(人がいると 1〜2ms×6回で計画が終わらなかった)。BOT の持ち時間を左右均等に(左が先取りしていた)。TL/CUSTOM の勝率予測ゲージ(Tab で非表示可。Node 対戦 88 試合で学習、的中 71%)。Node 対戦ハーネス(private-ai/vA-cc2/versus.mjs、CC2 入りは非公開):同じ 4 PPS で vA は CC2 に 0勝16敗(APP 0.59 対 0.89)。
 
 ## 2. 再発チェック(過去に壊れたもの)

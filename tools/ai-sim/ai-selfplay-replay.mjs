@@ -11,6 +11,7 @@ import fs from "node:fs";
 import { parseReplayFile, resolveOptions, createEngine } from "/Users/kurashinakei/Downloads/tetrio-replay-video/src/replay.js";
 import { tetrominoes } from "/Users/kurashinakei/Downloads/tetrio-replay-video/vendor/triangle/engine/utils/tetromino/data.ts";
 import { kicks as KD } from "/Users/kurashinakei/Downloads/tetrio-replay-video/vendor/triangle/engine/utils/kicks/data.ts";
+import "/Users/kurashinakei/Downloads/tetrio-hub/tools/patch/ai-src/engine/ai-tshape-table.js";
 import SP from "/Users/kurashinakei/Downloads/tetrio-hub/tools/patch/ai-src/engine/ai-spin-planner.js";
 
 const [tplPath, outPath, maxPieces = "300", seedArg] = process.argv.slice(2);

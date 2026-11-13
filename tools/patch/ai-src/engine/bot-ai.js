@@ -322,7 +322,9 @@
  // 115 -> 169 of ~340 T; with incoming garbage (GARB=4,120) 45% -> 55%, no top-outs.
  // Non-T attack counts 0.3, non-T mini spins little, TST slots most; tPotK 6 scans
  // T slots on twice as many boards (plan ~1.6x slower, still time-sliced).
- const T_STYLE={wastedT:30,tFull:[0,10,45,90],tsdReady:40,tstReady:90,mini:[0,0,2,4],tPotK:6,atkOther:.3};
+ // tShape: learned T-Spin terrain table (ai-tshape-table.js, user + 5han TL replays).
+ // vs Cold Clear 2 at 4 PPS (Node, 32 games): APP 0.59 -> 0.64, T-Spin share 47 -> 55%.
+ const T_STYLE={wastedT:30,tFull:[0,10,45,90],tsdReady:40,tstReady:90,mini:[0,0,2,4],tPotK:6,atkOther:.3,tShape:10};
  const B2BP=window.__b2bParams||(window.__b2bParams={});
  const bp=(k,d)=>B2BP[k]??d;
  function spinTerrain(board){

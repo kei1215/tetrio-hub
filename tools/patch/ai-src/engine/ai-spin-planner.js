@@ -146,7 +146,33 @@
     // rows are counted upward from the well floor
     well=Math.max(well,n)}}
   let bumpSq=0;for(let x=1;x<W;x++){const d=heights[x]-heights[x-1];bumpSq+=d*d}
-  return -P.sealed*sealed-P.trap*trap-P.tuck*tuck+P.tuckReady*tuckReady-P.bump*bump-P.bumpSq*bumpSq-P.height*sum/W-P.peak*Math.max(0,peak-P.safePeak)-P.top*Math.max(0,peak-P.topPeak)-P.dead*dead+P.well*well;
+  const tShape=P.tShape?P.tShape*tShapeValue(rows,P.tShapeTable||root.LocalTShapeTable):0;
+ return tShape-P.sealed*sealed-P.trap*trap-P.tuck*tuck+P.tuckReady*tuckReady-P.bump*bump-P.bumpSq*bumpSq-P.height*sum/W-P.peak*Math.max(0,peak-P.safePeak)-P.top*Math.max(0,peak-P.topPeak)-P.dead*dead+P.well*well;
+ }
+ /* T-Spin terrain sense (2026-11-13): shape patterns learned from real TL
+    replays (the user and 5han), scored by how often a TSD / TST followed within
+    a few pieces (tools/ai-sim/tspin-terrain-fit.mjs -> ai-tshape-table.js).
+    A key is a 3-wide, 4-tall window anchored on the deepest column of the
+    window (one row below its surface, then three above), plus how full the two
+    rows around the slot are outside the window, plus an edge flag. */
+ function tShapeKeys(rows){
+  const H=rows.length,top=new Array(W).fill(H),keys=[];
+  for(let x=0;x<W;x++)for(let y=0;y<H;y++)if((rows[y]>>x)&1){top[x]=y;break}
+  const occ=(x,y)=>y>=H?1:y<0?0:(rows[y]>>x)&1;
+  for(let x=0;x<=W-3;x++){
+   let c=x;for(let d=1;d<3;d++)if(top[x+d]>top[c])c=x+d;
+   const y0=top[c]-1;let bits=0,k=0;
+   for(let r=1;r>=-2;r--)for(let dx=0;dx<3;dx++){if(occ(x+dx,y0+r))bits|=1<<k;k++}
+   let key=bits;
+   for(const [i,yy] of [[0,y0],[1,y0-1]]){let n=0;if(yy>=0&&yy<H){const m=rows[yy]&~(7<<x)&FULL;for(let b=m;b;b&=b-1)n++}key|=(n>=7?2:n>=5?1:0)<<(12+2*i)}
+   keys.push(key|((x===0||x===W-3)?1:0)<<16);
+  }
+  return keys;
+ }
+ function tShapeValue(rows,table){
+  if(!table)return 0;let m=-Infinity;const ks=tShapeKeys(rows),v=new Array(ks.length);
+  for(let i=0;i<ks.length;i++){v[i]=table[ks[i]]||0;if(v[i]>m)m=v[i]}
+  let z=0;for(const a of v)z+=Math.exp(a-m);return m+Math.log(z)-Math.log(ks.length);
  }
  function tPotential(rows,P){
   let best=0;
@@ -355,6 +381,7 @@
   jobs.set(id,job);
   // Options must survive structured clone: plain data only.
   const send={};for(const [k,v] of Object.entries(P))if(typeof v!=='function')send[k]=v;
+  if(send.tShape&&!send.tShapeTable&&root.LocalTShapeTable)send.tShapeTable=root.LocalTShapeTable;
   w.load++;
   try{w.postMessage({id,kick:kick+(raw===rawTables?':set':''),tables:raw,state:{board:state.board,falling:state.falling,hold:state.hold,queue:state.queue,holdAllowed:state.holdAllowed,b2b:state.b2b,combo:state.combo},P:send})}
   catch(error){jobs.delete(id);w.load=Math.max(0,w.load-1);return create(engine,state,options)}
@@ -366,6 +393,6 @@
    get stopped(){return stoppedEarly},stop(){if(fallback)return fallback.stop();if(!done){done=true;stoppedEarly=true;result=job.best;if(jobs.delete(id))w.load=Math.max(0,w.load-1);try{w.postMessage({cancel:id})}catch{}}return result},
   };
  }
- const api={attackOf,setTables,create,createAsync,plan,placements,place,boardValue,load,matchCells,DEFAULTS};
+ const api={attackOf,setTables,create,createAsync,plan,placements,place,boardValue,load,matchCells,tShapeKeys,tShapeValue,DEFAULTS};
  if(typeof module!=='undefined')module.exports=api;else root.LocalSpinPlanner=api;
 })(typeof window==='undefined'?globalThis:window);
