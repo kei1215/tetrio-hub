@@ -21,6 +21,7 @@
   const heading=document.createElement('summary');heading.textContent='vAI テスト設定（ローカルQPのみ）';section.appendChild(heading);
   const flag=(key,label,defaultValue)=>{flagIn(section,key,label,defaultValue).style.display='block'};
   flag('qp-local-ai-tspin-b2b','BOT: Spin B2B モード（既定ON。QP・40L・TL・CUSTOMで、T-Spin多めのSpinだけでB2Bをつなぐ。攻撃が来たら相殺か受けるかを高さで決める）',true);
+  flag('qp-win-gauge','対戦の勝率予測ゲージを表示（TL・CUSTOM。盤面から左右の勝率を予測）',true);
   const ppsLabel=document.createElement('label');ppsLabel.style.display='block';ppsLabel.append(document.createTextNode('BOT目標PPS（0.1〜20・ゲーム内時間基準）'));
   const pps=document.createElement('input');pps.type='number';pps.min='0.1';pps.max='20';pps.step='0.1';pps.value=localStorage.getItem('qp-local-bot-pps')||'2';pps.addEventListener('change',()=>{const value=Math.max(.1,Math.min(20,Number(pps.value)||2));pps.value=String(value);localStorage.setItem('qp-local-bot-pps',String(value))});ppsLabel.appendChild(pps);section.appendChild(ppsLabel);
   const previewMode=document.createElement('label');previewMode.textContent='配置予測の表示 ';
