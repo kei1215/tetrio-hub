@@ -324,7 +324,7 @@
       // (TETR.IO lets garbage in only on a lock that clears nothing), so a piece
       // that clears nothing is bad and a run of clears is good.
       if(P.surviveNoClear&&(node.incoming||0)>0&&heightBefore+(node.incoming||0)+(P.threat||0)>(P.takeMax||14)){
-       if(res.lines)gain+=(P.surviveCombo||0)*Math.min(6,(node.combo||0)+1);else gain-=P.surviveNoClear}
+       if(res.lines)gain+=(P.surviveCombo||0)*Math.min(6,(node.combo||0)+1)*(p.spin||res.lines===4?1:.5);else gain-=P.surviveNoClear}
       let rowsOut=res.rows;
       if(!res.lines&&inc>0&&P.cancelW===0){const k=Math.min(inc,H,P.garbageCap||inc);rowsOut=withGarbage(res.rows,k,P.garbageHoles,gi);inc-=k;gi+=k;
        let h=0;for(let y=0;y<H;y++)if(rowsOut[y]){h=H-y;break}

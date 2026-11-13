@@ -527,7 +527,9 @@
    const out={},T=window.LocalAITemplates,o=state.setoptions||{};
    // v4.8272: garbage still on its way counts too (QP 2026-11-13: 20 lines waited ~480
    // frames as not active, and the plan treated the board as safe until it landed).
-   const incoming=Math.min(40,(state.impendingdamage||[]).reduce((n,d)=>n+Math.max(0,d.amt||0),0)+(state.garbageareentries||[]).length),g=geometry(state.board);
+   // v4.8274: counting it in full kept the plan in 'danger' all the time and B2B broke;
+   // it now only counts as threat (half), see out.threat below.
+   const incoming=pressure(state),onWay=Math.min(20,(state.impendingdamage||[]).reduce((n,d)=>n+(d.active===false?Math.max(0,d.amt||0):0),0)),g=geometry(state.board);
    out.charging=!!o.b2bcharging;out.chargeAt=Number(o.b2bcharge_at??4);out.chargeBase=Number(o.b2bcharge_base??3);
    // Cancel or take it? Keep a record of the garbage received lately: in QP
    // attacks come in series, so more is likely right after some arrived.
@@ -558,6 +560,7 @@
     const pb=peer.state.board,top=pb?pb.findIndex(r=>r.some(c=>c!==null)):-1,ph=top<0?0:pb.length-top;
     // a low opponent with a chain can keep both a spin and the charge ready
     out.threat=Math.min(16,surge+(b>=1?4:2)+(ph<8&&b>=4?2:0));}}catch{}
+   if(onWay)out.threat=Math.min(16,(out.threat||0)+Math.min(4,Math.round(onWay/2)));
    game._aiCancelInfo={incoming,series:+series.toFixed(1),margin:+margin.toFixed(1),cancelW:out.cancelW};
    if(!T)return out;
    try{
