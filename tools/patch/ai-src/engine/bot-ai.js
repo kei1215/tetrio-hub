@@ -482,7 +482,7 @@
     planFrameCap=Number.isFinite(left)?Math.max(4,Math.floor(left/3)):Infinity;
     planner=(settings.realtime&&LocalSpinPlanner.createAsync?LocalSpinPlanner.createAsync:LocalSpinPlanner.create)(engine,{board:base.game.board,falling:base.game.falling.type,hold:LocalAIInformation.holdPiece(base.game.hold),queue:LocalAIInformation.known(base),
      holdAllowed:LocalAIInformation.holdAllowed(base,game._aiAllowHold!==false),b2b:base.game.stats?.btb||0,combo:base.game.stats?.combo||0},
-     {width:planWidth=(!settings.realtime?24:LocalSpinPlanner.createAsync&&typeof Worker!=='undefined'?speed.width(Number(settings.interval),quick===24?64:quick):Math.min(quick,budget>=40?24:budget>=28?16:10)),...playerPlanOptions(base.game),
+     {syncWidth:Math.min(quick,16),width:planWidth=(!settings.realtime?24:LocalSpinPlanner.createAsync&&typeof Worker!=='undefined'?speed.width(Number(settings.interval),quick===24?64:quick):Math.min(quick,budget>=40?24:budget>=28?16:10)),...playerPlanOptions(base.game),
       // Without All-Spin mods (2026-11-13, Node self-play, 8 seeds x 300 pieces):
       // no zero-line / hole-filling spins (6 -> 0.1 per game), T kept for TSD/TST
       // (T-Spin share of attack 33% -> 44%, TSD/TST 9 -> 14 of 43 T, APP 0.67 -> 0.71).
@@ -546,7 +546,7 @@
    // often the spin plan exists, was cut by the clock, is reachable natively and
    // is actually played.
    const ps=game._aiPlanStats??={plans:0,noPlan:0,cut:0,notFound:0,played:0,spinMismatch:0,ms:0,width:0,async:0};
-   let planMs=0;if(planner){planMs=planner.spent;ps.plans++;ps.ms+=planMs;ps.width+=planWidth;if(planner.async)ps.async++;const cut=!planner.done;const p=planner.done?planner.result():planner.stop();if(cut||planner.stopped)ps.cut++;spinPlan=p?{...p,key:cellKey(p.type,p.x,p.y,p.r)}:null;if(!p)ps.noPlan++;planner=null}
+   let planMs=0;if(planner){planMs=planner.spent;ps.plans++;ps.ms+=planMs;ps.width+=planWidth;if(planner.async)ps.async++;const cut=!planner.done||planner._cut;const p=planner.done?planner.result():planner.stop();if(cut)ps.cut++;spinPlan=p?{...p,key:cellKey(p.type,p.x,p.y,p.r)}:null;if(!p)ps.noPlan++;planner=null}
    game._localSpinPlan=spinPlan;
    queue=nodeChoices(base,!botPolicy?.ownDanger||tspinB2B,rootLimit,spinPlan);
    if(spinPlan&&!queue.some(c=>c.planned))ps.notFound++;
@@ -658,10 +658,10 @@
     const left=settings.realtime?Number(window.LocalLegacyAI?.timing?.(game)?.total):Infinity;
     // A worker plan (createAsync) costs this thread nothing: only the lock time
     // and the frame cap stop it, not the slice budget meant for in-thread plans.
-    if(!planner.done&&(planSlices>=planFrameCap||!planner.async&&planSlices>=(settings.realtime?bp('planSlices',(Number(settings.rootBudget)||40)>=40?20:(Number(settings.rootBudget)||40)>=28?10:6):Infinity)||left<bp('planStopFrames',22)))planner.stop();
+    if(!planner.done&&(planSlices>=planFrameCap||!planner.async&&!planner.external&&planSlices>=(settings.realtime?bp('planSlices',(Number(settings.rootBudget)||40)>=40?20:(Number(settings.rootBudget)||40)>=28?10:6):Infinity)||left<bp('planStopFrames',22))){planner._cut=true;planner.stop()}
     // A worker plan stops at the PPS clock with its deepest finished level, so a
     // high target PPS is met instead of waiting for the whole plan.
-    if(!planner.done&&planner.async&&Number.isFinite(settings.dueAt)&&typeof game.getFrame==='function'&&game.getFrame()>=settings.dueAt-Math.max(1,Math.min(4,Math.floor(Number(settings.interval)/4)))&&planner.result())planner.stop();
+    if(!planner.done&&(planner.async||planner.external)&&Number.isFinite(settings.dueAt)&&typeof game.getFrame==='function'&&game.getFrame()>=settings.dueAt-Math.max(1,Math.min(4,Math.floor(Number(settings.interval)/4)))&&(planner.external||planner.result())){planner._cut=true;planner.stop()}
     if(!planner.done){planSlices++;planner.step(settings.realtime?stepBudgetMs:1e9);return {done:false,best:null,previewChoices:[]}}
     // a plan cut by the clock only tells that this PC is at least that slow
     if(planner.async)(planner.stopped?(planner.spent/planWidth>speed.msPerWidth&&speed.note(planner.spent,planWidth)):speed.note(planner.spent,planWidth));

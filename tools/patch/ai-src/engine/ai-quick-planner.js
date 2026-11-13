@@ -208,7 +208,10 @@
    if(search){
     // One global renderer budget is shared by all BOTs, not one budget for
     // each BOT. When a human plays, yield search slices before frame input.
-    const budget=window.LocalAIFrameBudget?.claim?.(humanActive,deadline.total<=8,game)??pace.stepBudgetMs;
+    let budget=window.LocalAIFrameBudget?.claim?.(humanActive,deadline.total<=8,game)??pace.stepBudgetMs;
+    // An outside engine (vA private builds) searches in this thread: at least 6 ms a
+    // frame, or its plan is never ready before the PPS clock (it then played nothing).
+    if(game._aiEngine)budget=Math.max(6,budget);
     if(humanActive)stats.humanProtectedFrames++;
     if(budget<=0){stats.budgetSkips++;return}
     const started=performance.now();

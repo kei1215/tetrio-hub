@@ -99,6 +99,8 @@
    return out;
   };
   return {
+   // external: bot-ai lets it think until the PPS clock (no in-thread slice cap)
+   external: true,
    get done() { return job.done; }, get spent() { return job.spent || 0; },
    // A non-realtime caller (step(1e9) in one synchronous loop) gets the full search.
    step(ms = 4) { return job.step(ms >= 1e6 ? 1e6 : Math.max(ms, 6)); },

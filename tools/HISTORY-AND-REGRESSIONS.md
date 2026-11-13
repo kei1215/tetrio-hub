@@ -92,6 +92,7 @@
 | AI のルーム対戦が1人ずつの .ttr に分かれ、試合として見られない | 1試合を1つの .ttrm(公式と同じ rounds の形)にまとめる | 実 TL の .ttrm をこの形で作り直して verify-stats:ALL OK(8ラウンド×2人)。ゲーム内は未確認 |
 | 対プレーヤー戦で AI が極端に弱い | humanActive で planner が 1〜2ms×最大6スライス。Worker(createAsync)で最後まで計画 | Node の Worker 代替で同期版と同じ答え。ゲーム内は未確認 |
 | AI 同士の対戦で地形がひどい(v4.8266 初版) | Worker 1つを左右で共有し、新しい計画が前の計画を捨てていた(片方は途中打ち切り)。Worker を複数にし、計画を順番に進める | Node で4つ同時に計画:全部完了し同期版と同じ答え |
+| ゲーム内の AI が浅い計画で置く・CC2 がほぼ手を出さない(v4.8266 の TTRM 診断) | アプリでは blob の Worker が作れず同期計画に戻り、幅 64 のまま約 45ms で打ち切り。CC2 は1フレームの予算が足りず PPS の期限で空の結果。Worker をパッチ内ファイル(ai-plan-worker.js)から作る、同期時は幅 16、外部AIは1フレーム 6ms 以上で期限まで考え早期終了 | TTRM の replay.aiDebug(async・cut・noPlan・external)。Node の Worker 代替で4件同時が同期版と一致 |
 | TL/CUSTOM で左の BOT が速く右が負けやすい | フレーム予算 4.5ms を先着順で配分(左が 2.4ms 取る)。BOT ごとに均等配分 | 2 BOT の模擬で 1350 対 1350 ms。ゲーム内は未確認 |
 
 ## 3. 守ること(ユーザーのルール)
