@@ -98,6 +98,7 @@
 | TL/CUSTOM で左の BOT が速く右が負けやすい | フレーム予算 4.5ms を先着順で配分(左が 2.4ms 取る)。BOT ごとに均等配分 | 2 BOT の模擬で 1350 対 1350 ms。ゲーム内は未確認 |
 | vA の受ける/相殺の重みが効かない | bot-ai(と versus)が残り高さで cancelW を毎回上書きしていた。T_STYLE に cancelW:0 と takeMax を入れ、planner が高さで判断する | 被弾中、高さ+被弾 ≤14 なら相殺せず受け、超えたら相殺する。B2B を切って相殺しない |
 | 先読み幅を広げると vA が弱くなる | 評価の甘い所(Tスロットの見込み点など)を広い探索が拾う。Spin B2B では幅 24 まで | Node 対戦で幅 24 が 48・96 より勝つ |
+| アプリ内で vA の Web Worker が動かない(async 0、毎手打ち切り) | ローカル配信の CSP が worker-src 'none' だった。build_release.py で worker-src 'self' blob: に変える(v4.8268) | ローカル TTRM の aiDebug.plan.async が 0 でない、cut が手数とほぼ同じにならない |
 
 ## 3. 守ること(ユーザーのルール)
 - 旧サイト kei1215/kei1215.github.io は読み取り専用。

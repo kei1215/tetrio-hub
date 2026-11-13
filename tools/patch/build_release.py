@@ -306,6 +306,9 @@ def add_editor_window(text):
     """Append the mission-editor window handler to O/local-main.js (once)."""
     if 'ipcMain' not in text:
         raise SystemExit('O/local-main.js: ipcMain not found')
+    # The vA AI plans in Web Workers (ai-plan-worker.js / blob): the local CSP refused
+    # every worker ('none'), so in the app the AI fell back to short in-thread plans (v4.8267).
+    text = text.replace("worker-src 'none'", "worker-src 'self' blob:")
     return replace_appended(text, EDITOR_WINDOW_MARK, EDITOR_WINDOW_SRC)
 
 
