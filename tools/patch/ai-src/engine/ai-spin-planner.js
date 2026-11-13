@@ -254,6 +254,11 @@
   const queue=(state.queue||[]).map(t=>String(t).toLowerCase()).filter(t=>tables.shapes[t]);
   const start={combo:Math.max(0,Number(state.combo)||0),incoming:Math.max(0,Number(P.incoming)||0),rows,cur:String(state.falling).toLowerCase(),hold:state.hold?String(state.hold).toLowerCase():null,qi:0,acc:0,first:null,b2b:state.b2b||0,spins:0};
   if(!tables.shapes[start.cur])return null;
+  // v4.8275 (user: building a board that enters 'danger' just to be allowed to break is
+  // pointless): danger relaxes the plan only if the board is in danger now, or garbage
+  // taken inside the plan put it there - never a stack the plan itself builds up.
+  let rootH=0;for(let y=0;y<H;y++)if(rows[y]){rootH=H-y;break}
+  const rootDanger=rootH+.5*start.incoming+.5*(P.threat||0)>=P.dangerPeak;
   // Player templates that fit this board: their placements (exact cells) are
   // preferred while the build is in progress (until the first clear).
   const tpl=new Map();
@@ -274,7 +279,7 @@
     // turn the plan into breaking the chain and digging.
     // P.threat: attack the opponent can fire soon (their B2B charge, a ready spin):
     // taking garbage now must leave room for that too, a cancel can be dodged.
-    const danger=heightBefore+.5*(node.incoming||0)+.5*(P.threat||0)>=P.dangerPeak;
+    const danger=heightBefore+.5*(node.incoming||0)+.5*(P.threat||0)>=P.dangerPeak&&(rootDanger||(node.gi||0)>0);
     for(const [type,hold,qi,held] of options){
      for(const p of placements(node.rows,type)){
       const res=place(node.rows,type,p);
