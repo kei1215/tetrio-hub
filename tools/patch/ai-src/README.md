@@ -30,3 +30,10 @@ v4.8246 Spin B2B mode (vA option "BOT: Spin B2B モード", localStorage
 - `engine/qp-ai-options.js`: the checkbox. `engine/live-bot-controller.js`:
   reads it every piece into `game._aiTSpinB2B`.
 - `ai-loader.js`: loads `ai-spin-planner.js`.
+
+2026-11-13 外部AI対戦(engine/ai-external.js):
+- 画面左下の「外部AI対戦」から、TL / CUSTOM の左右に プレイヤー / vA AI / 読み込んだ外部AI を選んで対戦する。
+- パッチには外部AIを入れない。ユーザーが自分のファイル(.js 1つ + .wasm などのデータ)を選んで読み込み、IndexedDB に残す。
+  パッケージの約束はファイル先頭のコメント。bot-ai.js は game._aiEngine の外部AIに配置を聞き、ネイティブのサンドボックスで確かめて同じキーで置く。
+- ai-spin-planner.js matchCells:外部AIのマス目から、到達できる配置(planner 座標)を探す。
+- local-ai-room.js:config.labels で対戦の表示名(TTRM の名前)を上書きできる。

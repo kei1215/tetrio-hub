@@ -34,7 +34,7 @@
  function begin(config={}){
   stop();if(!config._continuing)window.LocalRoomUI?.reset?.();const fallback=config.profileId,leftValue=config.left??'ai',rightValue=config.right??'ai';if(leftValue==='player'&&rightValue==='player')throw Error('ローカル1台では両側をプレーヤーにできません。片側をAIにしてください');
   const profiles=[profileFor(leftValue,fallback),profileFor(rightValue,fallback)];for(let i=0;i<2;i++)if(asSide([leftValue,rightValue][i])==='ai'&&!profiles[i])throw Error((i?'右':'左')+'側のAIを選択してください');
-  const names=profiles.map((profile,i)=>profile?.name||localStorage.getItem('qp-local-username')||('PLAYER '+(i+1)));if(typeof window.LocalNative?.tlRound!=='function')throw Error('TL対戦エンジンを読み込めませんでした。パッチを再適用してください');
+  const names=profiles.map((profile,i)=>config.labels?.[i]||profile?.name||localStorage.getItem('qp-local-username')||('PLAYER '+(i+1)));if(typeof window.LocalNative?.tlRound!=='function')throw Error('TL対戦エンジンを読み込めませんでした。パッチを再適用してください');
   const roomOptions=window.LocalRoomUI?.read?.()?.options||{};
   const games=window.LocalNative.tlRound({names,left:asSide(leftValue),right:asSide(rightValue),seed:config.seed,mode:config.mode,options:roomOptions}),state=session={games,cleanup:[],stopped:false,finished:false,config};
   // One TTRM per match: rounds are added as they finish (config._match survives auto-advance).

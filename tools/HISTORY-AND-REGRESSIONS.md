@@ -27,6 +27,7 @@
 - v4.8257:オンライン DUO はまず自分の分だけ保存(.ttr)。相方を待つ処理で保存されなかったため。診断ログと CONFIG > QP DUO REPLAYS を追加。
 - 2026-11-13(未ビルド・ai-src):AI(allspin MOD なし)は消去なし Spin をしない・T を TSD/TST に残す。Node の自己対局で .ttr を作る tools/ai-sim/ai-selfplay-replay.mjs。
 - 2026-11-13(未ビルド・ai-src):実戦リプレイで AI を直した。TL は Spin B2B モードが切れていて T-Spin 0%(6ラウンド)→ TL でも有効に。All-Spin でも消去なし Spin を減点(QP リプレイで 3589 ミノ中 160 回)。通常時のテンプレートは TSD/TST だけ使う。T-Spin 寄りの planner 設定(T_STYLE、atkOther)。QP の APP 0.82 は All-Spin を all+ にした影響(S/Z/L/J/I の Spin シングルが 2 火力。all-mini+ だと 0.59 相当)。
+- 2026-11-13(未ビルド・ai-src):「外部AI対戦」の入り口(engine/ai-external.js)。外部AIはパッチに入れず、ユーザーが読み込む。CC2 S2 パッケージは private-ai/package(非公開)。
 - v4.8256:QP DUO のリプレイ保存(オンラインは duo-save を常に有効、オフラインはローカル記録へ)、Warlock の Spin ルール(all+)。
 
 ### サイトとブックマークレット(docs/)

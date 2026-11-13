@@ -447,7 +447,9 @@
   // The plan runs in time slices inside step(), so a live frame never stalls
   // on it; the native root candidates are built once it is done.
   let spinPlan=null,planner=null,planSlices=0,planFrameCap=Infinity;
-  if(tspinB2B&&window.LocalSpinPlanner&&base.game.falling?.type&&!settings.fast){
+  // vA private builds: an outside engine decides (see below); public builds have none.
+  const externalPlan=!!window.LocalExternalAI?.active?.(game)&&!!base.game.falling?.type&&!settings.fast;
+  if(tspinB2B&&!externalPlan&&window.LocalSpinPlanner&&base.game.falling?.type&&!settings.fast){
    try{const budget=Number(settings.rootBudget)||40;
     // Frames until this piece locks (high gravity leaves only the lock delay):
     // a short window gets a narrower, quicker plan.
@@ -468,6 +470,11 @@
       slam:Number(engine.fm.GetEffectiveGravity?.()??base.game.g??0)>=1});
    }catch(error){planner=null}
   }
+  // vA private builds: an outside engine (Cold Clear 2, ai-external.js) picks the
+  // placement instead of the spin planner; the native sandbox still checks it and
+  // plays its exact keys. Public builds have no LocalExternalAI.
+  if(externalPlan){try{planner=LocalExternalAI.planner(game,base,{engine,kickset:String(base.game.setoptions?.kickset||'SRS+'),allow180:rules0.allow180&&sandbox.options?.allow180!==false,
+   slam:Number(engine.fm.GetEffectiveGravity?.()??base.game.g??0)>=1})}catch(error){planner=null}}
   // The player's own data steers the plan: templates that fit this board and
   // the coming pieces, where they make spins, how often they take a
   // low-attack B2B clear (single-line spin / mini) and how often a Quad.
@@ -549,7 +556,7 @@
       const visible=LocalAIInformation.modelStates(before,after,choice.start||snapshot),input=(network||settings.collect)?LocalAIModel.encode(...visible,features):null;const playerImitation=game._aiMimicTiming?1:game._rlState?.imitation??.75;let score=boundedLearningValue(features,weights)+tactical(before,after,tspinB2B)+(game._aiChainFocus?chainBonus(before,after,spin,game._aiChainWell??9):0)+(nativeSpinClear&&features[0]>0?Math.min(40,16+8*features[0])*(spinMini(before,after)?.35:1):0)+(network?Math.max(-24,Math.min(24,(1+3*playerImitation)*LocalAIModel.score(network,input))):0);
    score+=allSpinB2BBonus(before,after,nativeSpinClear,rotationRules(base.game.setoptions));
    score+=iTriplePenalty(before,after,before.falling.type,nativeSpinClear);
-   if(tspinB2B&&root&&choice.planned)score+=bp('planBonus',120);
+   if((tspinB2B||externalPlan)&&root&&choice.planned)score+=bp('planBonus',120);
    if(tspinB2B)score+=b2bScore(before,after,features,nativeSpinClear,before.falling.type,spinMini(before,after),geometry(before.board).peak>=dangerPeak);
    // v4.8243: a T-slot overhang built while a T is coming is a setup, not a
    // buried hole. Only the slot's own covered cells are forgiven.
@@ -631,7 +638,7 @@
      // Spin B2B mode: the planner reproduces the native rules exactly, so a
      // planned placement whose keys, kicks and spin flag the sandbox confirmed
      // is played as is (the remaining native checks only cost time).
-     if(tspinB2B&&result.planned&&result.score>-1e5&&(!spinPlan?.spin||result.spin)){roots=[result];best=result;return finish()}}
+     if((tspinB2B||externalPlan)&&result.planned&&result.score>-1e5&&(!spinPlan?.spin||result.spin)){roots=[result];best=result;return finish()}}
     else {if(result.score< -100000)continue;depth=Math.max(depth,phase+1);let combined=result.score*Math.pow(.65,phase),weight=Math.pow(.65,phase);for(let i=0;i<phase;i++){combined+=planAt(root,i).score*Math.pow(.65,i);weight+=Math.pow(.65,i)}combined/=weight;root.depthScores??={};if(combined>(root.depthScores[phase]??-Infinity)){root.depthScores[phase]=combined;const parent=planAt(root,phase-1);if(phase===1)parent.nextPlan=result;else parent.next=result;root.futureScore=combined;root.depth=phase+1}const winner=roots.reduce((a,b)=>(a.futureScore??a.score)>(b.futureScore??b.score)?a:b);best={...winner,lookaheadScore:winner.futureScore??winner.score,depth:winner.depth,next:winner.nextPlan}}
 
    }return {done:false,best,previewChoices:previewChoices()}},dispose(){planner=null;return finish()},get candidates(){return queue.length},get depth(){return depth}};

@@ -296,6 +296,20 @@
  }
  function plan(engine,state,options={}){const p=create(engine,state,options);if(!p)return null;while(!p.step(50));return p.result()}
  function setTables(t){tables=withBits({...t})}
- const api={attackOf,setTables,create,plan,placements,place,boardValue,load,DEFAULTS};
+ /* An outside engine (vA private builds: Cold Clear 2) names a placement by its
+    cells; find the reachable placement with exactly those cells, in planner
+    coordinates {x,y,r,spin}. cells: [x,y] with y=0 the top row of state.board. */
+ function matchCells(engine,state,type,cells,options={}){
+  if(!load(engine,String(options.kickset||'SRS+')))return null;
+  const prev=mode;mode={allow180:options.allow180!==false,slam:!!options.slam};
+  try{
+   const H=state.board.length,rows=new Array(H);
+   for(let y=0;y<H;y++){let m=0;for(let x=0;x<W;x++)if(state.board[y][x]!==null&&state.board[y][x]!==undefined)m|=1<<x;rows[y]=m}
+   const key=c=>c.map(([x,y])=>x+','+y).sort().join(';'),want=key(cells),sh=tables.shapes[type];
+   for(const p of placements(rows,type))if(key(sh[p.r].map(([cx,cy])=>[p.x+cx,p.y+cy]))===want)return {x:p.x,y:p.y,r:p.r,spin:p.spin,type};
+   return null;
+  }finally{mode=prev}
+ }
+ const api={attackOf,setTables,create,plan,placements,place,boardValue,load,matchCells,DEFAULTS};
  if(typeof module!=='undefined')module.exports=api;else root.LocalSpinPlanner=api;
 })(typeof window==='undefined'?globalThis:window);
