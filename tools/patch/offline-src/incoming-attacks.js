@@ -7,15 +7,19 @@
    if(config.floor10&&!['periodic','floor'].includes(config.attackMode))config={...config,attackMode:'floor'};
    if(!['periodic','floor'].includes(config.attackMode))return;
    const lines=Number(config.attackLines),seconds=Number(config.attackSeconds);
-   if(!Number.isInteger(lines)||lines<1||lines>20||!Number.isFinite(seconds)||seconds<.5||seconds>60)throw Error('攻撃は1〜20段、間隔は0.5〜60秒で指定してください');
+   if(!Number.isInteger(lines)||lines<1||!Number.isFinite(seconds)||seconds<.5||seconds>60)throw Error('攻撃は1段以上、間隔は0.5〜60秒で指定してください');
    game._localAttackConfig={mode:config.attackMode,lines,seconds};
-   let next=game.getFrame()+Math.round(seconds*60);
+   // Floor attack: the speed changes by itself too (2026-11-14) - higher floors come faster
+   // (x1.2 at 1F .. x0.6 at 10F+), each wait drawn at random (x0.5-1.5) like real targeting.
+   const floorOf=()=>config.floor10?Math.max(10,game.state.stats.zenith?.floor||1):(game.state.stats.zenith?.floor||1);
+   const wait=()=>config.attackMode==='floor'?Math.max(30,Math.round(seconds*60*(1.2-.6*Math.min(1,(floorOf()-1)/9))*(.5+Math.random()))):Math.round(seconds*60);
+   let next=game.getFrame()+wait();
    const tick=()=>{
     if(!game.isPlaying()||game.state.zenith?.incapacitated||game.getFrame()<next)return;
-    next=game.getFrame()+Math.round(seconds*60);
+    next=game.getFrame()+wait();
     for(const target of [game,window.LocalTestQP?.getAlly()].filter(Boolean)){
      if(!target.isPlaying()||target.state.zenith?.incapacitated)continue;
-     target.source.Push('ige',{id:'local-training-'+ ++id,type:'interaction',data:{type:'garbage',gameid:8000,username:'LOCAL TRAINING',amt:config.attackMode==='floor'?Math.min(40,lines+Math.max(0,(config.floor10?Math.max(10,target.state.stats.zenith.floor||1):(target.state.stats.zenith.floor||1))-1)):lines,zthalt:target.getZenithAltitude(),x:4.5,y:30}});
+     target.source.Push('ige',{id:'local-training-'+ ++id,type:'interaction',data:{type:'garbage',gameid:8000,username:'LOCAL TRAINING',amt:config.attackMode==='floor'?(lines+Math.max(0,(config.floor10?Math.max(10,target.state.stats.zenith.floor||1):(target.state.stats.zenith.floor||1))-1)):lines,zthalt:target.getZenithAltitude(),x:4.5,y:30}});
     }
    };
    // Garbage holes at least as scattered as on floor 10: QP recomputes messiness every
