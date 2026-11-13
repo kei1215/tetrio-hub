@@ -173,6 +173,9 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
  for(const [value,label]of [['none','攻撃なし'],['periodic','定期攻撃'],['floor','高層ほど強い攻撃']]){const option=document.createElement('option');option.value=value;option.textContent=label;attackMode.appendChild(option)}attackMode.value=saved('qp-local-attack-mode','none');
  const attackLines=field('攻撃段数',document.createElement('input'));attackLines.type='number';attackLines.min='1';attackLines.max='20';attackLines.value=saved('qp-local-attack-lines','2');attackLines.setAttribute('aria-label','攻撃段数');
  const attackSeconds=field('攻撃間隔（ゲーム内秒）',document.createElement('input'));attackSeconds.type='number';attackSeconds.min='.5';attackSeconds.max='60';attackSeconds.step='.5';attackSeconds.value=saved('qp-local-attack-seconds','5');attackSeconds.setAttribute('aria-label','攻撃間隔');
+ // Practice for players (2026-11-14): targeted like floor 10 from the start - the floor attack
+ // counts as floor 10 or more and garbage holes are at least as scattered as on floor 10.
+ const floor10=field('最初から10F相当の狙われ方・ゴミの穴のばらけ',document.createElement('input'));floor10.type='checkbox';floor10.checked=saved('qp-local-floor10','false')==='true';floor10.setAttribute('aria-label','最初から10F相当');
  const missionSource=field('復活ミッション',document.createElement('select'));missionSource.setAttribute('aria-label','復活ミッション');for(const [value,label]of [['standard','標準のみ'],['custom','自作のみ'],['both','すべて表示']]){const option=document.createElement('option');option.value=value;option.textContent=label;missionSource.appendChild(option)}missionSource.value=saved('qp-local-mission-source','standard');
  const missionTools=document.createElement('div');missionTools.id='local-mission-tools';missionTools.style.cssText='display:flex;flex-wrap:wrap;gap:.45em;margin:.7em 0';
  const missionImport=document.createElement('input');missionImport.type='file';missionImport.accept='application/json,text/plain,.json,.txt';missionImport.hidden=true;
@@ -249,7 +252,7 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
  refreshFixed();settings.appendChild(fixedPanel);
  const attackRequired=field('攻撃なしでも攻撃必須ミッションを表示',document.createElement('input'));attackRequired.type='checkbox';attackRequired.checked=saved('qp-local-mission-attack-required','false')==='true';attackRequired.setAttribute('aria-label','攻撃必須ミッションも表示');
  const modHyper=field('MOD中も条件を満たせばHYPERSPEEDを許可',document.createElement('input'));modHyper.type='checkbox';modHyper.checked=saved('qp-local-mod-hyper','false')==='true';modHyper.setAttribute('aria-label','MOD中HYPERSPEED');
- for(const control of [attackMode,attackLines,attackSeconds,missionSource,attackRequired,modHyper])control.addEventListener('change',()=>{localStorage.setItem('qp-local-attack-mode',attackMode.value);localStorage.setItem('qp-local-attack-lines',attackLines.value);localStorage.setItem('qp-local-attack-seconds',attackSeconds.value);localStorage.setItem('qp-local-mission-source',missionSource.value);localStorage.setItem('qp-local-mission-attack-required',String(attackRequired.checked));localStorage.setItem('qp-local-mod-hyper',String(modHyper.checked))});
+ for(const control of [attackMode,attackLines,attackSeconds,floor10,missionSource,attackRequired,modHyper])control.addEventListener('change',()=>{localStorage.setItem('qp-local-floor10',String(floor10.checked));localStorage.setItem('qp-local-attack-mode',attackMode.value);localStorage.setItem('qp-local-attack-lines',attackLines.value);localStorage.setItem('qp-local-attack-seconds',attackSeconds.value);localStorage.setItem('qp-local-mission-source',missionSource.value);localStorage.setItem('qp-local-mission-attack-required',String(attackRequired.checked));localStorage.setItem('qp-local-mod-hyper',String(modHyper.checked))});
  // The stock deck uses transforms and overflow clipping.  A fixed child is
  // then fixed to that clipped deck rather than the application viewport.
  // Place the dialog directly below <body>, just like the detached SETTING
@@ -325,7 +328,7 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
   if(duo!=='solo'&&comboEnabled.checked){for(const [name,selector]of comboSelectors){if(selector.value!=='off')selected[name]=selector.value}}
   const config=LocalQPOptions.build(selected,modHyper.checked);
   config.testMode=duo;config.attackMode=attackMode.value;
-  config.attackLines=Number(attackLines.value);config.attackSeconds=Number(attackSeconds.value);
+  config.attackLines=Number(attackLines.value);config.attackSeconds=Number(attackSeconds.value);config.floor10=floor10.checked;
   config.missions={source:missionSource.value,attackEnabled:config.attackMode!=='none',includeAttackRequired:attackRequired.checked,allowControlPenalties:controlPenalties.checked};
   return config;
  }
