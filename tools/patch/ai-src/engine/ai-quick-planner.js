@@ -196,13 +196,13 @@
    if(search){
     // One global renderer budget is shared by all BOTs, not one budget for
     // each BOT. When a human plays, yield search slices before frame input.
-    const budget=window.LocalAIFrameBudget?.claim?.(humanActive,deadline.total<=8)??pace.stepBudgetMs;
+    const budget=window.LocalAIFrameBudget?.claim?.(humanActive,deadline.total<=8,game)??pace.stepBudgetMs;
     if(humanActive)stats.humanProtectedFrames++;
     if(budget<=0){stats.budgetSkips++;return}
     const started=performance.now();
     let result=search.step(Math.min(pace.stepLimit,humanActive?2:pace.stepLimit));
     const elapsed=performance.now()-started;
-    window.LocalAIFrameBudget?.account?.(elapsed);
+    window.LocalAIFrameBudget?.account?.(elapsed,game);
     stats.searchTimeMs+=elapsed;stats.searchSlices++;stats.maxSliceMs=Math.max(stats.maxSliceMs,elapsed);
     const audit=game._localSpinAudit;
     if(audit){stats.rootCandidatesChecked=audit.rootChecked||0;stats.futureCandidatesChecked=audit.lookaheadChecked||0}

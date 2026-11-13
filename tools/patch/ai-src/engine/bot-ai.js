@@ -85,17 +85,25 @@
  // Share CPU time across all local BOTs on the renderer thread. A native
  // operation cannot be preempted mid-call, so these are cooperative budgets,
  // not a claim of hard realtime isolation. Keep it low if a human is playing.
+ // Fair share (2026-11-13): first come first served let the left BOT (ticked
+ // first) take 2.4 of 4.5 ms every frame and the right one often nothing, so
+ // the right side played slower and lost more. Each BOT seen in the last frame
+ // now gets an equal part; time it leaves unused goes to the others.
  const frameBudget=window.LocalAIFrameBudget??(()=>{
-  let slot=-1,spent=0,peak=0;
+  let slot=-1,spent=0,peak=0,seen=new Map(),lastCount=1;
   const clock=()=>performance.now();
-  return {claim(human=false,urgent=false){
+  return {claim(human=false,urgent=false,who=null){
     const tick=Math.floor(clock()/16.666667);
-    if(tick!==slot){slot=tick;spent=0}
-    const total=human?1.7:4.5;
-    const remaining=total-spent;
-    return remaining<.45?(urgent?.45:0):Math.max(.45,Math.min(human?1:2.4,remaining));
-   },account(ms){spent+=Math.max(0,ms);peak=Math.max(peak,ms)},
-   status:()=>({slot,spent,peak}),
+    if(tick!==slot){slot=tick;spent=0;lastCount=Math.max(1,seen.size);seen=new Map()}
+    const total=human?1.7:4.5,remaining=total-spent;
+    if(who&&!seen.has(who))seen.set(who,0);
+    const mine=who?seen.get(who):0,share=total/lastCount;
+    // own part first; the common rest only once every BOT had its turn
+    const own=who?Math.max(0,share-mine):remaining;
+    const room=Math.min(remaining,seen.size>=lastCount?remaining:own);
+    return room<.45?(urgent?.45:0):Math.max(.45,Math.min(human?1:2.4,room));
+   },account(ms,who=null){ms=Math.max(0,ms);spent+=ms;peak=Math.max(peak,ms);if(who)seen.set(who,(seen.get(who)||0)+ms)},
+   status:()=>({slot,spent,peak,bots:lastCount}),
   };
  })();
  window.LocalAIFrameBudget=frameBudget;
