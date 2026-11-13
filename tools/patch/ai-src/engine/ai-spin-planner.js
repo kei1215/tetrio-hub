@@ -281,7 +281,8 @@
     // taking garbage now must leave room for that too, a cancel can be dodged.
     const danger=heightBefore+.5*(node.incoming||0)+.5*(P.threat||0)>=P.dangerPeak&&(rootDanger||(node.gi||0)>0);
     for(const [type,hold,qi,held] of options){
-     for(const p of placements(node.rows,type)){
+     // a high stack: routes that climb over it with rotations (kicks) need more keys on the floor
+     for(const p of placements(node.rows,type,4,19,heightBefore>=14?6:3)){
       const res=place(node.rows,type,p);
       let gain=0,b2b=node.b2b,tplOff=node.tplOff,inc=node.incoming||0,gi=node.gi||0,brk=node.brk||null,pendS=node.pendS||0,pendR=node.pendR||0;
       if(tpl.size&&!tplOff){const cells=tables.shapes[type][p.r];const k=type+'|'+cells.map(([cx,cy])=>(p.x+cx)+','+(p.y+cy)).sort().join(';');const v=tpl.get(k);if(v)gain+=v}
