@@ -109,10 +109,10 @@
  const active = game => !!game?._aiEngine && !!bots[game._aiEngine];
 
  // ---- Entrance: 外部AI対戦 (TL / CUSTOM room: player / vA AI / loaded outside AI) ----
- const css = `#qp-ext-ai{position:fixed;left:12px;bottom:12px;z-index:99999;font:12px/1.4 sans-serif;color:#e8e8f0}
-#qp-ext-ai>button{background:#3b2a6b;color:#fff;border:1px solid #8c7bd8;border-radius:6px;padding:6px 10px;cursor:pointer}
+ const css = `#qp-ext-ai{position:fixed;left:12px;bottom:72px;z-index:2147483647;font:12px/1.4 sans-serif;color:#e8e8f0}
+#qp-ext-ai>button{display:none;background:#3b2a6b;color:#fff;border:1px solid #8c7bd8;border-radius:6px;padding:6px 10px;cursor:pointer}
 #qp-ext-ai .p{display:none;margin-top:6px;background:#1b1830ee;border:1px solid #6d5fb5;border-radius:8px;padding:10px;width:300px}
-#qp-ext-ai.open .p{display:block}#qp-ext-ai label{display:block;margin:4px 0}#qp-ext-ai select,#qp-ext-ai input[type=number]{width:100%;background:#0f0d1c;color:#fff;border:1px solid #555;border-radius:4px;padding:3px}
+#qp-ext-ai.open .p{display:block}#qp-ext-ai.float>button{display:inline-block}#qp-ext-ai label{display:block;margin:4px 0}#qp-ext-ai select,#qp-ext-ai input[type=number]{width:100%;background:#0f0d1c;color:#fff;border:1px solid #555;border-radius:4px;padding:3px}
 #qp-ext-ai .row{display:flex;gap:6px;margin-top:8px}#qp-ext-ai .row button{flex:1;padding:5px;border-radius:4px;border:1px solid #777;background:#2a2547;color:#fff;cursor:pointer}
 #qp-ext-ai .s{margin-top:6px;opacity:.85;white-space:pre-wrap}#qp-ext-ai .n{opacity:.7;margin-top:4px}`;
  function sideOptions() {
@@ -128,6 +128,7 @@
   root.innerHTML = `<button type="button">外部AI対戦</button><div class="p">
 <label>左 <select data-k="left"></select></label><label>右 <select data-k="right"></select></label>
 <label>ルール <select data-k="mode"><option value="league">TL</option><option value="custom">CUSTOM</option></select></label>
+<label>FT(先に何本取ったら勝ちか) <input data-k="ft" type="number" min="1" max="99" step="1" value="7"></label>
 <label>外部AIの強さ(エンジンごとの探索量。空欄で既定) <input data-k="str" type="number" min="1" step="1"></label>
 <div class="row"><button data-a="start" type="button">開始</button><button data-a="stop" type="button">終了</button></div>
 <div class="row"><button data-a="add" type="button">外部AIを読み込む</button><button data-a="del" type="button">外部AIを外す</button></div>
@@ -135,9 +136,15 @@
 <div class="n">外部AIはパッチに入っていません。自分のパソコンにある外部AIのファイル(.js と、必要なら .wasm など)を選んで読み込みます。</div><div class="s"></div></div>`;
   document.body.appendChild(root);
   const $ = q => root.querySelector(q), status = t => { $('.s').textContent = t; };
+  // The entrance sits next to "AI管理を開く" in the offline panel (TETR.IO's footer
+  // covers the bottom-left corner); without that panel a floating button is used.
+  const util = document.getElementById('local-utility-actions');
+  if (util && !document.getElementById('local-ext-ai-open')) { const b = document.createElement('button'); b.id = 'local-ext-ai-open'; b.type = 'button'; b.textContent = '外部AI対戦'; b.onclick = () => $('button').onclick(); util.appendChild(b); }
+  else root.classList.add('float');
   const extOf = v => (String(v).startsWith('ext:') ? String(v).slice(4) : null);
   const fill = () => {
    for (const k of ['left', 'right']) { const sel = $(`select[data-k="${k}"]`), keep = sel.value; sel.innerHTML = ''; for (const [v, t] of sideOptions()) { const o = document.createElement('option'); o.value = v; o.textContent = t; sel.appendChild(o); } sel.value = keep; if (!sel.value) sel.selectedIndex = k === 'left' ? 0 : sel.options.length - 1; }
+   try { const f = localStorage.getItem('qp-local-ai-ext-ft'); if (f) $('input[data-k="ft"]').value = f; } catch {}
    const id = extOf($('select[data-k="right"]').value) || extOf($('select[data-k="left"]').value); $('input[data-k="str"]').value = id ? (strength(id) ?? '') : '';
   };
   $('button').onclick = async () => { root.classList.toggle('open'); if (root.classList.contains('open')) { fill(); try { await window.LocalAI?.load?.(); fill(); } catch {} } };
@@ -163,9 +170,13 @@
     const profiles = window.LocalBotLearning?.profiles?.() || [];
     if (engines.some(Boolean) && !profiles.length) throw Error('vA の AI プロファイルが1つもありません(外部AIのキー操作役に使います)');
     // An outside AI side borrows a vA profile only for the key driver; the outside AI decides every placement.
-    const side = (v, e) => (e ? 'ai:' + profiles[0].id : v);
+    // Same PPS: an outside AI borrows the other side's vA profile (its key driver and pace) when there is one.
+    const other = i => [L, R][1 - i], drv = i => (String(other(i)).startsWith('ai:') ? other(i) : 'ai:' + profiles[0].id);
+    const side = (v, e, i) => (e ? drv(i) : v);
     const labels = engines.map(e => (e ? defs[e].label || e : null));
-    window.LocalAIRoom.start({ left: side(L, engines[0]), right: side(R, engines[1]), mode: $('select[data-k="mode"]').value, labels, engines });
+    try { localStorage.setItem('qp-local-ai-ext-ft', String($('input[data-k="ft"]').value)); } catch {}
+    const ft = Number($('input[data-k="ft"]').value); if (Number.isInteger(ft) && ft >= 1 && ft <= 99) window.LocalAIRoom.ft?.(ft);
+    window.LocalAIRoom.start({ left: side(L, engines[0], 0), right: side(R, engines[1], 1), mode: $('select[data-k="mode"]').value, labels, engines });
     status('開始: ' + [L, R].map(v => sideOptions().find(o => o[0] === v)?.[1] || v).join(' vs '));
    } catch (e) { status('開始できません: ' + e.message); }
   };

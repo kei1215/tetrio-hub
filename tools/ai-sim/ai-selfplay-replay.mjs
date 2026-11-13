@@ -121,6 +121,7 @@ while (stats.pieces < Number(maxPieces)) {
     if (lock.topout) topped = true;
     const a = (lock.rawGarbage || []).reduce((a, b) => a + b, 0); stats.attack += a;
     const cat = lines === 0 ? null : sp !== "none" ? (String(lock.mino).toLowerCase() === "t" ? (sp === "mini" ? "tmini" : "tfull") : "other") : lines === 4 ? "quad" : "plain";
+    stats.topB2B = Math.max(stats.topB2B || 0, e.stats.b2b || 0); if (cat === "plain" || (lines && lines < 4 && sp === "none")) stats.plainN = (stats.plainN || 0) + 1;
     if (cat) { stats.cat ??= {}; stats.cat[cat] = (stats.cat[cat] || 0) + a; }
     if (String(lock.mino).toLowerCase() === "t") { stats.tPieces = (stats.tPieces || 0) + 1; if (sp === "normal" && lines >= 2) stats.tGood = (stats.tGood || 0) + 1; }
   }
@@ -133,5 +134,5 @@ const results = { aggregatestats: { apm: +(stats.attack / secs * 60).toFixed(2),
 const out = { id: null, gamemode: tplFile.gamemode, ts: tplFile.ts, users: [{ ...tplFile.users[0], username: "VA-AI" }], replay: { frames, events, options, results }, version: tplFile.version };
 fs.writeFileSync(outPath, JSON.stringify(out));
 const tf = ((stats.cat?.tfull || 0) / Math.max(1, stats.attack) * 100).toFixed(0);
-console.log(JSON.stringify({ app: (stats.attack / Math.max(1, stats.pieces)).toFixed(2), tShare: tf + "%", tGood: (stats.tGood || 0) + "/" + (stats.tPieces || 0), cat: stats.cat, zeroSpin: stats.zeroSpin, recv: e.stats.garbage?.receive ?? 0, maxInc: stats.maxInc, miss: stats.miss, topped, lines: e.stats.lines, b2b: e.stats.b2b }));
+console.log(JSON.stringify({ app: (stats.attack / Math.max(1, stats.pieces)).toFixed(2), tShare: tf + "%", tGood: (stats.tGood || 0) + "/" + (stats.tPieces || 0), cat: stats.cat, zeroSpin: stats.zeroSpin, plainN: stats.plainN || 0, topB2B: stats.topB2B || 0, recv: e.stats.garbage?.receive ?? 0, maxInc: stats.maxInc, miss: stats.miss, topped, lines: e.stats.lines, b2b: e.stats.b2b }));
 if (0) console.log(JSON.stringify({ ...stats, lines: e.stats.lines, frames, topped, b2b: e.stats.b2b }));
