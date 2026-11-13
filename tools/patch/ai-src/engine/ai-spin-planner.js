@@ -241,7 +241,9 @@
     // Garbage still coming counts as height already there.
     // Only half of it: spins cancel too, so waiting garbage alone must not
     // turn the plan into breaking the chain and digging.
-    const danger=heightBefore+.5*(node.incoming||0)>=P.dangerPeak;
+    // P.threat: attack the opponent can fire soon (their B2B charge, a ready spin):
+    // taking garbage now must leave room for that too, a cancel can be dodged.
+    const danger=heightBefore+.5*(node.incoming||0)+.5*(P.threat||0)>=P.dangerPeak;
     for(const [type,hold,qi,held] of options){
      for(const p of placements(node.rows,type)){
       const res=place(node.rows,type,p);
@@ -268,7 +270,7 @@
        // otherwise be sent (and in QP climb), so take the garbage instead.
        // Take or cancel by height: low board -> take it and keep the attack;
        // a board that would not survive the garbage -> cancel (P.takeMax rows).
-       if(inc>0){const c=Math.min(inc,atk);if(P.cancelW>0)gain+=P.cancelW*c;else if(P.takeMax&&heightBefore+inc>P.takeMax)gain+=(P.cancelHi||4)*c;else gain-=P.atk*P.cancelLoss*c;inc-=c}
+       if(inc>0){const c=Math.min(inc,atk);if(P.cancelW>0)gain+=P.cancelW*c;else if(P.takeMax&&heightBefore+inc+(P.threat||0)>P.takeMax)gain+=(P.cancelHi||4)*c;else gain-=P.atk*P.cancelLoss*c;inc-=c}
        if(p.spin){let g=(type==='t'?(p.spin===2?P.tFull:P.tMini):P.mini)[Math.min(3,res.lines)];
         // Where the player makes spins (centre / edge), from their own data.
         if(colW&&g>0){const cells=tables.shapes[type][p.r];const cx=Math.round(cells.reduce((a,[x])=>a+x,0)/4+p.x);g*=colW[Math.max(0,Math.min(W-1,cx))]}
@@ -310,7 +312,10 @@
    // T-slot outlook for the best few boards of this depth (a T-move scan per
    // board is too slow for all of them).
    const k=Math.min(children.length,Math.ceil(P.width*P.tPotK));
-   for(let i=0;i<k;i++){children[i].value+=tPotential(children[i].rows,P);if(i%8===7)yield}
+   // P.reserve: when the opponent's ready attack would push this stack past
+   // takeMax, a ready T-spin slot is ammunition to cancel with; value it more.
+   for(let i=0;i<k;i++){const c=children[i];let m=1;if(P.reserve&&P.threat){let h=0;for(let y=0;y<H;y++)if(c.rows[y]){h=H-y;break}if(h+P.threat>(P.takeMax||14))m+=P.reserve}
+    c.value+=m*tPotential(c.rows,P);if(i%8===7)yield}
    children.length=k;
    children.sort((a,b)=>b.value-a.value);
    // Keep different first moves alive so the beam is not one idea.

@@ -528,6 +528,14 @@
    out.incoming=incoming+(margin<8?Math.round(series):0);
    out.cancelW=!incoming?0:margin<4?4+.5*g.peak:margin<8?1.5:0;
    out.cashout=50;
+   // What the opponent can fire soon (2026-11-13, user: a cancel can be dodged, and two
+   // attacks ready beat one cancel): their B2B charge if they break now, plus a typical
+   // spin. Taking garbage must leave room for it; see takeMax / danger in the planner.
+   try{const peer=game._localTLPeer,ps=peer?.state?.stats;if(ps&&peer.isPlaying?.()){
+    const b=Math.max(0,Number(ps.btb)||0),at=out.chargeAt||4,surge=out.charging&&b>at?b-at+(out.chargeBase||3):0;
+    const pb=peer.state.board,top=pb?pb.findIndex(r=>r.some(c=>c!==null)):-1,ph=top<0?0:pb.length-top;
+    // a low opponent with a chain can keep both a spin and the charge ready
+    out.threat=Math.min(16,surge+(b>=1?4:2)+(ph<8&&b>=4?2:0));}}catch{}
    game._aiCancelInfo={incoming,series:+series.toFixed(1),margin:+margin.toFixed(1),cancelW:out.cancelW};
    if(!T)return out;
    try{

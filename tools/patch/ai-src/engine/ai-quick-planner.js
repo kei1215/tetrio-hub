@@ -252,6 +252,10 @@
     // ends at a wall or the ARR lets us release on the column; drops are a held
     // soft drop released on the floor. Every step is checked against the trace.
     const f=game.state.falling,fail=reason=>{releaseKeys(game,target);stats.routeFailures++;if(target?.spin)stats.spinRouteMisses++;game._localBotIntent='経路やり直し: '+reason;target=null;lastPiece=-1};
+    // Lockstep with the player: wait at the spawn until the player has placed,
+    // so a spin / soft-drop route never forces the lock early (2026-11-13: the BOT
+    // locked up to 3 s before the player on floor routes).
+    if(!target.exec&&sync&&!sync.ahead()&&deadline.total>20){game._localBotIntent='同時に置く: プレーヤー待ち';return}
     if(!target.exec){
      if(target.routeStart&&(f.x!==target.routeStart.x||f.r!==target.routeStart.r)){fail('開始位置');return}
      const path=target.path.slice(),trace=(target.trace||[]).slice();
