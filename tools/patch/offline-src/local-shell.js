@@ -175,7 +175,7 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
  const attackSeconds=field('攻撃間隔（ゲーム内秒）',document.createElement('input'));attackSeconds.type='number';attackSeconds.min='.5';attackSeconds.max='60';attackSeconds.step='.5';attackSeconds.value=saved('qp-local-attack-seconds','5');attackSeconds.setAttribute('aria-label','攻撃間隔');
  // Practice for players (2026-11-14): targeted like floor 10 from the start - the floor attack
  // counts as floor 10 or more and garbage holes are at least as scattered as on floor 10.
- const floor10=field('最初から10F相当の狙われ方・ゴミの穴のばらけ',document.createElement('input'));floor10.type='checkbox';floor10.checked=saved('qp-local-floor10','false')==='true';floor10.setAttribute('aria-label','最初から10F相当');
+ const floor10=field('最初から10F相当（狙われ方・穴のばらけ・ゴミの猶予・攻撃間隔）',document.createElement('input'));floor10.type='checkbox';floor10.checked=saved('qp-local-floor10','false')==='true';floor10.setAttribute('aria-label','最初から10F相当');
  const missionSource=field('復活ミッション',document.createElement('select'));missionSource.setAttribute('aria-label','復活ミッション');for(const [value,label]of [['standard','標準のみ'],['custom','自作のみ'],['both','すべて表示']]){const option=document.createElement('option');option.value=value;option.textContent=label;missionSource.appendChild(option)}missionSource.value=saved('qp-local-mission-source','standard');
  const missionTools=document.createElement('div');missionTools.id='local-mission-tools';missionTools.style.cssText='display:flex;flex-wrap:wrap;gap:.45em;margin:.7em 0';
  const missionImport=document.createElement('input');missionImport.type='file';missionImport.accept='application/json,text/plain,.json,.txt';missionImport.hidden=true;
