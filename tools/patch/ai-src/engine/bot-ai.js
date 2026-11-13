@@ -517,7 +517,9 @@
   // low-attack B2B clear (single-line spin / mini) and how often a Quad.
   function playerPlanOptions(state){
    const out={},T=window.LocalAITemplates,o=state.setoptions||{};
-   const incoming=pressure(state),g=geometry(state.board);
+   // v4.8272: garbage still on its way counts too (QP 2026-11-13: 20 lines waited ~480
+   // frames as not active, and the plan treated the board as safe until it landed).
+   const incoming=Math.min(40,(state.impendingdamage||[]).reduce((n,d)=>n+Math.max(0,d.amt||0),0)+(state.garbageareentries||[]).length),g=geometry(state.board);
    out.charging=!!o.b2bcharging;out.chargeAt=Number(o.b2bcharge_at??4);out.chargeBase=Number(o.b2bcharge_base??3);
    // Cancel or take it? Keep a record of the garbage received lately: in QP
    // attacks come in series, so more is likely right after some arrived.
