@@ -44,12 +44,15 @@ function qpReplayMp4Button(document, window) {
  const floating=()=>{
   let f=document.getElementById('qp-mp4-float');
   const views=[['results','downloadreplay_results','qp-mp4-results'],['multilogview','downloadreplay_multilog','qp-mp4-multilog']];
-  const v=views.find(([view,,inRow])=>shown(document.getElementById(view))&&!shown(document.getElementById(inRow)));
+  // Only on the record screen itself (results / match log is the open menu), not HOME, not while the replay plays.
+  const open=e=>{const m=document.getElementById('menus'),mv=e?.closest?.('[data-menuview]');
+   return !!(e&&m&&!m.classList.contains('hidden')&&!m.classList.contains('thidden')&&mv&&!mv.classList.contains('hidden')&&!mv.classList.contains('thidden')&&shown(e))};
+  const v=views.find(([view,,inRow])=>open(document.getElementById(view))&&!shown(document.getElementById(inRow)));
   if(!v){if(f)f.style.display='none';return}
   if(!f){
    f=document.createElement('div');f.id='qp-mp4-float';f.title='このリプレイを MP4 動画にする';f.setAttribute('role','button');
-   // outside the REPLAY row TETR.IO's button styles do not apply: own look, under BACK, on top
-   f.style.cssText='position:fixed;left:16px;top:150px;z-index:2147483000;cursor:pointer;background:rgba(10,12,20,.82);color:#fff;border:2px solid rgba(255,255,255,.55);border-radius:4px;padding:4px 14px;font-family:HUN,sans-serif;font-size:20px;font-weight:900;letter-spacing:.04em;user-select:none';
+   // outside the REPLAY row TETR.IO's button styles do not apply: own look, bottom right, on top
+   f.style.cssText='position:fixed;right:16px;bottom:64px;z-index:2147483000;cursor:pointer;background:rgba(10,12,20,.82);color:#fff;border:2px solid rgba(255,255,255,.55);border-radius:4px;padding:4px 14px;font-family:HUN,sans-serif;font-size:20px;font-weight:900;letter-spacing:.04em;user-select:none';
    f.textContent='\u25b6 MP4';
    f.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();run(document.getElementById(f.dataset.download))},true);
    document.body.appendChild(f);
