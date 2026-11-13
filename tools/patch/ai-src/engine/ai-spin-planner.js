@@ -278,7 +278,7 @@
     for(const [type,hold,qi,held] of options){
      for(const p of placements(node.rows,type)){
       const res=place(node.rows,type,p);
-      let gain=0,b2b=node.b2b,tplOff=node.tplOff,inc=node.incoming||0,gi=node.gi||0,pendS=node.pendS||0,pendR=node.pendR||0;
+      let gain=0,b2b=node.b2b,tplOff=node.tplOff,inc=node.incoming||0,gi=node.gi||0,brk=node.brk||null,pendS=node.pendS||0,pendR=node.pendR||0;
       if(tpl.size&&!tplOff){const cells=tables.shapes[type][p.r];const k=type+'|'+cells.map(([cx,cy])=>(p.x+cx)+','+(p.y+cy)).sort().join(';');const v=tpl.get(k);if(v)gain+=v}
       if(res.lines){
        const combo=(node.combo||0)+1;
@@ -315,12 +315,13 @@
        else if(res.lines===4){gain+=(danger?6:P.quad)*(P.comboScale&&combo>1?1+P.comboScale*(combo-1):1);b2b++}
        // Breaking is fine near top-out, under attack when the surge is needed,
        // or once the chain is as long as the player usually cashes it in.
-       // v4.8275 (user): breaking is also fine with 20+ garbage rows to dig (board + waiting):
-       // dig Quads rebuild the chain at once.
-       else{const pen=danger||cashOk||P.digRebuild&&(P.gRows||0)>=P.digRebuild?-2:P.breakClear-P.breakPerB2B*Math.min(60,node.b2b);gain+=pen;
+       else{const pen=danger||cashOk?-2:P.breakClear-P.breakPerB2B*Math.min(60,node.b2b);gain+=pen;
         // Break -> combo -> finisher: keep the charge pending; it is paid only
         // if the clears keep coming (see above), never for a lone break.
         if(!danger&&!cashOk&&surge>0&&node.b2b>=P.comboCashMin){pendS=P.atk*surge;pendR=-pen}
+        // v4.8275 (user): a break is fine when the clears after it (dig Quads in a combo)
+        // send P.digRebuild+ (20) in this line: the penalty is paid back then.
+        if(P.digRebuild&&pen<0)brk={at:node.attack||0,r:-pen};
         b2b=0}
        if(res.rows.every(v=>v===0))gain+=12;
        tplOff=true;
@@ -342,9 +343,11 @@
       const nextCur=qi<queue.length?queue[qi]:null;
       // Transpositions (same board, same HOLD / next piece) waste the beam.
       let hash=hold?hold.charCodeAt(0):1;for(let y=0;y<H;y++)hash=Math.imul(hash,31)+rowsOut[y]|0;
+      const attackNow=(node.attack||0)+(res.lines?attackOf(type,p.spin,res.lines,node.b2b,P.combo?(node.combo||0)+1:1):0);
+      if(brk&&attackNow-brk.at>=P.digRebuild){gain+=brk.r;brk=null}
       const acc=node.acc+gain*Math.pow(P.depthDecay,d),key=hash+':'+(nextCur||'');
       if(seen.has(key))continue;seen.add(key);
-      const child={rows:rowsOut,cur:nextCur,hold,qi:qi+1,acc,tplOff,incoming:inc,gi,pendS,pendR,combo:res.lines?(node.combo||0)+1:0,attack:(node.attack||0)+(res.lines?attackOf(type,p.spin,res.lines,node.b2b,P.combo?(node.combo||0)+1:1):0),first:node.first||{x:p.x,y:p.y,r:p.r,hold:held,spin:p.spin,type},b2b,spins:node.spins+(p.spin&&res.lines?1:0)};
+      const child={rows:rowsOut,cur:nextCur,hold,qi:qi+1,acc,tplOff,incoming:inc,gi,pendS,pendR,combo:res.lines?(node.combo||0)+1:0,attack:attackNow,brk,first:node.first||{x:p.x,y:p.y,r:p.r,hold:held,spin:p.spin,type},b2b,spins:node.spins+(p.spin&&res.lines?1:0)};
       child.value=acc+boardValue(rowsOut,P);
       children.push(child);
      }
