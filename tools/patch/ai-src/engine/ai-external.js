@@ -45,21 +45,38 @@
  }
  function register(def) {
   if (!def || !/^[a-z0-9_-]{1,32}$/.test(String(def.id || '')) || typeof def.create !== 'function') throw Error('外部AIの登録が不正です(id と create が必要)');
-  defs[def.id] = { ...def, files: pendingFiles || def.files || {}, script: pendingScript || def.script || null };
+  // A def that brings its own files / script (the built-in CC2) keeps them, even when it
+  // registers while a stored package is being loaded (pendingFiles belongs to that package).
+  defs[def.id] = { ...def, files: def.files || pendingFiles || {}, script: def.script || pendingScript || null };
   delete bots[def.id]; delete errors[def.id];
  }
  // ---- worker host: the package script + files run in a Worker; results come back per slice ----
  const WORKER_SRC = `'use strict';
-let defs = {}, bot = null, job = null, cur = 0;
+let defs = {}, bot = null, job = null, cur = 0, stopAt = 0;
+// The next slice is queued with a MessageChannel, not setTimeout: worker timers can be
+// throttled (seen: 60 ms of search in 400 ms), a channel message is not.
+const tick = new MessageChannel(); let next = null; tick.port1.onmessage = () => { const f = next; next = null; f && f(); };
+const later = (f) => { next = f; tick.port2.postMessage(0); };
 self.LocalExternalAI = { register(d) { defs[d.id] = d; } };
 const post = (n, final) => { let r = null; try { r = job.result(); } catch {} postMessage({ t: 'res', n, r, done: !!(final || job.done), spent: job.spent || 0 }); };
-const run = (n) => { if (!job || cur !== n) return; let d = false; try { d = job.step(25); } catch { d = true; } post(n, d); if (d) { job = null; return; } setTimeout(() => run(n), 0); };
+// After stop(): keep searching until there is a move (Cold Clear 2 returns none before its
+// search ends), at most 250 ms more, then finish with what there is.
+const run = (n) => { if (!job || cur !== n) return; let d = false; try { d = job.step(stopAt ? 10 : 25); } catch { d = true; }
+ // (the move is read before job.stop(): Cold Clear 2's stop() can drop a finished move)
+ if (!d && stopAt) { let r = null; try { r = job.result(); } catch {}
+  if (r) { postMessage({ t: 'res', n, r, done: true, spent: job.spent || 0 }); job = null; return; }
+  if (performance.now() - stopAt > 250) { try { job.stop(); } catch {} d = true; } }
+ post(n, d); if (d) { job = null; return; } later(() => run(n)); };
 onmessage = async (e) => { const m = e.data;
  if (m.t === 'load') { try { const u = URL.createObjectURL(new Blob([m.script], { type: 'text/javascript' })); importScripts(u); URL.revokeObjectURL(u);
-   const d = defs[m.id]; if (!d) throw Error('register がありません'); bot = await d.create(m.files, { strength: m.strength }); postMessage({ t: 'ready' }); }
+   const d = defs[m.id]; if (!d) throw Error('register がありません'); bot = await d.create(m.files, { strength: m.strength });
+   // Warm-up search (the first searches of a fresh wasm are several times slower), max 2 s.
+   try { const e0 = Array.from({ length: 40 }, () => Array(10).fill(null)), w = bot.begin({ board: e0, current: 't', hold: null, queue: ['i', 'o', 's', 'z', 'l', 'j'], b2b: 0, combo: 0, incoming: [] }), t0 = performance.now();
+    for (let k = 0; k < 2 && performance.now() - t0 < 2000; k++) { let j = k ? bot.begin({ board: e0, current: 'i', hold: null, queue: ['t', 'o', 's', 'z', 'l', 'j'], b2b: 0, combo: 0, incoming: [] }) : w; while (!j.step(50) && performance.now() - t0 < 2000); } } catch {}
+   postMessage({ t: 'ready' }); }
   catch (err) { postMessage({ t: 'error', msg: String(err && err.message || err) }); } }
- else if (m.t === 'begin') { try { job = bot.begin(m.input); cur = m.n; run(m.n); } catch (err) { postMessage({ t: 'res', n: m.n, r: null, done: true, spent: 0 }); } }
- else if (m.t === 'stop') { if (job && cur === m.n) { try { job.stop(); } catch {} post(m.n, true); job = null; } }
+ else if (m.t === 'begin') { try { job = bot.begin(m.input); cur = m.n; stopAt = 0; run(m.n); } catch (err) { postMessage({ t: 'res', n: m.n, r: null, done: true, spent: 0 }); } }
+ else if (m.t === 'stop') { if (job && cur === m.n && !stopAt) stopAt = performance.now(); }
 };`;
  async function workerBot(def) {
   if (!def.script || typeof Worker !== 'function') return null;
@@ -80,8 +97,10 @@ onmessage = async (e) => { const m = e.data;
    begin(input) {
     const my = ++n; last = {}; w.postMessage({ t: 'begin', n: my, input });
     const live = () => my === n;
-    return { get done() { return live() && !!last.done; }, get spent() { return last.spent || 0; },
-     step() { return live() && !!last.done; }, stop() { if (live() && !last.done) w.postMessage({ t: 'stop', n: my }); },
+    // A worker that does not answer within 1.5 s of stop() counts as finished (no move).
+    let stoppedAt = 0; const late = () => stoppedAt && performance.now() - stoppedAt > 1500;
+    return { get done() { return live() && (!!last.done || late()); }, get spent() { return last.spent || 0; },
+     step() { return this.done; }, stop() { if (live() && !last.done && !stoppedAt) { stoppedAt = performance.now(); w.postMessage({ t: 'stop', n: my }); } },
      result() { return live() ? last.r || null : null; } };
    },
    terminate() { try { w.terminate(); } catch {} },
@@ -127,11 +146,13 @@ onmessage = async (e) => { const m = e.data;
   const stats = game._aiExternalStats || (game._aiExternalStats = { asked: 0, placed: 0, unmatched: 0, early: 0, ms: 0 });
   stats.asked++;
   const job = bot.begin(inputOf(base));
-  let out;
+  let out, early = false;
   const convert = () => {
    if (out !== undefined) return out;
-   const p = job.result(); out = null;
-   if (!p) return out;
+   const p = job.result();
+   // A worker search still finishing after stop() has no move yet: do not keep that null.
+   if (!p) { if (job.done || !bot.worker) out = null; return null; }
+   out = null;
    const H = base.game.board.length, type = lower(p.piece);
    const m = window.LocalSpinPlanner?.matchCells?.(opts.engine, { board: base.game.board }, type, p.cells.map(([x, yb]) => [x, H - 1 - yb]), opts);
    if (!m) { stats.unmatched++; return out; }
@@ -152,7 +173,8 @@ onmessage = async (e) => { const m = e.data;
    stop() {
     // A worker search can not be waited for here (its messages arrive between frames):
     // take the best move it has sent so far.
-    if (bot.worker) { job.stop(); return convert(); }
+    // bot-ai keeps waiting (frame by frame, nothing blocks) until done turns true.
+    if (bot.worker) { if (!job.done && !early) { early = true; stats.early++; } job.stop(); return job.done ? convert() : null; }
     if (!job.done) {
      stats.early++;
      const t0 = performance.now();
