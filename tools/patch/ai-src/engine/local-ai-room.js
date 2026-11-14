@@ -35,7 +35,12 @@
  const asSide=value=>value==='player'?'player':'ai';
  const profileFor=(value,fallback)=>{if(value==='player')return null;const id=String(value||'');return window.LocalBotLearning?.getProfile?.(id.startsWith('ai:')?id.slice(3):fallback)};
  const safePlaying=game=>{try{return !!game?.isPlaying?.()}catch{return false}};
- function send(source,target,amount){if(!safePlaying(target)||!Number.isFinite(amount)||amount<=0)return;const ack=source.state.garbageacknowledgements;if(!ack?.incoming||!ack?.outgoing)return;const iid=source.state.interactionid=(Number(source.state.interactionid)||0)+1,ackiid=ack.incoming[target.id]||0,pending=ack.outgoing;(pending[target.id]??=[]).push({iid,amt:amount});target.source.Push('ige',{id:'local-tl-'+(++packetId),type:'interaction',data:{type:'garbage',gameid:source.id,username:source.options.username,iid,ackiid,amt:amount,x:4.5,y:30,active:false}})}
+ // v4.8283 (user: リプレイと実際のプレイがずれる): the room no longer writes the sender's
+ // interactionid / garbageacknowledgements.outgoing. Those writes are not in the replay, so when both
+ // sides attacked within a frame the live game cancelled the crossing garbage (passthrough zero) and
+ // the replay did not (native replay of the 08:01 TTRM: off from that frame on). The packet id is
+ // counted by the room; ackiid = all acknowledged, so nothing is cancelled live or in the replay.
+ function send(source,target,amount){if(!safePlaying(target)||!Number.isFinite(amount)||amount<=0)return;const iid=source._localIgeIid=(source._localIgeIid||0)+1,ackiid=Number.MAX_SAFE_INTEGER;target.source.Push('ige',{id:'local-tl-'+(++packetId),type:'interaction',data:{type:'garbage',gameid:source.id,username:source.options.username,iid,ackiid,amt:amount,x:4.5,y:30,active:false}})}
  function noGravity(g){try{g.options.g=0;g.options.gincrease=0;if(g.state)g.state.g=0;const ro=g.replay?.options;if(ro&&ro!==g.options){ro.g=0;ro.gincrease=0}g._localNoGravity=true}catch{}}
  function stop(){const old=session;if(!old)return;session=null;old.stopped=true;for(const dispose of old.cleanup.splice(0))try{dispose()}catch{}for(const game of old.games){try{game._localLiveBot?.stop?.();game.source?.Push?.('keyup',{key:'softDrop',subframe:.5})}catch{}try{if(safePlaying(game))game.endNow?.()}catch{}try{game.state.playing=false}catch{}}try{old.games[1]?.destroy?.()}catch{}hideScore()}
  function attachBot(game,profile,state,external){

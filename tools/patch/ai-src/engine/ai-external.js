@@ -23,8 +23,16 @@
  'use strict';
  const DB = 'qp-external-ai', STORE = 'packages';
  const defs = {}, bots = {}, errors = {};
- const strengthKey = id => 'qp-local-ai-ext-strength-' + id;
- const strength = id => { const v = Number(localStorage.getItem(strengthKey(id))); return Number.isFinite(v) && v > 0 ? v : null; };
+ // v4.8283 (user: 強さを 0 にしても全く弱くならない): 「外部AIの強さ」 is a level 0-100 (blank = 100) for
+ // every engine. It was a raw package number (nodes / ms) and 0 was thrown away (kept full strength);
+ // a smaller search alone hardly weakens CC1 either (Node: APP 0.65 at 3 ms and at 3000 ms).
+ // Now: below 50 the package searches at its minimum, and bot-ai.js misplaces pieces on purpose,
+ // (1-level)^2 x 35% of pieces (level()).
+ const levelKey = id => 'qp-local-ai-ext-level-' + id;
+ const levelOf = id => { try { const raw = localStorage.getItem(levelKey(id)); if (raw === null || raw === '') return 100; const v = Number(raw); return Number.isFinite(v) ? Math.max(0, Math.min(100, v)) : 100; } catch { return 100; } };
+ // package option (its own unit): 1 = the package's minimum search; null = its default
+ const strength = id => (levelOf(id) < 50 ? 1 : null);
+ const level = game => (game?._aiEngine && defs[game._aiEngine] ? levelOf(game._aiEngine) / 100 : 1);
  const lower = t => String(t || '').toLowerCase();
 
  // ---- package store (IndexedDB) ----
@@ -204,7 +212,7 @@ onmessage = async (e) => { const m = e.data;
 <label>左 <select data-k="left"></select></label><label>右 <select data-k="right"></select></label>
 <label>ルール <select data-k="mode"><option value="league">TL</option><option value="custom">CUSTOM</option></select></label>
 <label>FT <input data-k="ft" type="number" min="1" max="99" step="1" value="7"></label>
-<label>外部AIの強さ（空欄で既定） <input data-k="str" type="number" min="1" step="1"></label>
+<label>外部AIの強さ 0〜100（空欄で100） <input data-k="str" type="number" min="0" max="100" step="1"></label>
 <div class="row"><button data-a="start" type="button">開始</button><button data-a="stop" type="button">終了</button></div>
 <div class="row"><button data-a="add" type="button">外部AIを読み込む</button><button data-a="del" type="button">外部AIを外す</button></div>
 <input data-k="files" type="file" multiple accept=".js,.mjs,.wasm,.json,.bin" style="display:none">
@@ -220,7 +228,7 @@ onmessage = async (e) => { const m = e.data;
   const fill = () => {
    for (const k of ['left', 'right']) { const sel = $(`select[data-k="${k}"]`), keep = sel.value; sel.innerHTML = ''; for (const [v, t] of sideOptions()) { const o = document.createElement('option'); o.value = v; o.textContent = t; sel.appendChild(o); } sel.value = keep; if (!sel.value) sel.selectedIndex = k === 'left' ? 0 : sel.options.length - 1; }
    try { const f = localStorage.getItem('qp-local-ai-ext-ft'); if (f) $('input[data-k="ft"]').value = f; } catch {}
-   const id = extOf($('select[data-k="right"]').value) || extOf($('select[data-k="left"]').value); $('input[data-k="str"]').value = id ? (strength(id) ?? '') : '';
+   const id = extOf($('select[data-k="right"]').value) || extOf($('select[data-k="left"]').value); $('input[data-k="str"]').value = id ? String(levelOf(id)) : '';
   };
   // In the Tab panel (2026-11-13): the same controls as a section under the vAI
   // test settings; the floating panel stays only where there is no Tab panel.
@@ -251,9 +259,9 @@ onmessage = async (e) => { const m = e.data;
     if (L === 'player' && R === 'player') throw Error('片側は AI にしてください');
     await window.LocalAI?.load?.();
     const engines = [extOf(L), extOf(R)];
-    const str = Number($('input[data-k="str"]').value);
+    const rawStr = $('input[data-k="str"]').value.trim(), str = rawStr === '' ? 100 : Math.max(0, Math.min(100, Math.round(Number(rawStr))));
     for (const id of new Set(engines.filter(Boolean))) {
-     if (Number.isFinite(str) && str > 0 && str !== strength(id)) { localStorage.setItem(strengthKey(id), String(str)); delete bots[id]; }
+     if (Number.isFinite(str) && str !== levelOf(id)) { const before = strength(id); localStorage.setItem(levelKey(id), String(str)); if (strength(id) !== before) { try { bots[id]?.terminate?.(); } catch {} delete bots[id]; } }
      status((defs[id]?.label || id) + ' を準備中…'); await load(id);
     }
     const profiles = window.LocalBotLearning?.profiles?.() || [];
@@ -275,7 +283,7 @@ onmessage = async (e) => { const m = e.data;
   const { games, config } = ev.detail || {};
   (games || []).forEach((g, i) => { g._aiEngine = config?.engines?.[i] || null; g._aiExternalStats = null; });
  });
- window.LocalExternalAI = { register, load, planner, active, inputOf, addFiles, restore, engines: () => Object.keys(defs) };
+ window.LocalExternalAI = { register, load, planner, active, level, inputOf, addFiles, restore, engines: () => Object.keys(defs) };
  const mount = () => { if (document.body) panel(); else setTimeout(mount, 200); };
  if (typeof document !== 'undefined') { mount(); restore(); }
 })();

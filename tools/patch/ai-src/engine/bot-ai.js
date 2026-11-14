@@ -600,6 +600,10 @@
    game._localSpinPlan=spinPlan;
    queue=nodeChoices(base,!botPolicy?.ownDanger||tspinB2B,rootLimit,spinPlan);
    if(spinPlan&&!queue.some(c=>c.planned))ps.notFound++;
+   // v4.8283 (user: 必ずCCの思考にして): with an outside AI its placement is checked first, so the
+   // PPS clock can not cut the root pass before it and leave a vA-scored candidate (TTRMs: 14 of
+   // 79 pieces, forcedByPPS, at 3.2 PPS lockstep).
+   if(externalPlan){const i=queue.findIndex(c=>c.planned);if(i>0)queue.unshift(...queue.splice(i,1))}
    rootQueue=queue;
    if(settings.fast)queue=queue.slice(0,6);
    rootBudget=queue.length;cursor=0;
@@ -690,17 +694,27 @@
      do not point them out. Rate: qp-ai-misdrop-rate (default 3%). */
   function misdrop(){
    let on=false,rate=.03;try{on=localStorage.getItem('qp-ai-misdrop')==='true';rate=Math.max(0,Math.min(.3,Number(localStorage.getItem('qp-ai-misdrop-rate')??.03)||0))}catch{}
+   // v4.8283 (user: 外部AIの強さを 0 にしても弱くならない): an outside AI below strength 100 slips
+   // on purpose: (1-level)^2 x 35% of pieces (80: 1%, 60: 6%, 40: 13%, 0: 35%), one column off,
+   // below 30 up to two columns or another rotation. Node (CC1 solo, 150 pieces): APP 0.70 / 0.69 /
+   // 0.49 / 0.43 at 100 / 80 / 60 / 40; at 20 and 0 it tops out alone.
+   const lv=externalPlan?Math.max(0,Math.min(1,Number(window.LocalExternalAI?.level?.(game)??1))):1,weak=lv<1?(1-lv)**2*.35:0;
+   if(weak>0&&(!on||weak>rate)){on=true;rate=weak}
    if(!on||settings.collect||!best||!rootQueue?.length||Math.random()>=rate)return;
-   const dx=Math.random()<.5?-1:1,c=rootQueue.find(q=>q.type===best.type&&!!q.hold===!!best.hold&&q.rotation===best.rotation&&q.x===best.x+dx&&!q.spin)||rootQueue.find(q=>q.type===best.type&&!!q.hold===!!best.hold&&q.rotation===best.rotation&&q.x===best.x-dx&&!q.spin);
+   const same=q=>q.type===best.type&&!!q.hold===!!best.hold&&!q.spin,far=weak>0&&lv<.3?2:1;
+   const pool=rootQueue.filter(q=>same(q)&&(q.rotation===best.rotation||weak>0&&lv<.3)&&Math.abs(q.x-best.x)>=1&&Math.abs(q.x-best.x)<=far);
+   const dx=Math.random()<.5?-1:1,c=weak>0?pool[Math.floor(Math.random()*pool.length)]:rootQueue.find(q=>same(q)&&q.rotation===best.rotation&&q.x===best.x+dx)||rootQueue.find(q=>same(q)&&q.rotation===best.rotation&&q.x===best.x-dx);
    if(!c)return;const r=evaluate(c,base,true);if(!r||r.score<=-1e5)return;
    r.misdrop=true;roots=[r];best=r;game._aiMisdrops=(game._aiMisdrops||0)+1;if(game._aiPlanStats)game._aiPlanStats.misdrops=(game._aiPlanStats.misdrops||0)+1;
   }
-  const previewChoices=()=>settings.humanActive?[]:roots.filter(r=>r&&r.score> -100000&&r.route&&Array.isArray(r.cells)).map(({cells,route,turn,spin,features,hold,type,score})=>({cells,route,turn,spin,features,hold,type,score})).sort((a,b)=>b.score-a.score).slice(0,24);function finish(){misdrop();const priorityRoots=roots.filter(r=>r.score> -100000);if(priorityRoots.length&&!settings.collect){
+  const previewChoices=()=>settings.humanActive?[]:roots.filter(r=>r&&r.score> -100000&&r.route&&Array.isArray(r.cells)).map(({cells,route,turn,spin,features,hold,type,score})=>({cells,route,turn,spin,features,hold,type,score})).sort((a,b)=>b.score-a.score).slice(0,24);function finish(){if(!disposed)externalPick();misdrop();const priorityRoots=roots.filter(r=>r.score> -100000);if(priorityRoots.length&&!settings.collect){
     const effective=r=>{const future=Number(r.futureScore??r.score);const delta=Number(r.structuralRisk)||0;
      return future-Math.min(180,delta)*.65;
     };
     best=priorityRoots.reduce((a,b)=>effective(a)>=effective(b)?a:b);
    }if(!disposed&&!settings.collect&&game._rlState?.enabled){const picked=LocalRLCore.choose(game._aiMimicTiming?{...game._rlState,imitation:1}:game._rlState,game._rlKey,priorityRoots);if(picked&&(!best||((picked.futureScore??picked.score)>=(best.futureScore??best.score)-6&&picked.structuralRisk<=(best.structuralRisk||0)+3)))best=picked}else if(!settings.rootOnly&&!disposed&&game._aiExploration&&!botPolicy?.ownDanger&&roots.length>1&&Math.random()<.12){const candidates=priorityRoots.filter(r=>(r.futureScore??r.score)>((best?.lookaheadScore??best?.score??0)-10)&&r.score> -100000);if(candidates.length){const picked=candidates[Math.floor(Math.random()*Math.min(3,candidates.length))];best={...picked,depth:picked.futureScore===undefined?1:2,lookaheadScore:picked.futureScore}}}if(!disposed&&best&&!settings.collect){game._localSpinAudit.selectedSpin=!!best.spin;best={...best,next:best.nextPlan||best.next}}if(!disposed){disposed=true;sandbox.state.playing=false;sandbox.destroy()}return {done:true,best,previewChoices:previewChoices(),...(settings.collect?{choices:roots}: {})}}
+  // An outside AI's placement is always the one played (also when the clock finalizes early).
+  function externalPick(){if(!externalPlan||!spinPlan||!rootQueue||(best&&best.planned&&roots.length===1))return;const c=rootQueue.find(q=>q.planned);if(!c)return;const r=evaluate(c,base,true);if(r&&r.score>-1e5){roots=[r];best=r;if(game._aiPlanStats)game._aiPlanStats.playedLate=(game._aiPlanStats.playedLate||0)+1}else if(game._aiPlanStats)game._aiPlanStats.externalUnreachable=(game._aiPlanStats.externalUnreachable||0)+1}
   return {finalize(){if(planner)buildRoot();return finish()},step(limit=4){if(disposed)return {done:true,best};
    if(planner){
     // Live play: the plan never holds the piece past its lock time. With
