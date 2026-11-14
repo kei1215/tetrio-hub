@@ -90,8 +90,8 @@ def page(md_path, title, other):
 def main():
     man = DOCS / 'manual'
     pages = {
-        'index.html': page(man / 'FEATURE-MANUAL.md', 'TETR.IO Patch 機能説明書', [('baseline.html', '機能基準書'), ('../bookmarklets/', 'ダウンロードへ戻る')]),
-        'baseline.html': page(man / 'FEATURE-BASELINE.md', 'TETR.IO Patch 機能基準書', [('./', '機能説明書'), ('../bookmarklets/', 'ダウンロードへ戻る')]),
+        'index.html': page(man / 'FEATURE-MANUAL.md', 'TETR.IO Patch 機能説明書', [('baseline.html', '機能基準書'), ('../bookmarklets/#desktop', 'ダウンロードへ戻る')]),
+        'baseline.html': page(man / 'FEATURE-BASELINE.md', 'TETR.IO Patch 機能基準書', [('./', '機能説明書'), ('../bookmarklets/#desktop', 'ダウンロードへ戻る')]),
     }
     for name, text in pages.items():
         (man / name).write_text(text, encoding='utf-8')
