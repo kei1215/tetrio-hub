@@ -248,7 +248,7 @@ def page_auth():
     script = re.sub(r"patch-v4\.82\d\d", f"patch-v{PATCH}", script)
     script = re.sub(r"vA4\.82\d\d", f"vA{PATCH}", script)
     script = script.replace("{ class: 'btn', href: '#' }", "{ class: 'btn btn-primary', href: '#' }")
-    body = hero('TETR.IO Patch', 'A形式(AI 版)', 'AI 版は、指定の Discord サーバーでロールを持っている人だけがダウンロードできます。',
+    body = hero('TETR.IO Patch', 'A形式(AI 版)', 'AI 版は、指定の Discord サーバーでロールを持っている人と、個別に許可された Discord アカウントだけがダウンロードできます。',
                 'Discord でログインすると、そのサーバーでの自分のロールを確かめます。読み取るのは、そのサーバーでの自分のロールとユーザー情報だけです。')
     body += '\n' + card('ダウンロード', '    <div id="view"><p>確認しています…</p></div>\n    <p class="mb-0"><a href="./#desktop">← OS別パッチに戻る</a></p>', mb=5)
     page = shell(1, 'TETR.IO Patch A形式', body, script)

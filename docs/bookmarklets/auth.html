@@ -33,7 +33,7 @@
   <section class="my-5">
     <p class="text-uppercase text-primary fw-bold mb-2">TETR.IO Patch</p>
     <h1 class="display-5 fw-bold">A形式(AI 版)</h1>
-    <p class="lead">AI 版は、指定の Discord サーバーでロールを持っている人だけがダウンロードできます。</p>
+    <p class="lead">AI 版は、指定の Discord サーバーでロールを持っている人と、個別に許可された Discord アカウントだけがダウンロードできます。</p>
     <div class="alert alert-info">Discord でログインすると、そのサーバーでの自分のロールを確かめます。読み取るのは、そのサーバーでの自分のロールとユーザー情報だけです。</div>
   </section>
   <section class="card shadow-sm mb-5"><div class="card-body p-4">
@@ -74,6 +74,8 @@
       const CLIENT_ID = '1563594705151725660';
       const GUILD = '1483436626855329903';
       const ROLE = '1562481503185805393';
+      // ロールがなくても、サーバーに入っていなくても許可する Discord アカウント(ユーザーID)
+      const ALLOW = ['1276952393199652924'];
       const REDIRECT = 'https://kei1215.github.io/tetrio-hub/bookmarklets/auth.html';
       const CACHE = 'qp-ai-discord-v1';
       const KEEP_MS = 24 * 60 * 60 * 1000;
@@ -102,7 +104,7 @@
       };
       const showDownloads = name => {
         view.replaceChildren();
-        view.append(el('p', (name ? name + ' さん、' : '') + 'ロールを確認できました。'));
+        view.append(el('p', (name ? name + ' さん、' : '') + '確認できました。'));
         const ul = el('ul');
         for (const [os, ext] of [['Mac', '.command'], ['Windows', '.cmd'], ['Linux', '.sh']]) {
           const li = el('li');
@@ -127,15 +129,19 @@
       try { expected = sessionStorage.getItem('qp-ai-state'); sessionStorage.removeItem('qp-ai-state'); } catch (e) {}
       if (error) return showLogin('ログインがキャンセルされました。');
       if (!expected || p.get('state') !== expected) return showLogin('ログインの確認に失敗しました。もう一度ログインしてください。');
-      fetch(`https://discord.com/api/v10/users/@me/guilds/${GUILD}/member`, { headers: { Authorization: 'Bearer ' + token } })
-        .then(async r => {
+      const auth = { headers: { Authorization: 'Bearer ' + token } };
+      const ok = name => { store.set(CACHE, { name, until: Date.now() + KEEP_MS }); showDownloads(name); };
+      fetch('https://discord.com/api/v10/users/@me', auth)
+        .then(r => r.ok ? r.json() : null).catch(() => null)
+        .then(u => {
+          if (u && ALLOW.includes(String(u.id))) return ok(u.global_name || u.username || '');
+          return fetch(`https://discord.com/api/v10/users/@me/guilds/${GUILD}/member`, auth).then(async r => {
           if (r.status === 404) return showLogin('このアカウントは、指定の Discord サーバーに参加していません。');
           if (!r.ok) return showLogin('Discord で確認できませんでした(' + r.status + ')。少し待ってからもう一度ログインしてください。');
           const m = await r.json();
           if (!Array.isArray(m.roles) || !m.roles.includes(ROLE)) return showLogin('このアカウントは、指定のロールを持っていません。');
-          const name = m.nick || (m.user && (m.user.global_name || m.user.username)) || '';
-          store.set(CACHE, { name, until: Date.now() + KEEP_MS });
-          showDownloads(name);
+          ok(m.nick || (m.user && (m.user.global_name || m.user.username)) || '');
+          });
         })
         .catch(e => showLogin('Discord で確認できませんでした: ' + e.message));
     })();
