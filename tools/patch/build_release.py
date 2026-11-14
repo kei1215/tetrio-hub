@@ -440,6 +440,10 @@ def add_editor_window(text):
     # The vA AI plans in Web Workers (ai-plan-worker.js / blob): the local CSP refused
     # every worker ('none'), so in the app the AI fell back to short in-thread plans (v4.8267).
     text = text.replace("worker-src 'none'", "worker-src 'self' blob:")
+    # v4.8285 (user: アプリ内でそれぞれのAIをインストールする簡単な窓口): the one-click installer in
+    # ai-external.js downloads packages from the tetrio-hub Pages folder ext-ai/.
+    if "connect-src 'self' tetrio-local://app https://kei1215.github.io" not in text:
+        text = text.replace("connect-src 'self' tetrio-local://app", "connect-src 'self' tetrio-local://app https://kei1215.github.io", 1)
     return replace_appended(text, EDITOR_WINDOW_MARK, EDITOR_WINDOW_SRC)
 
 

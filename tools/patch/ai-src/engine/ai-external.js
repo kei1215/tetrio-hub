@@ -215,6 +215,7 @@ onmessage = async (e) => { const m = e.data;
 <label>外部AIの強さ 0〜100（空欄で100） <input data-k="str" type="number" min="0" max="100" step="1"></label>
 <div class="row"><button data-a="start" type="button">開始</button><button data-a="stop" type="button">終了</button></div>
 <div class="row"><button data-a="add" type="button">外部AIを読み込む</button><button data-a="del" type="button">外部AIを外す</button></div>
+<div class="row"><select data-k="cat"><option value="">かんたんインストール…</option></select><button data-a="inst" type="button">インストール</button></div>
 <input data-k="files" type="file" multiple accept=".js,.mjs,.wasm,.json,.bin" style="display:none">
 <div class="s"></div></div>`;
   document.body.appendChild(root);
@@ -246,6 +247,22 @@ onmessage = async (e) => { const m = e.data;
   if (!dock()) { const mo = new MutationObserver(() => { if (dock()) mo.disconnect(); }); mo.observe(document.documentElement, { childList: true, subtree: true }); }
   $('button').onclick = async () => { if (docked) { docked.open = true; docked.scrollIntoView?.({ block: 'nearest' }); return; } root.classList.toggle('open'); if (root.classList.contains('open')) { fill(); try { await window.LocalAI?.load?.(); fill(); } catch {} } };
   $('[data-a="stop"]').onclick = () => { try { window.LocalAIRoom?.stop?.(); try { window.LocalNative?.resetResults?.(); window.LocalNative?.view?.('play1p'); } catch {} status('終了しました'); } catch (e) { status(e.message); } };
+  // v4.8285 (user: アプリ内でそれぞれのAIをインストールする簡単な窓口): one-click install of the
+  // published packages (docs/ext-ai/catalog.json on tetrio-hub Pages); same store as 外部AIを読み込む.
+  const CAT = 'https://kei1215.github.io/tetrio-hub/ext-ai/';
+  fetch(CAT + 'catalog.json', { cache: 'no-store' }).then(r => r.json()).then(list => {
+   const sel = $('select[data-k="cat"]');
+   list.forEach((pkg, i) => { const o = document.createElement('option'); o.value = String(i); o.textContent = pkg.label; sel.appendChild(o); });
+   $('[data-a="inst"]').onclick = async () => {
+    const pkg = list[Number(sel.value)]; if (!pkg) return status('インストールするAIを選んでください');
+    status(pkg.label + ' をダウンロード中…');
+    try {
+     const files = [];
+     for (const name of pkg.files) { const r = await fetch(CAT + name); if (!r.ok) throw Error(name + ' ' + r.status); files.push(new File([await r.arrayBuffer()], name)); }
+     const ids = await addFiles(files); fill(); status('インストールしました: ' + ids.map(id => defs[id].label || id).join(', '));
+    } catch (e) { status('インストールできませんでした: ' + e.message); }
+   };
+  }).catch(() => { const sel = $('select[data-k="cat"]'); if (sel) sel.options[0].textContent = 'かんたんインストール(ネット接続が必要)'; });
   $('[data-a="add"]').onclick = () => $('input[data-k="files"]').click();
   $('input[data-k="files"]').onchange = async ev => { try { const ids = await addFiles(ev.target.files); fill(); status('読み込みました: ' + ids.map(id => defs[id].label || id).join(', ')); } catch (e) { status('読み込めません: ' + e.message); } ev.target.value = ''; };
   $('[data-a="del"]').onclick = async () => {
