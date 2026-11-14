@@ -126,10 +126,13 @@
     const tl = rep && !headless(n) && timelines.get(rep);
     if (!tl || tl === own) return own.events;
     // リプレイ盤面修正で操作中: 止めたフレームまではリプレイの一覧、その先は自分で置いた分
+    // 埋め込んだ修正の再生中: 修正が始まるフレームまではリプレイの一覧、その先はこの盤面で置いた分
     const rpe = W.__rpe, practice = rpe && rpe.active === n;
-    const limit = practice ? rpe.snapFrame : n.esm.frame;
+    const ef = !practice && rpe && typeof rpe.embedFrame === 'function' ? rpe.embedFrame(n) : null;
+    const edited = ef !== null && n.esm.frame > ef;
+    const limit = practice ? rpe.snapFrame : edited ? ef : n.esm.frame;
     const list = tl.events.filter(e => e.frame <= limit);
-    return practice ? list.concat(own.events.filter(e => e.frame > limit)) : list;
+    return practice || edited ? list.concat(own.events.filter(e => e.frame > limit)) : list;
   };
 
   const tally = events => {
