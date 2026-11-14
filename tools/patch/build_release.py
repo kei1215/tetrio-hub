@@ -311,6 +311,18 @@ def fix_replay_c_key(text, label):
     return replace_once(text, REPLAY_C_KEY, '', label + ' replay C key')
 
 
+# v4.8281 (user: TLの曲を流せる様に): tlRound keeps the music between rounds when the room asks
+# (config.keepBgm), and window.__qpBgmFade lets the room fade it out at match end / 終了. Idempotent.
+TL_BGM_OLD = "tlRound(config={}){\n  this.resetResults();$i(false);Hi('none');Sa.BgmFadeOut();"
+TL_BGM_NEW = "tlRound(config={}){\n  window.__qpBgmFade??=t=>Sa.BgmFadeOut(t);this.resetResults();$i(false);Hi('none');config.keepBgm||Sa.BgmFadeOut();"
+
+
+def fix_tl_bgm(text):
+    if TL_BGM_NEW in text:
+        return text
+    return replace_once(text, TL_BGM_OLD, TL_BGM_NEW, 'O/offline/client.js TL music')
+
+
 def fix_offline_client(text):
     for old, new, count in OFFLINE_CLIENT_FIXES:
         if text.count(old) != count:
@@ -517,7 +529,7 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                 text = data.decode('utf-8')
                 if not incremental:
                     text = fix_offline_client(text)
-                data = fix_replay_c_key(fix_scoreslide(fix_wheel_volume(fix_warn_toggles(fix_tl_siren(fix_custom_opts(fix_warlock_mini(text)))))), 'O/offline/client.js').encode('utf-8')
+                data = fix_replay_c_key(fix_tl_bgm(fix_scoreslide(fix_wheel_volume(fix_warn_toggles(fix_tl_siren(fix_custom_opts(fix_warlock_mini(text))))))), 'O/offline/client.js').encode('utf-8')
             elif offline and name == 'O/local-main.js':
                 data = add_editor_window(data.decode('utf-8')).encode('utf-8')
             elif has_offline and offline and name == 'O/offline/index.html':
