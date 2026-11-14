@@ -31,6 +31,7 @@
 - v4.8256:QP DUO のリプレイ保存(オンラインは duo-save を常に有効、オフラインはローカル記録へ)、Warlock の Spin ルール(all+)。
 - 2026-11-14 ブラウザ版 AI 入り QP OFFLINE(offline-va4.8283、tools/patch/build_browser_ai.py):auth.html の Discord 確認後だけボタンを出す。本体差分は offline-v4.8255 を共有。AI のワーカーは Blob から作る。
 - 2026-11-14 ブラウザ版 QP OFFLINE:TETR.IO 本体の更新(hv 20261113T221312, tetrio.js SHA 1244839b…)に合わせて差分を作り直し。中身は vO 4.8283 のオフライン版。フォルダ名 offline-v4.8255 は据え置き(ブックマークを変えなくてよい)。
+- v4.8285:外部AI対戦に「かんたんインストール」(CC2 S2・CC1・MisaMino、docs/ext-ai/catalog.json、private-ai/publish-ext-ai.sh)。アプリの connect-src に https://kei1215.github.io を追加。
 - 2026-11-14 web AI 版(offline-va4.8284):外部AI(Cold Clear 2 S2・Cold Clear 1・MisaMino)を最初から入れた(private-ai/add-web-external.sh)。本体差分を自分のフォルダに持ち、vO の web 版を作り直しても影響しない。
 - v4.8284:オフラインの CONFIG を読み込み・保存とも項目ごとに混ぜる(client.js fix_config_keep)。新しい TETR.IO の項目が消えない・古い本体の項目が抜けない。ブラウザ版はリプレイ付き記録を最新5個まで(browser-limits.js)、AI 版ブラウザの自作AIは1体まで。
 - v4.8282:AI 対戦(TL/CUSTOM)は勝敗が決まると保存した試合の結果画面へ移る。毎ラウンド 3,2,1,GO(client.js fix_rsg → window.__qpRsg)。盤面修正は操作中だけ次ラウンド自動再生を止め、やめたら戻す。
