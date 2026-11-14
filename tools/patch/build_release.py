@@ -271,6 +271,19 @@ def fix_warn_toggles(text):
     return text
 
 
+# v4.8280 (user: マウスの上下スクロールでプレイ中に音量調整ができたはず): the native wheel volume
+# handler needs body.ingame, which local games never set. window.__qpLocalWheel (local-shell.js)
+# says when a local game is playing and the wheel is over the board. Idempotent.
+WHEEL_VOL_OLD = 'if(!1===ot.volume.scrollable)return;if(!document.body.classList.contains("ingame")&&!e.altKey)return;'
+WHEEL_VOL_NEW = 'if(!1===ot.volume.scrollable)return;if(!document.body.classList.contains("ingame")&&!e.altKey&&!window.__qpLocalWheel?.(e))return;'
+
+
+def fix_wheel_volume(text):
+    if WHEEL_VOL_NEW in text:
+        return text
+    return replace_once(text, WHEEL_VOL_OLD, WHEEL_VOL_NEW, 'O/offline/client.js wheel volume')
+
+
 def fix_offline_client(text):
     for old, new, count in OFFLINE_CLIENT_FIXES:
         if text.count(old) != count:
@@ -477,7 +490,7 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                 text = data.decode('utf-8')
                 if not incremental:
                     text = fix_offline_client(text)
-                data = fix_warn_toggles(fix_tl_siren(fix_custom_opts(fix_warlock_mini(text)))).encode('utf-8')
+                data = fix_wheel_volume(fix_warn_toggles(fix_tl_siren(fix_custom_opts(fix_warlock_mini(text))))).encode('utf-8')
             elif offline and name == 'O/local-main.js':
                 data = add_editor_window(data.decode('utf-8')).encode('utf-8')
             elif has_offline and offline and name == 'O/offline/index.html':
