@@ -170,7 +170,7 @@ def page_patch():
       <li>ON の間は、パッチのリプレイ演出(背景変更・シークバー非表示・Z/X/C の演出切り替え・TL 演出・結果画面)と、次のラウンドの自動再生を切ります。名前はそのまま出ます。</li>
     </ul>''')
     body += '\n' + card('機能基準書・ミッションエディタ', f'''    <p>これまでに追加した機能は、機能説明書にまとめています(分かる範囲で、追加された版も書いています)。追加・変更する機能はこの基準書へ記録します。v5.3 の設定項目を維持した v6.5 エディタ(追加効果タブ付き)も利用できます。ゲームの「詳細エディタを開く」から開くと、今あるミッションを表示します。</p>
-    <div class="d-flex gap-2 flex-wrap"><a href="offline-v{OFFLINE}/FEATURE-MANUAL.md" class="btn btn-dark">機能説明書を読む</a><a href="offline-v{OFFLINE}/FEATURE-BASELINE.md" class="btn btn-outline-dark">機能基準書を読む</a><a href="offline-v{OFFLINE}/mission-editor.html" class="btn btn-outline-primary" target="_blank" rel="noopener">ミッションエディタ v6.5</a><a href="../patch/v4.8233/QP-Mission-Editor-v6.3.html" class="btn btn-outline-secondary" target="_blank" rel="noopener">v6.3</a></div>''', mb=5)
+    <div class="d-flex gap-2 flex-wrap"><a href="../manual/FEATURE-MANUAL.md" class="btn btn-dark">機能説明書を読む</a><a href="../manual/FEATURE-BASELINE.md" class="btn btn-outline-dark">機能基準書を読む</a><a href="offline-v{OFFLINE}/mission-editor.html" class="btn btn-outline-primary" target="_blank" rel="noopener">ミッションエディタ v6.5</a><a href="../patch/v4.8233/QP-Mission-Editor-v6.3.html" class="btn btn-outline-secondary" target="_blank" rel="noopener">v6.3</a></div>''', mb=5)
     script = f'''        <script>
           let bookmarkCode = '';
           fetch('./tetrio-offline-standalone-v{OFFLINE}.txt').then(r => r.text()).then(code => {{
