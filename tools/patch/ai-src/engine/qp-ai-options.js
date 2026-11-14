@@ -17,32 +17,33 @@
  const attach=()=>{
   attachQP();
   const panel=document.getElementById('local-panel');if(!panel||document.getElementById('qp-ai-test-settings'))return;
-  const section=document.createElement('details');section.id='qp-ai-test-settings';section.open=true;
-  const heading=document.createElement('summary');heading.textContent='vAI テスト設定（ローカルQPのみ）';section.appendChild(heading);
+  const section=document.createElement('details');section.id='qp-ai-test-settings';section.open=false; // v4.8281 (user: 再起動しても常時開いてるのやめて): starts closed
+  // v4.8281 (user: 文字が多いのは説明書のみに): short labels here; explanations are on the site manual.
+  const heading=document.createElement('summary');heading.textContent='vAI 設定';section.appendChild(heading);
   const flag=(key,label,defaultValue)=>{flagIn(section,key,label,defaultValue).style.display='block'};
-  flag('qp-local-ai-tspin-b2b','BOT: Spin B2B モード（既定ON。QP・40L・TL・CUSTOMで、T-Spin多めのSpinだけでB2Bをつなぐ。攻撃が来たら相殺か受けるかを高さで決める）',true);
-  flag('qp-win-gauge','対戦の勝率予測ゲージを表示（TL・CUSTOM。盤面から左右の勝率を予測）',true);
-  flag('qp-ai-sync-player','プレーヤーと同時に置く（TL・CUSTOM の対プレーヤー戦。プレーヤーが1つ置くたびにBOTも1つ置き、PPSを揃える）',false);
+  flag('qp-local-ai-tspin-b2b','BOT: Spin B2B モード',true);
+  flag('qp-win-gauge','勝率予測ゲージ',true);
+  flag('qp-ai-sync-player','プレーヤーと同時に置く',false);
   // player:BOT piece ratio for the flag above (v4.8279)
-  const ratioLabel=document.createElement('label');ratioLabel.style.display='block';ratioLabel.append(document.createTextNode('同時に置くときのミノ数の比 プレーヤー:BOT（例 10:9 でBOTが1割少なく置く。既定 1:1）'));
+  const ratioLabel=document.createElement('label');ratioLabel.style.display='block';ratioLabel.append(document.createTextNode('同時に置く比 プレーヤー:BOT '));
   const ratio=document.createElement('input');ratio.type='text';ratio.placeholder='1:1';ratio.style.width='6em';ratio.value=localStorage.getItem('qp-ai-sync-ratio')||'1:1';
   ratio.addEventListener('change',()=>{const m=/^\s*(\d+(?:\.\d+)?)\s*[:：]\s*(\d+(?:\.\d+)?)\s*$/.exec(ratio.value);if(!m||!(+m[1]>0)||!(+m[2]>0)){ratio.value=localStorage.getItem('qp-ai-sync-ratio')||'1:1';return}ratio.value=m[1]+':'+m[2];localStorage.setItem('qp-ai-sync-ratio',ratio.value)});
   ratioLabel.appendChild(ratio);section.appendChild(ratioLabel);
-  flag('qp-ai-misdrop','置きミスを再現する（既定OFF。ときどき1列ずれて置く。悪い手として扱い、学習や修正ツールの指摘には使わない）',false);
-  const ppsLabel=document.createElement('label');ppsLabel.style.display='block';ppsLabel.append(document.createTextNode('BOT目標PPS（0.1〜20・ゲーム内時間基準）'));
+  flag('qp-ai-misdrop','置きミスを再現',false);
+  const ppsLabel=document.createElement('label');ppsLabel.style.display='block';ppsLabel.append(document.createTextNode('BOT目標PPS '));
   const pps=document.createElement('input');pps.type='number';pps.min='0.1';pps.max='20';pps.step='0.1';pps.value=localStorage.getItem('qp-local-bot-pps')||'2';pps.addEventListener('change',()=>{const value=Math.max(.1,Math.min(20,Number(pps.value)||2));pps.value=String(value);localStorage.setItem('qp-local-bot-pps',String(value))});ppsLabel.appendChild(pps);section.appendChild(ppsLabel);
   // Compute power: auto measures this PC and fits the plan to the target PPS.
   const powerLabel=document.createElement('label');powerLabel.style.display='block';powerLabel.textContent='計算量 ';
   const powerSelect=document.createElement('select');powerSelect.setAttribute('aria-label','AIの計算量');
-  for(const [value,name] of [['auto','自動（PCの速さを測り、目標PPSに合わせる・既定）'],['low','低（軽いPC）'],['mid','中'],['high','高'],['max','最大（速いPC）']]){const option=document.createElement('option');option.value=value;option.textContent=name;powerSelect.appendChild(option)}
+  for(const [value,name] of [['auto','自動'],['low','低'],['mid','中'],['high','高'],['max','最大']]){const option=document.createElement('option');option.value=value;option.textContent=name;powerSelect.appendChild(option)}
   powerSelect.value=['low','mid','high','max'].includes(localStorage.getItem('qp-ai-power'))?localStorage.getItem('qp-ai-power'):'auto';
   powerSelect.addEventListener('change',()=>localStorage.setItem('qp-ai-power',powerSelect.value));
   const powerInfo=document.createElement('small');powerInfo.style.display='block';
-  const showPower=()=>{const sp=window.LocalAIPlanSpeed;powerInfo.textContent=sp?.samples?'この PC の計画速度：幅1あたり '+sp.msPerWidth.toFixed(1)+' ms（'+sp.samples+' 回測定）':'計画速度はBOTが動くと測ります。'};showPower();powerSelect.addEventListener('focus',showPower);
+  const showPower=()=>{const sp=window.LocalAIPlanSpeed;powerInfo.textContent=sp?.samples?'計画速度 '+sp.msPerWidth.toFixed(1)+' ms':''};showPower();powerSelect.addEventListener('focus',showPower);
   powerLabel.appendChild(powerSelect);section.appendChild(powerLabel);section.appendChild(powerInfo);
   const previewMode=document.createElement('label');previewMode.textContent='配置予測の表示 ';
   const previewSelect=document.createElement('select');previewSelect.setAttribute('aria-label','AI配置予測表示');
-  for(const [value,name] of [['off','非表示（既定）'],['game','ゲーム中に表示'],['replay','リプレイ中のみ'],['both','ゲーム中とリプレイ中']]){const option=document.createElement('option');option.value=value;option.textContent=name;previewSelect.appendChild(option)}
+  for(const [value,name] of [['off','非表示'],['game','ゲーム中'],['replay','リプレイ中'],['both','両方']]){const option=document.createElement('option');option.value=value;option.textContent=name;previewSelect.appendChild(option)}
   previewSelect.value=['game','replay','both'].includes(localStorage.getItem('qp-ai-preview-mode'))?localStorage.getItem('qp-ai-preview-mode'):'off';
   previewSelect.addEventListener('change',()=>{localStorage.setItem('qp-ai-preview-mode',previewSelect.value);window.LocalAIPreview?.refresh?.()});
   previewMode.appendChild(previewSelect);section.appendChild(previewMode);
@@ -52,14 +53,14 @@
   contentSelect.value=['both','place','power'].includes(localStorage.getItem('qp-ai-preview-content'))?localStorage.getItem('qp-ai-preview-content'):'both';
   contentSelect.addEventListener('change',()=>{localStorage.setItem('qp-ai-preview-content',contentSelect.value);window.LocalAIPreview?.refresh?.()});
   contentLabel.appendChild(contentSelect);section.appendChild(contentLabel);
-  const importRow=document.createElement('label');importRow.textContent='自分のTTRからSpin・型（組み方）・好みを取り込む ';const replayFile=document.createElement('input');replayFile.type='file';replayFile.accept='.ttr,.json';replayFile.setAttribute('aria-label','Spin学習用TTR');importRow.appendChild(replayFile);section.appendChild(importRow);
-  const spinStatus=document.createElement('small');spinStatus.style.display='block';const tplCount=()=>window.LocalAITemplates?.list?.().length||0;spinStatus.textContent='記録済みSpin: '+(window.LocalSpinLibrary?.load?.().length||0)+'種類 / 型: '+tplCount()+'種類。自分のプレイ中も保存します。BOTはミノ順と盤面に合う型を優先します。';section.appendChild(spinStatus);
+  const importRow=document.createElement('label');importRow.textContent='TTRから型を取り込む ';const replayFile=document.createElement('input');replayFile.type='file';replayFile.accept='.ttr,.json';replayFile.setAttribute('aria-label','Spin学習用TTR');importRow.appendChild(replayFile);section.appendChild(importRow);
+  const spinStatus=document.createElement('small');spinStatus.style.display='block';const tplCount=()=>window.LocalAITemplates?.list?.().length||0;spinStatus.textContent='記録済みSpin: '+(window.LocalSpinLibrary?.load?.().length||0)+'種類 / 型: '+tplCount()+'種類';section.appendChild(spinStatus);
   replayFile.multiple=true;replayFile.addEventListener('change',async()=>{const files=[...(replayFile.files||[])];if(!files.length)return;replayFile.disabled=true;spinStatus.textContent='TTR内のSpinを解析中…';try{let result;for(const [i,file] of files.entries())result=window.LocalAITemplates?await window.LocalAITemplates.importTTR(file,(n,total)=>{spinStatus.textContent=(files.length>1?(i+1)+'/'+files.length+' ':'')+'解析 '+Math.round(n/total*100)+'%'}):await window.LocalSpinLibrary.importTTR(file,(n,total)=>{spinStatus.textContent='Spin解析 '+Math.round(n/total*100)+'%'});spinStatus.textContent='取り込み Spin '+result.count+'回 / 保存済み '+result.total+'種類'+(result.templates!==undefined?' / 型 +'+result.templates+'（合計'+result.templateTotal+'）':'')+'。';window.LocalAIPreview?.refresh?.()}catch(error){spinStatus.textContent='取込失敗：'+(error.message||error)}finally{replayFile.disabled=false;replayFile.value=''}});
   const openings=document.createElement('small');openings.style.display='block';
   const openingStats=window.LocalSpinLibrary?.openingStats?.()||[];
   openings.textContent='記録した開幕配置: '+openingStats.length+'種類'+(openingStats.length?' / 最多'+openingStats[0].uses+'回':'');section.appendChild(openings);
-  const previewNote=document.createElement('small');previewNote.textContent='プレイヤーの実際のSpin直前の構造から、壁・屋根と後続の回転候補を1案ずつ描きます（最大5案切替）。同じミノの配置違いで候補を埋めず、CURRENT/HOLD/NEXTで確定した2手と将来構想を区別します。Spin成功の保証はありません。学習データがなければ予測は表示しません。';section.appendChild(previewNote);
-  const note=document.createElement('p');note.textContent='保存AI・相方AI・攻撃設定はAI管理の「プレイ・対戦」にあります。vOにはこの項目を表示しません。';section.appendChild(note);
+  // Placement-preview explanation: site manual (v4.8281).
+  
   // Right under the AI target box at the top of the Tab panel.
   const quick=document.getElementById('local-ai-quick');if(quick&&quick.parentNode===panel)quick.after(section);else panel.prepend(section);
  };

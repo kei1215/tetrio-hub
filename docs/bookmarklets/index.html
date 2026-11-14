@@ -68,6 +68,36 @@
     <p class="small text-muted mb-0">O・A は、TETRIO-Resources-1.0.zip が「ダウンロード」(または ダウンロード/all-tetrio-patch)にあることが必要です。</p>
   </div></section>
   <section class="card shadow-sm mb-4"><div class="card-body p-4">
+    <h2 class="h4">オフラインの Tab パネル設定</h2>
+    <p>オフライン画面で Tab を押すと開くパネルの設定です。パネルには短い名前だけを出しています。</p>
+    <h3 class="h6">オフライン専用設定・ゲーム速度(v4.8280〜、最初はすべて OFF)</h3>
+    <ul class="small">
+      <li><strong>警告音</strong>:積みが高くなったときの警告音(TL・CUSTOM・QP)。</li>
+      <li><strong>警告ミノ</strong>:次に出るミノが置けないとき、出現位置にミノの形を表示します。</li>
+      <li><strong>せり上がり予告線</strong>:次にゴミが上がったときの積みの上端を、盤面より上にはみ出す部分だけ赤い線で表示します(操作ミノより後ろ)。盤面より上にすでにブロックがあるときは出しません。</li>
+      <li><strong>TL点数の+1演出</strong>:TL・CUSTOM 対戦で、盤面の上の点数が上がるときに「+1」を出します。</li>
+      <li><strong>TL勝敗後の点数画面</strong>:ラウンドが終わるとボードを消して、本物の TL と同じ点数画面を出します。次のラウンドは約6秒後に始まります。</li>
+    </ul>
+    <h3 class="h6">vAI 設定(A形式のみ)</h3>
+    <ul class="small">
+      <li><strong>BOT: Spin B2B モード</strong>(既定 ON):QP・40L・TL・CUSTOM で、T-Spin 多めの Spin だけで B2B をつなぎます。攻撃が来たら、相殺するか受けるかを高さで決めます。</li>
+      <li><strong>勝率予測ゲージ</strong>(既定 ON):TL・CUSTOM で、盤面から左右の勝率を予測して上に表示します。</li>
+      <li><strong>プレーヤーと同時に置く</strong>(既定 OFF):TL・CUSTOM の対プレーヤー戦で、プレーヤーが1つ置くたびに BOT も1つ置き、PPS を揃えます。</li>
+      <li><strong>同時に置く比 プレーヤー:BOT</strong>(既定 1:1):例 10:9 で BOT が1割少なく置きます。</li>
+      <li><strong>置きミスを再現</strong>(既定 OFF):ときどき1列ずれて置きます。悪い手として扱い、学習や修正ツールの指摘には使いません。</li>
+      <li><strong>BOT目標PPS</strong>:0.1〜20。ゲーム内時間が基準です。</li>
+      <li><strong>計算量</strong>:自動(既定)は PC の速さを測り、目標 PPS に合わせます。低は軽い PC 向け、最大は速い PC 向けです。BOT が動くと計画速度を測って表示します。</li>
+      <li><strong>配置予測の表示・予測情報</strong>:プレイヤーの実際の Spin 直前の構造から、壁・屋根と後続の回転候補を1案ずつ描きます(最大5案切替)。同じミノの配置違いで候補を埋めず、CURRENT/HOLD/NEXT で確定した2手と将来構想を区別します。Spin 成功の保証はありません。学習データがなければ表示しません。</li>
+      <li><strong>TTRから型を取り込む</strong>:自分の TTR から Spin・型(組み方)・好みを取り込みます。自分のプレイ中も保存します。BOT はミノ順と盤面に合う型を優先します。</li>
+      <li>保存AI・相方AI・攻撃設定は、AI管理の「プレイ・対戦」にあります。</li>
+    </ul>
+    <h3 class="h6">外部AI対戦(A形式のみ)</h3>
+    <ul class="small mb-0">
+      <li>外部AIはパッチに入っていません。自分のパソコンにある外部AIのファイル(.js と、必要なら .wasm など)を「外部AIを読み込む」で選びます。</li>
+      <li><strong>FT</strong>:先に何本取ったら勝ちか。<strong>外部AIの強さ</strong>:エンジンごとの探索量(空欄で既定)。</li>
+    </ul>
+  </div></section>
+  <section class="card shadow-sm mb-4"><div class="card-body p-4">
     <h2 class="h4">リバイブミッションの追加効果(v4.8238〜)</h2>
     <p>ミッションエディタ v6.5 の「追加効果」タブで設定します。複数を同時に使えます。</p>
     <ul class="small mb-0">

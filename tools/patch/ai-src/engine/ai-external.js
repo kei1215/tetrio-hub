@@ -203,12 +203,12 @@ onmessage = async (e) => { const m = e.data;
   root.innerHTML = `<button type="button">外部AI対戦</button><div class="p">
 <label>左 <select data-k="left"></select></label><label>右 <select data-k="right"></select></label>
 <label>ルール <select data-k="mode"><option value="league">TL</option><option value="custom">CUSTOM</option></select></label>
-<label>FT(先に何本取ったら勝ちか) <input data-k="ft" type="number" min="1" max="99" step="1" value="7"></label>
-<label>外部AIの強さ(エンジンごとの探索量。空欄で既定) <input data-k="str" type="number" min="1" step="1"></label>
+<label>FT <input data-k="ft" type="number" min="1" max="99" step="1" value="7"></label>
+<label>外部AIの強さ（空欄で既定） <input data-k="str" type="number" min="1" step="1"></label>
 <div class="row"><button data-a="start" type="button">開始</button><button data-a="stop" type="button">終了</button></div>
 <div class="row"><button data-a="add" type="button">外部AIを読み込む</button><button data-a="del" type="button">外部AIを外す</button></div>
 <input data-k="files" type="file" multiple accept=".js,.mjs,.wasm,.json,.bin" style="display:none">
-<div class="n">外部AIはパッチに入っていません。自分のパソコンにある外部AIのファイル(.js と、必要なら .wasm など)を選んで読み込みます。</div><div class="s"></div></div>`;
+<div class="s"></div></div>`;
   document.body.appendChild(root);
   const $ = q => root.querySelector(q), status = t => { $('.s').textContent = t; };
   // The entrance sits next to "AI管理を開く" in the offline panel (TETR.IO's footer

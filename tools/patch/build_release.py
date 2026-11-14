@@ -297,6 +297,20 @@ def fix_scoreslide(text):
     return replace_once(text, SCORESLIDE_OLD, SCORESLIDE_NEW, 'O/offline/client.js score slide')
 
 
+# v4.8281 (user: TL点数上昇演出(Cキーでも切替)を無くして / ホールドがリプレイ時に使えなくなっている):
+# the replay C-key toggle swallowed C (the default HOLD key) in replays. Removed from both the
+# offline client and O/transform.js; the Tab panel row is gone too (local-shell.js). Idempotent.
+REPLAY_C_KEY = ("window.addEventListener('keydown',event=>{if(event.code==='KeyC'&&!event.repeat&&nativeReplayActive()){const enabled=!scoreEffectEnabled();"
+                "localStorage.setItem('qp-patch-tl-score-rise-v1',enabled?'1':'0');notifySetting('TL点数上昇演出: '+(enabled?'ON':'OFF'));"
+                "event.preventDefault();event.stopImmediatePropagation()}},true);")
+
+
+def fix_replay_c_key(text, label):
+    if REPLAY_C_KEY not in text:
+        return text
+    return replace_once(text, REPLAY_C_KEY, '', label + ' replay C key')
+
+
 def fix_offline_client(text):
     for old, new, count in OFFLINE_CLIENT_FIXES:
         if text.count(old) != count:
@@ -503,7 +517,7 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                 text = data.decode('utf-8')
                 if not incremental:
                     text = fix_offline_client(text)
-                data = fix_scoreslide(fix_wheel_volume(fix_warn_toggles(fix_tl_siren(fix_custom_opts(fix_warlock_mini(text)))))).encode('utf-8')
+                data = fix_replay_c_key(fix_scoreslide(fix_wheel_volume(fix_warn_toggles(fix_tl_siren(fix_custom_opts(fix_warlock_mini(text)))))), 'O/offline/client.js').encode('utf-8')
             elif offline and name == 'O/local-main.js':
                 data = add_editor_window(data.decode('utf-8')).encode('utf-8')
             elif has_offline and offline and name == 'O/offline/index.html':
@@ -522,6 +536,7 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                     text = add_duo_save(text, duo_src)
                 if offline:
                     text = add_duo_view(add_mp4_button(text))
+                text = fix_replay_c_key(text, 'O/transform.js')
                 data = text.encode('utf-8')
             elif offline and name == 'O/music-main.js':
                 data = add_updater(data.decode('utf-8')).encode('utf-8')
