@@ -240,6 +240,18 @@ def fix_custom_opts(text):
     return replace_once(text, CUSTOM_OPTS_OLD, CUSTOM_OPTS_NEW, 'O/offline/client.js CUSTOM options builder')
 
 
+# v4.8280 (user: the board danger warning and the next-piece spawn warning are gone): the
+# local TL / CUSTOM preset had nosiren:true, which real TETRA LEAGUE does not set. Idempotent.
+TL_SIREN_OLD = "zenith_mods:[],nosiren:true,can_retry:false,"
+TL_SIREN_NEW = "zenith_mods:[],nosiren:false,can_retry:false,"
+
+
+def fix_tl_siren(text):
+    if TL_SIREN_NEW in text:
+        return text
+    return replace_once(text, TL_SIREN_OLD, TL_SIREN_NEW, 'O/offline/client.js TL preset nosiren')
+
+
 def fix_offline_client(text):
     for old, new, count in OFFLINE_CLIENT_FIXES:
         if text.count(old) != count:
@@ -446,7 +458,7 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                 text = data.decode('utf-8')
                 if not incremental:
                     text = fix_offline_client(text)
-                data = fix_custom_opts(fix_warlock_mini(text)).encode('utf-8')
+                data = fix_tl_siren(fix_custom_opts(fix_warlock_mini(text))).encode('utf-8')
             elif offline and name == 'O/local-main.js':
                 data = add_editor_window(data.decode('utf-8')).encode('utf-8')
             elif has_offline and offline and name == 'O/offline/index.html':
