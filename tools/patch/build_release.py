@@ -329,6 +329,27 @@ def fix_rsg(text):
     return replace_once(text, RSG_OLD, RSG_NEW, 'O/offline/client.js room countdown')
 
 
+# v4.8284 (user: configの正常化はオフラインでconfigの一部が抜け落ちること / 維持): the frozen offline
+# client copied the stored userConfig with a shallow Object.assign (a nested object from the newer
+# TETR.IO replaced the whole default object, so keys the old client needs went missing) and saved
+# only its own keys (newer keys were dropped from the stored config). Load and save now deep-merge:
+# defaults <- stored on load, stored <- current on save. Idempotent.
+CFG_MERGE = ('const qpCfgMerge=(d,s)=>{for(const k of Object.keys(s||{})){const a=d[k],b=s[k];'
+             'if(a&&b&&typeof a==="object"&&typeof b==="object"&&!Array.isArray(a)&&!Array.isArray(b))qpCfgMerge(a,b);else d[k]=b}return d};')
+CFG_SAVE_OLD = 'function mt(){localStorage.setItem("userConfig",JSON.stringify(ot))}'
+CFG_SAVE_NEW = (CFG_MERGE + 'function mt(){let p={};try{p=JSON.parse(localStorage.getItem("userConfig")||"{}")||{}}catch{}'
+                'localStorage.setItem("userConfig",JSON.stringify(qpCfgMerge(p,JSON.parse(JSON.stringify(ot)))))}')
+CFG_LOAD_OLD = 'Object.assign(ot,JSON.parse(e)),ot.handling.ihs||'
+CFG_LOAD_NEW = 'qpCfgMerge(ot,JSON.parse(e)),ot.handling.ihs||'
+
+
+def fix_config_keep(text):
+    if CFG_SAVE_NEW in text:
+        return text
+    text = replace_once(text, CFG_SAVE_OLD, CFG_SAVE_NEW, 'O/offline/client.js config save merge')
+    return replace_once(text, CFG_LOAD_OLD, CFG_LOAD_NEW, 'O/offline/client.js config load merge')
+
+
 def fix_tl_bgm(text):
     if TL_BGM_NEW in text:
         return text
@@ -541,7 +562,7 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                 text = data.decode('utf-8')
                 if not incremental:
                     text = fix_offline_client(text)
-                data = fix_replay_c_key(fix_rsg(fix_tl_bgm(fix_scoreslide(fix_wheel_volume(fix_warn_toggles(fix_tl_siren(fix_custom_opts(fix_warlock_mini(text)))))))), 'O/offline/client.js').encode('utf-8')
+                data = fix_replay_c_key(fix_config_keep(fix_rsg(fix_tl_bgm(fix_scoreslide(fix_wheel_volume(fix_warn_toggles(fix_tl_siren(fix_custom_opts(fix_warlock_mini(text))))))))), 'O/offline/client.js').encode('utf-8')
             elif offline and name == 'O/local-main.js':
                 data = add_editor_window(data.decode('utf-8')).encode('utf-8')
             elif has_offline and offline and name == 'O/offline/index.html':

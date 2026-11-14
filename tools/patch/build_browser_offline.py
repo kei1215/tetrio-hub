@@ -14,6 +14,27 @@ Usage:
 import argparse, hashlib, json, re, shutil, zipfile
 from pathlib import Path
 
+BROWSER_LIMITS = r"""/* Browser QP OFFLINE: keep at most 5 local records with a replay (localStorage is small). */
+(() => {
+ const Z = window.QPLocalZen, LIMIT = 5;
+ if (!Z || Z.__qpBrowserCap) return;
+ Z.__qpBrowserCap = true;
+ const record = Z.record.bind(Z);
+ const oldest = () => { try { return Z.records().filter(r => r.replay).sort((a, b) => a.date - b.date); } catch { return []; } };
+ Z.record = (...args) => {
+  const list = oldest();
+  while (list.length >= LIMIT) Z.deleteRecord(list.shift().id);
+  for (let i = 0; ; i++) {
+   try { return record(...args); }
+   catch (error) {
+    const left = oldest();
+    if (i >= LIMIT || !left.length || !/quota/i.test(String(error && (error.name + error.message)))) throw error;
+    Z.deleteRecord(left[0].id);
+   }
+  }
+ };
+})();
+"""
 BLOCK = 32       # window used to find shared segments
 MIN_COPY = 48    # shorter shared runs ship as additions
 
@@ -128,9 +149,13 @@ def main():
     shell_tag = f'<script src="{base}local-shell.js"></script>'
     if t.count(shell_tag) != 1:
         raise SystemExit('local-shell tag')
-    t = t.replace(shell_tag, shell_tag + f'\n<script src="{base}reverse-hyper-browser.js"></script>')
+    t = t.replace(shell_tag, shell_tag + f'\n<script src="{base}reverse-hyper-browser.js"></script>\n<script src="{base}browser-limits.js"></script>')
     if t.count('__CLIENT_BLOB_URL__') != 1 or re.search(r'src="/[\w-]+\.js"', t):
         raise SystemExit('template check failed')
+    # Browser only (user 2026-11-14: ブラウザ版では5個までのリプレイを通常上限に): the page stores
+    # local records in tetr.io localStorage (about 5 MB), so keep the newest 5 records that carry a
+    # replay and free the oldest when the browser reports the storage is full.
+    (a.out_dir / 'browser-limits.js').write_text(BROWSER_LIMITS, encoding='utf-8')
     (a.out_dir / 'offline-template.html').write_text(t, encoding='utf-8')
 
     # Client byte patch against the current official tetrio.js.

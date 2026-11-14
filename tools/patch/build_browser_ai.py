@@ -42,6 +42,9 @@ def main():
                 # blob page); the planner then builds its worker from a Blob, which works here.
                 text = text.replace('script[src*="/engine/ai-spin-planner.js"]', 'script[src*="qp-desktop-only-plan-worker"]')
                 text = text.replace('OFFLINE vA-', 'OFFLINE BOOKMARKLET vA-')
+                # user 2026-11-14: ブラウザ版の自作AIは1体まで
+                text = text.replace("if(profiles.length>=64)throw Error('保存AIは64体までです')",
+                                    "if(profiles.length>=1)throw Error('ブラウザ版の保存AIは1体までです。今のAIを削除してから作成してください')")
                 if re.search(r"['\"]/engine/(?!ai-plan-worker)", text):
                     raise SystemExit('absolute /engine/ path left in ' + rel)
                 data = text.encode('utf-8')
@@ -59,6 +62,9 @@ def main():
     old_cache = re.search(r"n='([^']+)'", vo).group(1)
     bm = vo.replace(old_dir, f'offline-v{tag}').replace(old_cache, f'tetrio-patch-offline-v{tag}-core1')
     (a.docs / 'bookmarklets' / f'tetrio-offline-ai-v{a.version}.txt').write_text(bm, encoding='utf-8')
+    bl = (out / 'engine' / 'bot-learning.js').read_text(encoding='utf-8')
+    if 'ブラウザ版の保存AIは1体まで' not in bl:
+        raise SystemExit('AI profile limit anchor')
     print('done', out)
 
 
