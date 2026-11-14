@@ -15,7 +15,10 @@
        {piece, usedHold, cells: [[x, y], ...] (y = 0 bottom)} | null
    bot-ai.js asks LocalExternalAI.planner() for the placement of a game whose _aiEngine
    names a loaded engine; the native sandbox still checks it and plays its exact keys.
-   The search runs on the main thread in slices (the local CSP forbids workers). */
+   v4.8276 (user: heavy lag, CC2 weak against a player): the package runs in its own Web
+   Worker (the app CSP allows blob: workers since v4.8267) and searches there without
+   blocking the game; the BOT takes the best move found so far at the PPS clock. A package
+   that can not run in a worker falls back to main-thread slices. */
 (() => {
  'use strict';
  const DB = 'qp-external-ai', STORE = 'packages';
@@ -32,23 +35,62 @@
  const deletePackage = name => tx('readwrite', s => s.delete(name));
 
  // Run a package script; register() inside it records the definition.
- let pendingFiles = null;
+ let pendingFiles = null, pendingScript = null;
  async function runPackage(pkg) {
-  pendingFiles = pkg.files;
+  pendingFiles = pkg.files; pendingScript = pkg.script;
   const url = URL.createObjectURL(new Blob([pkg.script], { type: 'text/javascript' }));
   try {
    await new Promise((resolve, reject) => { const tag = document.createElement('script'); tag.src = url; tag.onload = resolve; tag.onerror = () => reject(Error('外部AIのスクリプトを実行できません: ' + pkg.name)); document.head.appendChild(tag); });
-  } finally { URL.revokeObjectURL(url); pendingFiles = null; }
+  } finally { URL.revokeObjectURL(url); pendingFiles = null; pendingScript = null; }
  }
  function register(def) {
   if (!def || !/^[a-z0-9_-]{1,32}$/.test(String(def.id || '')) || typeof def.create !== 'function') throw Error('外部AIの登録が不正です(id と create が必要)');
-  defs[def.id] = { ...def, files: pendingFiles || def.files || {} };
+  defs[def.id] = { ...def, files: pendingFiles || def.files || {}, script: pendingScript || def.script || null };
   delete bots[def.id]; delete errors[def.id];
+ }
+ // ---- worker host: the package script + files run in a Worker; results come back per slice ----
+ const WORKER_SRC = `'use strict';
+let defs = {}, bot = null, job = null, cur = 0;
+self.LocalExternalAI = { register(d) { defs[d.id] = d; } };
+const post = (n, final) => { let r = null; try { r = job.result(); } catch {} postMessage({ t: 'res', n, r, done: !!(final || job.done), spent: job.spent || 0 }); };
+const run = (n) => { if (!job || cur !== n) return; let d = false; try { d = job.step(25); } catch { d = true; } post(n, d); if (d) { job = null; return; } setTimeout(() => run(n), 0); };
+onmessage = async (e) => { const m = e.data;
+ if (m.t === 'load') { try { const u = URL.createObjectURL(new Blob([m.script], { type: 'text/javascript' })); importScripts(u); URL.revokeObjectURL(u);
+   const d = defs[m.id]; if (!d) throw Error('register がありません'); bot = await d.create(m.files, { strength: m.strength }); postMessage({ t: 'ready' }); }
+  catch (err) { postMessage({ t: 'error', msg: String(err && err.message || err) }); } }
+ else if (m.t === 'begin') { try { job = bot.begin(m.input); cur = m.n; run(m.n); } catch (err) { postMessage({ t: 'res', n: m.n, r: null, done: true, spent: 0 }); } }
+ else if (m.t === 'stop') { if (job && cur === m.n) { try { job.stop(); } catch {} post(m.n, true); job = null; } }
+};`;
+ async function workerBot(def) {
+  if (!def.script || typeof Worker !== 'function') return null;
+  let w;
+  try {
+   w = new Worker(URL.createObjectURL(new Blob([WORKER_SRC], { type: 'text/javascript' })));
+   await new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(Error('外部AIのワーカーが応答しません')), 15000);
+    w.onmessage = (e) => { if (e.data.t === 'ready') { clearTimeout(t); resolve(); } else if (e.data.t === 'error') { clearTimeout(t); reject(Error(e.data.msg)); } };
+    w.onerror = (ev) => { clearTimeout(t); reject(Error(ev.message || 'worker')); };
+    w.postMessage({ t: 'load', id: def.id, script: def.script, files: def.files, strength: strength(def.id) });
+   });
+  } catch (error) { console.warn('外部AIをワーカーで動かせません(画面のスレッドで動かします): ' + error.message); try { w?.terminate(); } catch {} return null; }
+  let n = 0, last = {};
+  w.onmessage = (e) => { const m = e.data; if (m.t === 'res' && m.n === n) last = m; };
+  return {
+   worker: true,
+   begin(input) {
+    const my = ++n; last = {}; w.postMessage({ t: 'begin', n: my, input });
+    const live = () => my === n;
+    return { get done() { return live() && !!last.done; }, get spent() { return last.spent || 0; },
+     step() { return live() && !!last.done; }, stop() { if (live() && !last.done) w.postMessage({ t: 'stop', n: my }); },
+     result() { return live() ? last.r || null : null; } };
+   },
+   terminate() { try { w.terminate(); } catch {} },
+  };
  }
  async function load(id) {
   if (bots[id]) return bots[id];
   const def = defs[id]; if (!def) throw Error('外部AI「' + id + '」が読み込まれていません');
-  try { bots[id] = await def.create(def.files, { strength: strength(id) }); return bots[id]; }
+  try { bots[id] = (await workerBot(def)) || await def.create(def.files, { strength: strength(id) }); return bots[id]; }
   catch (error) { errors[id] = error; throw error; }
  }
  // Files chosen by the player: one .js (the package) + its data files.
@@ -108,6 +150,9 @@
    // ~60 ms in Node, more in the browser). Top it up first: at most 120 ms here,
    // up to 250 ms of search in all, then finish early.
    stop() {
+    // A worker search can not be waited for here (its messages arrive between frames):
+    // take the best move it has sent so far.
+    if (bot.worker) { job.stop(); return convert(); }
     if (!job.done) {
      stats.early++;
      const t0 = performance.now();
@@ -176,7 +221,7 @@
   };
   if (!dock()) { const mo = new MutationObserver(() => { if (dock()) mo.disconnect(); }); mo.observe(document.documentElement, { childList: true, subtree: true }); }
   $('button').onclick = async () => { if (docked) { docked.open = true; docked.scrollIntoView?.({ block: 'nearest' }); return; } root.classList.toggle('open'); if (root.classList.contains('open')) { fill(); try { await window.LocalAI?.load?.(); fill(); } catch {} } };
-  $('[data-a="stop"]').onclick = () => { try { window.LocalAIRoom?.stop?.(); status('終了しました'); } catch (e) { status(e.message); } };
+  $('[data-a="stop"]').onclick = () => { try { window.LocalAIRoom?.stop?.(); try { window.LocalNative?.resetResults?.(); window.LocalNative?.view?.('play1p'); } catch {} status('終了しました'); } catch (e) { status(e.message); } };
   $('[data-a="add"]').onclick = () => $('input[data-k="files"]').click();
   $('input[data-k="files"]').onchange = async ev => { try { const ids = await addFiles(ev.target.files); fill(); status('読み込みました: ' + ids.map(id => defs[id].label || id).join(', ')); } catch (e) { status('読み込めません: ' + e.message); } ev.target.value = ''; };
   $('[data-a="del"]').onclick = async () => {

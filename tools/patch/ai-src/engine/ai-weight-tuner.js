@@ -74,6 +74,8 @@
  // Round results from the local AI room.
  root.addEventListener?.('local-ai-match-end',e=>{try{
   const s=load();if(!s.enabled||!s.base)return;const {games,winner}=e.detail||{};if(!games||games.length!==2)return;
+  // v4.8276: no tuning from matches with an outside AI (user: 外部AIは学習を基本入れない)
+  if(games.some(g=>g?._aiEngine||g?._aiExternalStats))return;
   const va=games.map((g,i)=>g?._aiPlanStats&&!g._aiExternalStats?i:-1).filter(i=>i>=0);
   if(va.length!==1)return;const i=va[0],sample=reward(games[i],games[1-i],winner===i,s.reward);
   sample.phase=s.phase;step(sample);root.LocalAITuner.last=sample;
