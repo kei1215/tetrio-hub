@@ -252,6 +252,25 @@ def fix_tl_siren(text):
     return replace_once(text, TL_SIREN_OLD, TL_SIREN_NEW, 'O/offline/client.js TL preset nosiren')
 
 
+# v4.8280 (user: separate ON/OFF for the warning sound and the warning mino; Tab panel sets
+# window.__qpWarn {sound, piece}). Each anchor is a native line; the marker makes it idempotent.
+WARN_TOGGLES = [
+    ('e.sfx.Play("warning",1,.33)', 'window.__qpWarn?.sound!==false&&e.sfx.Play("warning",1,.33)'),
+    ('e.sfx.Play("damage_alert",1,.33)', 'window.__qpWarn?.sound!==false&&e.sfx.Play("damage_alert",1,.33)'),
+    ('s=e.sfx.Play("hyperalert",1,.33)', 's=window.__qpWarn?.sound!==false&&e.sfx.Play("hyperalert",1,.33)'),
+    ('HoldWarning:function(){if(!e.hm.IsFullMode()||!t.setoptions.display_hold)return;',
+     'HoldWarning:function(){if(!e.hm.IsFullMode()||!t.setoptions.display_hold)return;if(window.__qpWarn?.piece===false)return void e.hm.H.board.el("holdwarn").delete();'),
+]
+
+
+def fix_warn_toggles(text):
+    for old, new in WARN_TOGGLES:
+        if new in text:
+            continue
+        text = replace_once(text, old, new, 'O/offline/client.js warning toggle')
+    return text
+
+
 def fix_offline_client(text):
     for old, new, count in OFFLINE_CLIENT_FIXES:
         if text.count(old) != count:
@@ -458,7 +477,7 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                 text = data.decode('utf-8')
                 if not incremental:
                     text = fix_offline_client(text)
-                data = fix_tl_siren(fix_custom_opts(fix_warlock_mini(text))).encode('utf-8')
+                data = fix_warn_toggles(fix_tl_siren(fix_custom_opts(fix_warlock_mini(text)))).encode('utf-8')
             elif offline and name == 'O/local-main.js':
                 data = add_editor_window(data.decode('utf-8')).encode('utf-8')
             elif has_offline and offline and name == 'O/offline/index.html':
