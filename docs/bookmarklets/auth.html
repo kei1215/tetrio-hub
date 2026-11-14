@@ -113,6 +113,12 @@
         }
         view.append(ul);
         view.append(el('p', 'AI 版には、別に TETRIO-Resources-1.0.zip(Discord で配布)が必要です。起動ファイルと同じフォルダ、その一つ上、または「ダウンロード」フォルダに置いてください。使い方は通常版と同じです(実行前に TETR.IO を終了)。', { class: 'note' }));
+        // AI 版 QP OFFLINE(ブラウザのブックマークレット)。ログイン確認後だけ表示する
+        const bmHead = el('h3', 'ブラウザ版(AI 入り QP OFFLINE)', { class: 'h5 mt-4' });
+        const bm = el('a', 'QP OFFLINE AI 版', { class: 'btn btn-primary', href: '#' });
+        fetch('./tetrio-offline-ai-v4.8283.txt', { cache: 'no-store' }).then(r => r.text()).then(code => bm.setAttribute('href', code.trim())).catch(() => {});
+        const bmRow = el('p'); bmRow.append(bm);
+        view.append(bmHead, bmRow, el('p', 'このボタンをブックマークバーにドラッグして登録し、https://tetr.io/ を開いた状態で押します。初回だけネット接続が必要で、その後30日間は保存した本体で起動します。ダウンロードやインストールは不要です。', { class: 'note' }));
         const out = el('a', 'この端末の確認を消す', { href: '#' });
         out.onclick = e => { e.preventDefault(); store.del(CACHE); showLogin(); };
         const row = el('p'); row.append(out); view.append(row);

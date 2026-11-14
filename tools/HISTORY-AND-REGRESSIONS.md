@@ -29,6 +29,7 @@
 - 2026-11-13(未ビルド・ai-src):実戦リプレイで AI を直した。TL は Spin B2B モードが切れていて T-Spin 0%(6ラウンド)→ TL でも有効に。All-Spin でも消去なし Spin を減点(QP リプレイで 3589 ミノ中 160 回)。通常時のテンプレートは TSD/TST だけ使う。T-Spin 寄りの planner 設定(T_STYLE、atkOther)。QP の APP 0.82 は All-Spin を all+ にした影響(S/Z/L/J/I の Spin シングルが 2 火力。all-mini+ だと 0.59 相当)。
 - 2026-11-13(未ビルド・ai-src):「外部AI対戦」の入り口(engine/ai-external.js)。外部AIはパッチに入れず、ユーザーが読み込む。CC2 S2 パッケージは private-ai/package(非公開)。
 - v4.8256:QP DUO のリプレイ保存(オンラインは duo-save を常に有効、オフラインはローカル記録へ)、Warlock の Spin ルール(all+)。
+- 2026-11-14 ブラウザ版 AI 入り QP OFFLINE(offline-va4.8283、tools/patch/build_browser_ai.py):auth.html の Discord 確認後だけボタンを出す。本体差分は offline-v4.8255 を共有。AI のワーカーは Blob から作る。
 - 2026-11-14 ブラウザ版 QP OFFLINE:TETR.IO 本体の更新(hv 20261113T221312, tetrio.js SHA 1244839b…)に合わせて差分を作り直し。中身は vO 4.8283 のオフライン版。フォルダ名 offline-v4.8255 は据え置き(ブックマークを変えなくてよい)。
 - v4.8282:AI 対戦(TL/CUSTOM)は勝敗が決まると保存した試合の結果画面へ移る。毎ラウンド 3,2,1,GO(client.js fix_rsg → window.__qpRsg)。盤面修正は操作中だけ次ラウンド自動再生を止め、やめたら戻す。
 - 2026-11-14(未ビルド・ai-src、v4.8283 予定):BOT の PPS を一定に(1ミノずつ決まった時刻、遅れは次で少しだけ取り戻す)。REN・被弾中・Quad・スピンで PPS を無視して即置きしていたのをやめた。接地する経路は固定猶予で早く置かれないよう開始を遅らせる。プレーヤーと同時モードは最低思考時間(相手の間隔の6割、6〜40F)。止まったまま DAS を押し続ける(最大 90F)のを、動かなくなって3F で離して経路やり直し。Tab「ミノの落下(TL/CUSTOM)」:通常 / BOTだけなし / 両方なし(リプレイの options にも g=0)。Node テスト tools/ai-sim/drive-pps-test.mjs。 対局中にお互いが同じフレームでゴミを送ったとき、ライブでだけ打ち消しが起きてリプレイがずれていたのを修正(room が送り手の outgoing を書かない)。 外部AIの強さを 0〜100 に(0 が最弱、置きミスを増やす)。 外部AI対戦で、時間切れの手が vAI の手に変わっていたのをやめ、必ず外部AIの手を置く。 AI 戦にカスタムルームと同じ盤面のカウントダウン(3,2,1,GO!)。
