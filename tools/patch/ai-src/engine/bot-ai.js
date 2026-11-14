@@ -331,6 +331,10 @@
  // a softmax fit of CC2's own choices (flat, few overhangs, no edge well), take
  // garbage while height + incoming <= 14 else cancel (no forced B2B break),
  // value an open dig column, no 1-line non-T minis. APP 0.71 -> 0.80, wins 2 -> 3-4 of 32.
+ // 2026-11-14 (user: CC2 のプレイを学習させても無意味; test opponent is now Cold Clear 1): the 11
+ // CC2-fitted board terms (sealed .. well) were checked against CC1, 32 paired games at 4 PPS:
+ // kept APP 0.88, 4 wins / without (planner defaults) APP 0.71, 2 wins. Kept until a fit on
+ // human replays replaces them; no new CC2 data is used.
  const T_STYLE={wastedT:30,tFull:[0,10,45,90],tsdReady:40,tstReady:90,mini:[0,0,8,14],tPotK:6,atkOther:1,tShape:10,
   sealed:14,trap:7.4,tuck:6,tuckReady:-2.8,bump:3.7,bumpSq:.33,height:-1.7,peak:5.1,top:6.4,dead:-.7,well:-4.1,takeMax:14,dig:4,cancelW:0,gHole:3,surviveNoClear:8,surviveCombo:2,digRebuild:20};
  const B2BP=window.__b2bParams||(window.__b2bParams={});
