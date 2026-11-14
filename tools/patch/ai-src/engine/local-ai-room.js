@@ -1,12 +1,15 @@
 /* Local TL/CUSTOM match runner.
    v4.8276: stop() ends both boards natively (endNow) so the keyboard board does not stay
-   on screen after 終了. */
+   on screen after 終了.
+   v4.8279 (user: 火力の待ちが一切ない / すぐ赤くなる): a garbage packet without cid is active at
+   once in the native engine; active:false makes it wait garbagespeed (TL 20 frames) like
+   online TL before it can enter. */
 (() => {
  let session=null,packetId=0;
  const asSide=value=>value==='player'?'player':'ai';
  const profileFor=(value,fallback)=>{if(value==='player')return null;const id=String(value||'');return window.LocalBotLearning?.getProfile?.(id.startsWith('ai:')?id.slice(3):fallback)};
  const safePlaying=game=>{try{return !!game?.isPlaying?.()}catch{return false}};
- function send(source,target,amount){if(!safePlaying(target)||!Number.isFinite(amount)||amount<=0)return;const ack=source.state.garbageacknowledgements;if(!ack?.incoming||!ack?.outgoing)return;const iid=source.state.interactionid=(Number(source.state.interactionid)||0)+1,ackiid=ack.incoming[target.id]||0,pending=ack.outgoing;(pending[target.id]??=[]).push({iid,amt:amount});target.source.Push('ige',{id:'local-tl-'+(++packetId),type:'interaction',data:{type:'garbage',gameid:source.id,username:source.options.username,iid,ackiid,amt:amount,x:4.5,y:30}})}
+ function send(source,target,amount){if(!safePlaying(target)||!Number.isFinite(amount)||amount<=0)return;const ack=source.state.garbageacknowledgements;if(!ack?.incoming||!ack?.outgoing)return;const iid=source.state.interactionid=(Number(source.state.interactionid)||0)+1,ackiid=ack.incoming[target.id]||0,pending=ack.outgoing;(pending[target.id]??=[]).push({iid,amt:amount});target.source.Push('ige',{id:'local-tl-'+(++packetId),type:'interaction',data:{type:'garbage',gameid:source.id,username:source.options.username,iid,ackiid,amt:amount,x:4.5,y:30,active:false}})}
  function stop(){const old=session;if(!old)return;session=null;old.stopped=true;for(const dispose of old.cleanup.splice(0))try{dispose()}catch{}for(const game of old.games){try{game._localLiveBot?.stop?.();game.source?.Push?.('keyup',{key:'softDrop',subframe:.5})}catch{}try{if(safePlaying(game))game.endNow?.()}catch{}try{game.state.playing=false}catch{}}try{old.games[1]?.destroy?.()}catch{}}
  function attachBot(game,profile,state,external){
   const model=window.LocalBotLearning?.cloneLearner?.(profile.model);if(!model)throw Error('AI学習データを読み込めませんでした');
