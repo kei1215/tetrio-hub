@@ -140,10 +140,13 @@
     const tl = rep && !headless(n) && timelines.get(rep);
     if (!tl || tl === own) return own.events;
     // リプレイ盤面修正で操作中: 止めたフレームまではリプレイの一覧、その先は自分で置いた分
+    // 埋め込んだ修正の再生中: 修正が始まるフレームまではリプレイの一覧、その先はこの盤面で置いた分
     const rpe = W.__rpe, practice = rpe && rpe.active === n;
-    const limit = practice ? rpe.snapFrame : n.esm.frame;
+    const ef = !practice && rpe && typeof rpe.embedFrame === 'function' ? rpe.embedFrame(n) : null;
+    const edited = ef !== null && n.esm.frame > ef;
+    const limit = practice ? rpe.snapFrame : edited ? ef : n.esm.frame;
     const list = tl.events.filter(e => e.frame <= limit);
-    return practice ? list.concat(own.events.filter(e => e.frame > limit)) : list;
+    return practice || edited ? list.concat(own.events.filter(e => e.frame > limit)) : list;
   };
 
   const tally = events => {
@@ -327,21 +330,34 @@
   // TETR.IO はミノを置くとき、盤面に書き込む前に "lock" を通知する(置いた数もまだ増えていない)。
   // その時点の盤面と、置くミノのマスを、ゲームの最初から何個目のミノかで覚えておく(最新の 21 個まで)。
   // このスクリプトがゲームを進めている最中(操作中)は記録しない
+  // 置くミノのマス(盤面の行・列。行は上から数える)
+  const lockCells = (fm, piece) => {
+    const def = fm.GetPieceDefinition(piece.type, piece.r, true);
+    if (!def || !Array.isArray(def.data)) return null;
+    const y0 = Math.ceil(piece.y);
+    return def.data.map(([dx, dy]) => [piece.x + dx - def.dx, y0 + dy - def.dy]);
+  };
   const hookLocks = n => {
     const fm = n && n.fm;
     if (!fm || fm.__rpeLockEmit || typeof fm.emit !== 'function') return;
     const emit0 = fm.emit;
     fm.__rpeLockEmit = emit0;
     fm.emit = function (type, ...a) {
-      if (type === 'lock' && !stepping) {
+      if (type === 'lock') {
         try {
-          const g = n.gsm, piece = a[0], num = (g.stats.piecesplaced || 0) + 1;
-          const def = fm.GetPieceDefinition(piece.type, piece.r, true);
-          if (def && Array.isArray(def.data)) {
-            const y0 = Math.ceil(piece.y);
-            const log = n.__rpeLockLog || (n.__rpeLockLog = new Map());
-            log.set(num, { board: g.board.map(row => row.slice()), type: String(piece.type || 'x'), cells: def.data.map(([dx, dy]) => [piece.x + dx - def.dx, y0 + dy - def.dy]) });
-            for (const k of log.keys()) if (k < num - 21 || k > num) log.delete(k);
+          const g = n.gsm, piece = a[0];
+          if (simLock) simLock(n, piece);   // マネ練習の手本を作っている最中
+          else if (!stepping) {
+            const num = (g.stats.piecesplaced || 0) + 1, cells = lockCells(fm, piece);
+            if (cells) {
+              const log = n.__rpeLockLog || (n.__rpeLockLog = new Map());
+              log.set(num, { board: g.board.map(row => row.slice()), type: String(piece.type || 'x'), cells });
+              for (const k of log.keys()) if (k < num - 21 || k > num) log.delete(k);
+            }
+          } else if (S.active === n) {
+            // 操作中に置いたミノ(マネ練習で手本と比べる)
+            const cells = lockCells(fm, piece);
+            lastLock = cells && { cells, board: g.board.map(row => row.slice()) };
           }
         } catch (e) { }
       }
@@ -373,6 +389,28 @@
   // TETR.IO と同じキー名の作り方(e.code を大文字に)
   const keyName = e => e.code ? e.code.toUpperCase() : e.key ? (e.key === ' ' ? 'SPACE' : e.location === 3 ? 'NUMPAD' + e.key.toUpperCase() : e.key.toUpperCase()) : '';
   const actionOf = e => { const b = getBinds(); return b.get(keyName(e)) || b.get(String(e.key || '').toUpperCase()) || null; };
+  // ハンドリング(DAS/ARR/SDF など)を TETR.IO と同じ形にそろえる。
+  // userConfig の値は文字列のことがあり("0" など)、そのまま入れると ARR 0 の判定(0 === arr)が外れて
+  // 長押しで動かない・動きが止まらないことがあった。数・範囲は TETR.IO がゲームを作るときと同じにする
+  const normHandling = (t, cur, version) => {
+    const out = { ...cur };
+    if (!t || typeof t !== 'object') return out;
+    const num = (v, lo, hi, step) => { const x = parseFloat(v); return Number.isFinite(x) ? Math.floor(Math.max(lo, Math.min(x, hi)) * step) / step : null; };
+    const arr = num(t.arr, 0, 5, 10), das = num(t.das, 1, 20, 10), dcd = num(t.dcd || 0, 0, 20, 10), sdf = num(t.sdf, 5, 41, 1);
+    if (arr !== null) out.arr = arr;
+    if (das !== null) out.das = das;
+    if (dcd !== null) out.dcd = dcd;
+    if (sdf !== null) out.sdf = sdf;
+    if ('safelock' in t) out.safelock = version >= 12 && t.safelock !== false;
+    if ('cancel' in t) out.cancel = !!t.cancel;
+    if ('may20g' in t) out.may20g = !(version >= 18) || t.may20g !== false;
+    for (const k of ['irs', 'ihs']) if (['off', 'hold', 'tap'].includes(t[k])) out[k] = t[k];
+    return out;
+  };
+  const applyHandling = (n, h) => {
+    const g = n.gsm;
+    Object.assign(g.handling, h || normHandling(config().handling, g.handling, (g.setoptions && g.setoptions.version) || 19));
+  };
 
   // ---- 状態 ----
   const S = W.__rpe = {
@@ -388,10 +426,33 @@
     fumenPage: (() => { try { return JSON.parse(localStorage.getItem('rpe-fumen-v1') || '{}').page || 'piece'; } catch (e) { return 'piece'; } })(),
     fumenGray: (() => { try { return JSON.parse(localStorage.getItem('rpe-fumen-v1') || '{}').gray || 'none'; } catch (e) { return 'none'; } })(),
     panelClosed: updated ? !!keep.panelClosed : false,
+    practice: keep.practice ?? false,
+    embMode: keep.embMode ?? 'edit',   // 地形のマネ練習(リプレイで実際に置いた所を目標に出す)
     active: null,                // 操作中のゲーム
+    lastEdit: null,              // 最後に操作した内容(.ttrm に埋め込むため)
     msg: '',
     attack: 0, lines: 0, pieces: 0
   };
+  // .ttrm に埋め込む修正(各プレイヤーの replay.results の中。TETR.IO は知らない項目を無視するので、
+  // このツールがなければ普通のリプレイとして再生される)
+  const EMB = 'qp_replay_edit';
+  // 埋め込みのある .ttrm の再生のしかた: 'edit' 修正後 / 'practice' 修正後 + 地形練習 / 'orig' 元の版
+  const embedRaw = n => {
+    try {
+      const r = n.esm.replay, e = r && r.results && r.results[EMB];
+      return e && e.v === 1 && Number.isFinite(e.frame) && Number.isFinite(e.end) && e.state && Array.isArray(e.events) ? e : null;
+    } catch (x) { return null; }
+  };
+  const embedOf = n => S.embMode === 'orig' ? null : embedRaw(n);
+  S.embedFrame = n => { const e = n && embedOf(n); return e ? e.frame : null; };   // スピンカウンターが使う
+  S.practiceTargets = () => targets;   // 確認用(マネ練習の手本)
+  let rec = [], recGrav;         // 操作の記録(埋め込み用): {f, t:'d'|'u', k} キー / {f, t:'g', v} 重力なし / {f, t:'h', h} ハンドリング
+  let editBase = null;           // 埋め込みの再生中に止めたときの、その埋め込み(続けて直すと1つにまとめる)
+  let internal = 0;              // このスクリプトが状態を入れ直している最中(シークとして扱わない)
+  let simLock = null;            // マネ練習の手本を作っている最中に、置いたミノを受け取る
+  let lastLock = null;           // 操作中に最後に置いたミノ
+  let targets = [];              // マネ練習の手本(止めた場面から、リプレイで実際に置いた順)
+  let wrongAt = 0;               // 手本と違う所に置いた時刻
   let snap = null;               // 止めたときの状態(TETR.IO の EjectState)
   let snapFrame = 0, base = null;
   let queue = [];                // ゲームに入れるキー操作
@@ -437,6 +498,57 @@
     S.swap = n.__rpeOrig.ox > other.__rpeOrig.ox;
     S.swapAuto = true; S.swapKey = pairKey(list);
   };
+  // o[k] を置き換え、戻す処理を patches に積む(前が自前のプロパティならそれに、なければ消して元のメソッドに戻す)
+  const own = (o, k, v) => {
+    const had = Object.prototype.hasOwnProperty.call(o, k), old = o[k];
+    o[k] = v;
+    patches.push(() => { if (had) o[k] = old; else delete o[k]; });
+  };
+  // 一時的に o[k] を置き換える(戻す関数を返す)
+  const swap = (o, k, v) => {
+    const had = Object.prototype.hasOwnProperty.call(o, k), old = o[k];
+    o[k] = v;
+    return () => { if (had) o[k] = old; else delete o[k]; };
+  };
+  // 状態を入れ直す(シークの見張りには「シーク」と思わせない)
+  const injectAt = (n, state, frame) => {
+    internal++;
+    try { n.siom.InjectState(clone(state)); n.esm.Seek(frame); } finally { internal--; }
+  };
+  // 早送りで揺れた盤面の位置を戻す(TETR.IO の AdvanceFrames と同じ)
+  const calmHolder = n => { try { const hs = n.hm.H.holderstate; for (const k of ['x', 'y', 'r', 's', 'w', 'dx', 'dy', 'dr', 'ds', 'dw']) hs[k] = 0; } catch (e) { } };
+  // 音と画面への通知を止めて、ゲームを1フレームずつ進める(fn が false を返すか、進まなくなったら終わり)
+  const fastRun = (n, fn) => {
+    const H = n.lm.H, skip0 = H.soundSkipRate;
+    const emit0 = n.elm.emit;
+    const undoEmit = swap(n.elm, 'emit', function (type, ...a) { if (type === 'frame' || type === 'end' || type === 'start') return undefined; return emit0.call(this, type, ...a); });
+    H.soundSkipRate = 0;
+    try {
+      for (let i = 0; i < 60 * 60 * 15; i++) {
+        if (!fn(i)) break;
+        const b = n.esm.frame;
+        n.lm.Update();
+        if (n.esm.frame === b) break;
+      }
+    } finally { undoEmit(); H.soundSkipRate = skip0; calmHolder(n); }
+  };
+
+  // ---- マネ練習の手本: 止めた場面から、リプレイのとおりに裏で進めて、置いたミノを集める ----
+  const simulate = (n, state, frame) => {
+    const out = [];
+    let over = false;
+    const undoOver = swap(n.gom, 'GameOver', function () { over = true; });
+    simLock = (g, piece) => { if (g !== n) return; const cells = lockCells(n.fm, piece); if (cells) out.push({ type: String(piece.type || 'x'), cells, board: n.gsm.board.map(row => row.slice()) }); };
+    const t0 = performance.now();
+    try {
+      fastRun(n, i => !over && out.length < 80 && !n.esm.IsFinished() && ((i & 31) || performance.now() - t0 < 400));
+    } finally {
+      simLock = null; undoOver();
+      injectAt(n, state, frame);
+    }
+    return out;
+  };
+
   const enter = n => {
     if (S.active) return;
     S.sideName = name(n);
@@ -448,23 +560,25 @@
     S.snapFrame = snapFrame;   // スピンカウンターが「止めたフレームまではリプレイの分」を数えるのに使う
     const st = n.gsm.stats;
     base = { attack: st.garbage.attack || 0, lines: st.lines || 0, pieces: st.piecesplaced || 0 };
+    { const e = embedOf(n); editBase = e && snapFrame >= e.frame ? e : null; }
+    targets = []; lastLock = null; wrongAt = 0;
+    if (S.practice) { try { targets = simulate(n, snap, snapFrame); } catch (e) { console.warn(TAG, 'practice', e); targets = []; } }
     S.active = n;
     queue = []; held.clear(); acc = 0; last = performance.now(); deadAt = 0;
-    undo = [{ state: snap, frame: snapFrame }]; redo = []; placed = st.piecesplaced || 0;
     const esm = n.esm, elm = n.elm, H = n.lm.H, siom = n.siom;
-    // 1) ゲームへの入力: リプレイの記録の代わりに、自分のキー操作を流す
-    esm.Pull = function () {
-      const f = this._frame, now = queue.filter(e => e.frame <= f);
+    // 1) ゲームへの入力: リプレイの記録の代わりに、自分のキー操作を流す(埋め込み用に記録もする)
+    own(esm, 'Pull', function () {
+      const f = this._frame;
+      if (recGrav !== S.noGravity) { rec.push({ f, t: 'g', v: S.noGravity }); recGrav = S.noGravity; }
+      const now = queue.filter(e => e.frame <= f);
       queue = queue.filter(e => e.frame > f);
-      for (const e of now) this.Emit({ ...e, frame: f });
-    };
-    esm.IsFinished = () => false;
-    patches.push(() => { delete esm.Pull; delete esm.IsFinished; });
+      for (const e of now) { rec.push({ f, t: e.type === 'keydown' ? 'd' : 'u', k: e.data.key }); this.Emit({ ...e, frame: f }); }
+    });
+    own(esm, 'IsFinished', () => false);
     // 2) リプレイ画面への通知(シークバーの位置・終了)を止める。操作中にシークバーは動かない
     const emit0 = elm.emit;
     // (止めるのは、このスクリプトがゲームを進めている最中だけ。リプレイを閉じるときの通知は通す)
-    elm.emit = function (type, ...a) { if (stepping && (type === 'frame' || type === 'end' || type === 'start')) return undefined; return emit0.call(this, type, ...a); };
-    patches.push(() => { elm.emit = emit0; });
+    own(elm, 'emit', function (type, ...a) { if (stepping && (type === 'frame' || type === 'end' || type === 'start')) return undefined; return emit0.call(this, type, ...a); });
     // 3) 再生・シークを見張る: 押されたら、ゲームが動き出す前に止めたときの状態へ戻す
     let spd = H.playbackSpeed;
     Object.defineProperty(H, 'playbackSpeed', {
@@ -473,36 +587,37 @@
     });
     patches.push(() => { delete H.playbackSpeed; H.playbackSpeed = spd; });
     const inject0 = siom.InjectState;
-    siom.InjectState = function (...a) { if (S.active === n) leave(false); return inject0.apply(this, a); };
-    patches.push(() => { siom.InjectState = inject0; });
+    own(siom, 'InjectState', function (...a) { if (S.active === n && !internal) leave(false); return inject0.apply(this, a); });
     // 4') 自分の操作で自滅したとき(ゲームを進めている最中)だけ、ゲームオーバーの処理を走らせない。
     //     走ると、リプレイ画面がもう片方の盤面を消すなどしてしまう。代わりに盤面をその場で止め、
     //     少ししてから自滅したミノを置く前に戻す。
     //     それ以外(操作中のままリプレイを閉じたときの終了処理など)は、止めた場面に戻してから
     //     そのまま TETR.IO の処理を走らせる。止めると盤面の描画が残ってしまう
+    //     勝ち・クリアなど自滅でない終わり方は、操作中は無視する(戻されて操作が効かなくなるのを防ぐ)
     const gom = n.gom, over0 = gom.GameOver;
-    gom.GameOver = function (...a) {
-      if (S.active === n && stepping) { if (!deadAt) deadAt = performance.now(); return; }
+    own(gom, 'GameOver', function (reason, ...a) {
+      if (S.active === n && stepping) {
+        if (!/^(winner|clear|drop|dropnow|forfeit|retry)$/.test(String(reason)) && !deadAt) deadAt = performance.now();
+        return;
+      }
       if (S.active === n) leave(true);
-      return over0.apply(this, a);
-    };
-    patches.push(() => { gom.GameOver = over0; });
+      return over0.call(this, reason, ...a);
+    });
     // 4'') ライン消去の直前の盤面を写しておく(fumen で「置いた所 → 消えた後」の順にページを出すため)
     const bm = n.bm, full0 = bm.GetFullLines;
-    bm.GetFullLines = function (...a) {
+    own(bm, 'GetFullLines', function (...a) {
       const r = full0.apply(this, a);
       if (stepping && r && r.length) preClear = n.gsm.board.map(row => row.slice());
       return r;
-    };
-    patches.push(() => { bm.GetFullLines = full0; });
+    });
     // 5) 重力なし: 落下の計算に使う重力を 0 にする(ソフトドロップ・ハードドロップは効く)
     const fm = n.fm;
-    fm.GetEffectiveGravity = function (...a) { return S.noGravity ? 0 : Object.getPrototypeOf(this).GetEffectiveGravity.apply(this, a); };
-    patches.push(() => { delete fm.GetEffectiveGravity; });
+    own(fm, 'GetEffectiveGravity', function (...a) { return S.noGravity ? 0 : Object.getPrototypeOf(this).GetEffectiveGravity.apply(this, a); });
     // 4) 記録しない・自分のハンドリング(DAS/ARR/SDF)で動かす。どちらも戻すときに元へ戻る
     n.gsm.setoptions.noreplay = true;
-    const hd = config().handling;
-    if (hd && typeof hd === 'object') Object.assign(n.gsm.handling, hd);
+    applyHandling(n);
+    rec = [{ f: snapFrame, t: 'h', h: { ...n.gsm.handling } }]; recGrav = undefined;
+    undo = [{ state: snap, frame: snapFrame, seg: rec.slice() }]; redo = []; placed = st.piecesplaced || 0;
     syncKeys(n);
     // 再生ボタンなどにフォーカスが残っていると、スペース(ハードドロップ)でそのボタンが押されてしまうので外す
     unfocus();
@@ -510,15 +625,25 @@
     console.log(TAG, 'play', name(n), 'frame', snapFrame);
   };
 
+  // 今の操作を、埋め込む形にまとめる(止めた場面の状態 + そこからの操作)。
+  // 埋め込みの再生中に止めて直したときは、前の埋め込みの続きとして1つにする
+  const buildEdit = n => {
+    if (!rec.some(e => e.t === 'd' || e.t === 'u')) return null;
+    const end = n.esm.frame;
+    let ed = { v: 1, frame: snapFrame, end, state: JSON.parse(JSON.stringify(undo[0].state)), events: rec.slice() };
+    if (editBase && snapFrame >= editBase.frame) ed = { v: 1, frame: editBase.frame, end, state: editBase.state, events: editBase.events.filter(e => e.f < snapFrame).concat(ed.events) };
+    return { game: n, edit: ed };
+  };
   const leave = restore => {
     const n = S.active;
     if (!n) return;
+    try { const le = buildEdit(n); if (le) S.lastEdit = le; } catch (e) { console.warn(TAG, e); }
     S.active = null;
     while (patches.length) { try { patches.pop()(); } catch (e) { console.warn(TAG, e); } }
     if (restore && snap) {
-      try { n.siom.InjectState(clone(snap)); n.esm.Seek(snapFrame); } catch (e) { console.warn(TAG, 'restore failed', e); }
+      try { injectAt(n, snap, snapFrame); } catch (e) { console.warn(TAG, 'restore failed', e); }
     }
-    queue = []; held.clear();
+    queue = []; held.clear(); wrongAt = 0; lastLock = null;
     console.log(TAG, restore ? 'restored' : 'left (seek)');
   };
 
@@ -539,14 +664,15 @@
   const jump = u => {
     const n = S.active;
     if (!n || !u) return;
-    S.active = null;   // InjectState の見張りに「シークした」と思わせない
-    try { n.siom.InjectState.call(n.siom, clone(u.state)); n.esm.Seek(u.frame); } catch (e) { console.warn(TAG, 'jump failed', e); }
-    S.active = n;
+    try { injectAt(n, u.state, u.frame); } catch (e) { console.warn(TAG, 'jump failed', e); }
     n.gsm.setoptions.noreplay = true;
-    const hd = config().handling;
-    if (hd && typeof hd === 'object') Object.assign(n.gsm.handling, hd);
+    applyHandling(n);
     placed = n.gsm.stats.piecesplaced || 0;
-    deadAt = 0; acc = 0; queue = [];
+    deadAt = 0; wrongAt = 0; lastLock = null; acc = 0; queue = [];
+    // 記録も、その場面までの操作に作り直す(各場面は前の場面からの操作 seg を持っている)
+    const i = undo.indexOf(u);
+    if (i >= 0) { rec = []; for (let k = 0; k <= i; k++) rec.push(...(undo[k].seg || [])); }
+    recGrav = undefined;
     syncKeys(n);
   };
   // R(リトライのキー): 止めた場面からやり直す
@@ -573,6 +699,9 @@
   const onKey = e => {
     const n = S.active;
     if (!n || typing(e.target)) return;
+    // Mac は ⌘ を押している間、ほかのキーを離しても keyup が来ない。⌘ を離したら、押しっぱなしの扱いを全部離す
+    // (離した通知が抜けると、ミノが滑り続け、同じキーを押し直しても「押したまま」として無視されていた)
+    if (e.type === 'keyup' && (e.key === 'Meta' || /^(METALEFT|METARIGHT|OSLEFT|OSRIGHT)$/.test(keyName(e)))) { releaseAll(); return; }
     // Ctrl+Z / Ctrl+Y(Mac は ⌘ でも)
     if ((e.ctrlKey || e.metaKey) && /^(KEYZ|KEYY)$/.test(keyName(e))) {
       e.preventDefault(); e.stopImmediatePropagation();
@@ -588,7 +717,11 @@
     const k = keyName(e);
     if (e.type === 'keypress') return;
     if (e.type === 'keydown') {
-      if (held.has(k)) return;
+      if (held.has(k)) {
+        if (e.repeat) return;   // キーリピート
+        // 押したままのはずのキーがもう一度押された = 離した通知が抜けていた。いったん離してから押し直す
+        if (a !== 'retry') queue.push({ frame: n.esm.frame, type: 'keyup', data: { key: a, subframe: 0 } });
+      }
       held.add(k);
       if (a === 'retry') return retry();
       queue.push({ frame: n.esm.frame, type: 'keydown', data: { key: a, subframe: 0 } });
@@ -601,13 +734,16 @@
   addEventListener('keydown', onKey, true);
   addEventListener('keyup', onKey, true);
   addEventListener('keypress', onKey, true);
-  const onBlur = () => {
+  const releaseAll = () => {
     const n = S.active;
     if (!n) return held.clear();
     for (const k of held) { const a = getBinds().get(k); if (a && a !== 'retry') queue.push({ frame: n.esm.frame, type: 'keyup', data: { key: a, subframe: 0 } }); }
     held.clear();
   };
+  const onBlur = () => releaseAll();
+  const onVis = () => { if (document.hidden) releaseAll(); };
   addEventListener('blur', onBlur);
+  document.addEventListener('visibilitychange', onVis);
 
   // ---- fumen(https://fumen.zui.jp/)に書き出す ----
   // 操作中: 1ページ目 = 止めた場面、2ページ目から = ミノを1つ置くごとの地形(1ミノ1ページ)。
@@ -834,8 +970,171 @@
   S.fumen = n => S.active && !n ? fumenOfEdit() : fumenOf(n || shown()[0]);
   S.fumenBoards = fumenOfBoards;
 
+  // ---- 埋め込んだ修正の再生 ----
+  // 埋め込みのあるゲームでは、止めた場面のフレームに来たら、その時の状態を入れ直し、
+  // そこからは記録した操作(キー・重力なし・ハンドリング)をリプレイの入力の代わりに流す。
+  // 操作の最後まで来たら、その盤面は止める(相手の盤面とリプレイの時間は進む)。
+  // シークで修正より後へ飛んだときは、止めた場面から早送りして同じ所まで進める
+  const evIndex = new WeakMap();
+  const eventsAt = (e, f) => {
+    let m = evIndex.get(e);
+    if (!m) { m = new Map(); for (const ev of e.events) { if (!m.has(ev.f)) m.set(ev.f, []); m.get(ev.f).push(ev); } evIndex.set(e, m); }
+    return m.get(f) || [];
+  };
+  const fastForward = (n, e, target) => {
+    internal++;
+    try {
+      injectAt(n, e.state, e.frame);
+      fastRun(n, () => n.esm.frame < target);
+    } finally { internal--; }
+  };
+  const playHook = n => {
+    if (n.__rpePlay) return;
+    const esm = n.esm, fm = n.fm, siom = n.siom;
+    const P = n.__rpePlay = { undo: [] };
+    const pull0 = esm.Pull, grav0 = fm.GetEffectiveGravity, inject0 = siom.InjectState;
+    P.undo.push(swap(esm, 'Pull', function () {
+      const e = S.active !== n && embedOf(n), f = this._frame;
+      if (n.__rpeHold && (!e || f <= e.end)) { n.gsm.pause = false; n.__rpeHold = false; }
+      if (!e || f < e.frame) return pull0.call(this);
+      if (f === e.frame) { injectAt(n, e.state, f); n.__rpeGrav = false; }
+      for (const ev of eventsAt(e, f)) {
+        if (ev.t === 'g') n.__rpeGrav = !!ev.v;
+        else if (ev.t === 'h') applyHandling(n, ev.h);
+        else if (ev.t === 'd' || ev.t === 'u') this.Emit({ frame: f, type: ev.t === 'd' ? 'keydown' : 'keyup', data: { key: ev.k, subframe: 0 } });
+      }
+      if (f > e.end && !n.__rpeHold) { n.__rpeHold = true; n.gsm.pause = true; }
+    }));
+    P.undo.push(swap(fm, 'GetEffectiveGravity', function (...a) {
+      const e = S.active !== n && embedOf(n);
+      if (e && n.__rpeGrav && n.esm.frame >= e.frame) return 0;
+      return grav0.apply(this, a);
+    }));
+    P.undo.push(swap(siom, 'InjectState', function (st, ...r) {
+      const res = inject0.call(this, st, ...r);
+      try {
+        const e = !internal && S.active !== n && embedOf(n);
+        if (e && st && st.frame > e.frame) fastForward(n, e, st.frame);
+      } catch (x) { console.warn(TAG, 'embed seek', x); }
+      return res;
+    }));
+  };
+  const unplay = n => {
+    const P = n && n.__rpePlay;
+    if (!P) return;
+    while (P.undo.length) { try { P.undo.pop()(); } catch (e) { } }
+    if (n.__rpeHold) { try { n.gsm.pause = false; } catch (e) { } n.__rpeHold = false; }
+    delete n.__rpePlay;
+  };
+
+  // ---- 修正を .ttrm に埋め込んで保存 ----
+  // TETR.IO 自身の「リプレイを保存」ボタンの中身(読み込んだリプレイそのもの)を受け取り、
+  // 修正したプレイヤーの replay.results に修正を足して保存する。
+  // replay.results は読み込んだリプレイと同じものなので、ここに入れると今のリプレイ画面でもすぐ修正後で再生される
+  const captureDownload = id => {
+    const btn = document.getElementById(id);
+    if (!btn) return null;
+    const B0 = W.Blob, click0 = HTMLAnchorElement.prototype.click;
+    let text = null, file = null;
+    W.Blob = function (parts, o) { try { if (text == null) text = parts.map(String).join(''); } catch (e) { } return new B0(parts, o); };
+    W.Blob.prototype = B0.prototype;
+    HTMLAnchorElement.prototype.click = function () { file = this.download; try { URL.revokeObjectURL(this.href); } catch (e) { } };
+    try { btn.click(); } finally { W.Blob = B0; HTMLAnchorElement.prototype.click = click0; }
+    return text ? { text, file: file || 'replay.ttrm' } : null;
+  };
+  const saveFile = (text, file) => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+    a.download = file;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  };
+  const saveEmbed = () => {
+    if (S.active) leave(true);
+    const le = S.lastEdit;
+    if (!le || !alive(le.game)) { S.msg = '保存する修正がありません(止めてミノを動かしてから押してください)'; return; }
+    const n = le.game, res = n.esm.replay && n.esm.replay.results;
+    if (!res) { S.msg = 'このリプレイには埋め込めません'; return; }
+    res[EMB] = le.edit;
+    const multi = games.filter(g => { try { return g.esm.IsReplay() && alive(g) && !g.iom.IsHeadless(); } catch (e) { return false; } }).length >= 2;
+    const cap = captureDownload(multi ? 'downloadreplay_multilog' : 'downloadreplay_results') || captureDownload(multi ? 'downloadreplay_results' : 'downloadreplay_multilog');
+    if (!cap || !cap.text.includes('"' + EMB + '"')) { S.msg = '保存できませんでした(リプレイ画面から開き直してください)'; return; }
+    const m = /^(.*?)(\.ttrm|\.ttr)?$/i.exec(cap.file);
+    saveFile(cap.text, m[1] + '-edit' + (m[2] || (multi ? '.ttrm' : '.ttr')));
+    S.msg = '修正を埋め込んで保存しました。このツールがあれば修正後の内容で再生されます(なければ元のリプレイ)';
+    console.log(TAG, 'embedded', le.edit.frame, '→', le.edit.end, le.edit.events.length, 'events');
+  };
+  const removeEmbed = () => {
+    if (S.active) leave(true);
+    const n = pick(shown());
+    const e = n && embedRaw(n);
+    if (!e) { S.msg = '埋め込みはありません'; return; }
+    delete n.esm.replay.results[EMB];
+    S.lastEdit = null;
+    S.msg = '埋め込みを外しました(保存し直すと元のリプレイになります。今の画面はシークし直すと元に戻ります)';
+  };
+
+  // ---- マネ練習: 目標のミノを盤面に重ねて描く ----
+  const PIECE_COLOR = { z: '#ff3a3a', l: '#ff9a1f', o: '#ffe02a', s: '#5be13b', i: '#33dcff', j: '#3a6bff', t: '#c24bff' };
+  const filledCell = c => c !== null && c !== undefined && c !== 0 && c !== '';
+  // 手本の盤面 orig と今の盤面 cur の上下のずれ(手本が受けたせり上がりの分、手本は上にある)。
+  // ずれ g: orig の行 y = cur の行 y + g
+  const shiftOf = (orig, cur) => {
+    let best = 0, bestBad = Infinity;
+    const H = Math.min(orig.length, cur.length);
+    for (let g = -8; g <= 20; g++) {
+      let bad = 0;
+      for (let y = 0; y < H && bad < bestBad; y++) {
+        const yc = y + g;
+        if (yc < 0 || yc >= H) continue;
+        const a = orig[y] || [], b = cur[yc] || [];
+        for (let x = 0; x < 10; x++) if (filledCell(a[x]) !== filledCell(b[x])) bad++;
+      }
+      if (bad < bestBad || (bad === bestBad && Math.abs(g) < Math.abs(best))) { best = g; bestBad = bad; }
+    }
+    return best;
+  };
+  const targetCells = (tg, board) => { const g = shiftOf(tg.board, board); return tg.cells.map(([x, y]) => [x, y + g]); };
+  const sameCells = (a, b) => { const k = c => c.map(([x, y]) => x + ',' + y).sort().join(' '); return !!a && !!b && k(a) === k(b); };
+  let ov = null;
+  const drawTarget = now => {
+    const n = S.active, tg = n && S.practice && targets[undo.length - 1];
+    if (!tg) { if (ov) ov.style.display = 'none'; return; }
+    if (!ov) {
+      ov = document.createElement('canvas');
+      ov.id = '__rpetarget';
+      ov.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;pointer-events:none;z-index:2147483645';
+      document.body.appendChild(ov);
+    }
+    ov.style.display = 'block';
+    const dpr = W.devicePixelRatio || 1, cw = Math.round(innerWidth * dpr), ch = Math.round(innerHeight * dpr);
+    if (ov.width !== cw || ov.height !== ch) { ov.width = cw; ov.height = ch; }
+    const ctx = ov.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cw, ch);
+    try {
+      const H = n.hm.H, so = H.stackobj;
+      const kid = H.fallingobj && H.fallingobj.children.find(c => c.visible && c.width > 0);
+      if (kid) n.__rpeCell = kid.width;
+      const L = n.__rpeCell;
+      if (!so || !L) return;
+      const pix = document.getElementById('pixi'), rect = pix ? pix.getBoundingClientRect() : { left: 0, top: 0 };
+      const top = (Number.isFinite(n.T) && Number.isFinite(n.H) ? n.T - n.H : 20);
+      const pt = (x, y) => { const p = so.toGlobal({ x: L * x, y: L * (y - top) }); return [(rect.left + p.x) * dpr, (rect.top + p.y) * dpr]; };
+      const cells = targetCells(tg, n.gsm.board);
+      const pulse = 0.75 + 0.25 * Math.sin(now / 160);
+      ctx.lineWidth = Math.max(3, 3 * dpr);
+      for (const [x, y] of cells) {
+        const q = [pt(x, y), pt(x + 1, y), pt(x + 1, y + 1), pt(x, y + 1)];
+        ctx.beginPath(); ctx.moveTo(...q[0]); for (let i = 1; i < 4; i++) ctx.lineTo(...q[i]); ctx.closePath();
+        ctx.globalAlpha = 0.6 * pulse; ctx.fillStyle = PIECE_COLOR[tg.type] || '#ffffff'; ctx.fill();
+        ctx.globalAlpha = pulse; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    } catch (e) { }
+  };
+
   // ---- パネル ----
-  const css = 'position:fixed;z-index:2147483646;font:12px/1.4 system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.82);border:1px solid #0085a1;border-radius:6px;';
+  const css ='position:fixed;z-index:2147483646;font:12px/1.4 system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.82);border:1px solid #0085a1;border-radius:6px;';
   const panel = document.createElement('div');
   panel.id = '__rpepanel';
   panel.style.cssText = css + 'left:10px;top:60px;padding:8px;display:grid;gap:5px;width:220px';
@@ -867,8 +1166,26 @@
   const saveFumen = () => { try { localStorage.setItem('rpe-fumen-v1', JSON.stringify({ page: S.fumenPage, gray: S.fumenGray })); } catch (e) { } };
   const bFumenPage = btn('', () => { S.fumenPage = S.fumenPage === 'seven' ? 'piece' : 'seven'; saveFumen(); draw(); });
   const bFumenGray = btn('', () => { const order = ['none', 'cycle', 'piece']; S.fumenGray = order[(order.indexOf(S.fumenGray) + 1) % order.length]; saveFumen(); draw(); });
+  const bPractice = btn('', () => {
+    S.practice = !S.practice;
+    // 止めた場面から手本を作り直す(操作中なら止めた場面に戻ってから、自動でもう一度操作できるようになる)
+    if (S.active) leave(true);
+    S.msg = S.practice ? 'マネ練習: 光っている所に置くと次の手へ進みます' : '';
+    draw();
+  });
+  const bEmbed = btn('修正を .ttrm に埋め込んで保存', () => { saveEmbed(); draw(); });
+  const MODES = { edit: '修正後', practice: '地形練習', orig: '元の版' };
+  const bEmbMode = btn('', () => {
+    const order = ['edit', 'practice', 'orig'];
+    S.embMode = order[(order.indexOf(S.embMode) + 1) % 3];
+    S.practice = S.embMode === 'practice';
+    if (S.active) leave(true);
+    S.msg = '埋め込みの再生: ' + MODES[S.embMode] + '(再生中ならシークし直すと反映)';
+    draw();
+  });
+  const bUnembed = btn('埋め込みを外す', () => { removeEmbed(); draw(); });
   const bClose = btn('パネルを閉じる', () => setClosed(true));
-  panel.append(status, bAuto, bSide, bSwap, bGrav, bReset, bFumen, bFumenPage, bFumenGray, bCounter, bClose);
+  panel.append(status, bAuto, bSide, bSwap, bGrav, bReset, bPractice, bEmbMode, bEmbed, bUnembed, bFumen, bFumenPage, bFumenGray, bCounter, bClose);
   const mini = document.createElement('div');
   mini.id = '__rpemini';
   mini.textContent = '盤面修正';
@@ -920,6 +1237,12 @@
     bFumenGray.textContent = 'fumen の色: ' + ({ none: 'そのまま', cycle: '1巡(7ミノ)で置いたミノ以外グレー', piece: '最後に置いたミノ以外グレー' })[S.fumenGray];
     const tgt = pick(list);
     bSide.textContent = '操作する盤面: ' + (tgt ? name(tgt) : '-') + (list.length > 1 ? '(押すと切り替え)' : '');
+    bPractice.textContent = 'マネ練習(手本の配置を目標に出す): ' + (S.practice ? 'ON' : 'OFF');
+    const emb = tgt && embedRaw(tgt);
+    bUnembed.style.display = emb ? '' : 'none';
+    bEmbMode.style.display = emb ? '' : 'none';
+    bEmbMode.textContent = '埋め込みの再生: ' + MODES[S.embMode] + '(押すと切り替え)';
+    bEmbed.style.opacity = (S.active && rec.some(e => e.t === 'd' || e.t === 'u')) || S.lastEdit ? '1' : '.6';
     let t;
     if (S.active) {
       const st = S.active.gsm.stats;
@@ -927,9 +1250,10 @@
       S.lines = (st.lines || 0) - base.lines;
       S.pieces = (st.piecesplaced || 0) - base.pieces;
       t = `操作中: ${name(S.active)}\n火力 ${S.attack}(相手には送りません)\nライン ${S.lines} / ミノ ${S.pieces}\nCtrl+Z 1手戻す / Ctrl+Y 進める / R 最初から\n再生ボタンで元の場面に戻ります`;
+      if (S.practice) t += targets.length ? `\nマネ練習: ${Math.min(undo.length, targets.length)} / ${targets.length} 手目` + (undo.length > targets.length ? '(手本の最後まで置きました)' : '') : '\nマネ練習: この先の手本がありません';
     } else if (!list.length) {
       t = games.length ? 'リプレイを開くと使えます' : 'リプレイを開くと使えます\n(このブックマークを押したあとに開いたリプレイが対象。開いていたら開き直してください)';
-    } else t = `リプレイ: ${list.length}人\n一時停止すると操作できます`;
+    } else t = `リプレイ: ${list.length}人\n一時停止すると操作できます` + (emb ? `\n埋め込みの修正あり(${emb.frame}〜${emb.end} フレーム)` : '');
     status.textContent = 'リプレイ盤面修正\n' + t + (S.msg ? '\n' + S.msg : '');
   };
 
@@ -982,16 +1306,27 @@
   const loop = now => {
     raf = requestAnimationFrame(loop);
     try {
-      if (!checkStart()) { last = now; return; }
+      if (!checkStart()) { last = now; if (ov) ov.style.display = 'none'; return; }
       const list = shown();
       applySwap(list);
       for (const g of list) hookLocks(g);
-      // パッチ版: 盤面修正を ON にしている間は、次のラウンドへの自動再生を切る
-      if (W.__qpEmbedded && list.length) {
+      // パッチ版: 盤面を操作している間だけ、次のラウンドへの自動再生を止める。
+      // 操作をやめたら元に戻す(ユーザー: 連続再生が盤面修正発動時にうまく働かない)。
+      if (W.__qpEmbedded) {
         const nr = document.getElementById('replaytools_button_nextround');
-        if (nr && nr.classList.contains('active')) nr.classList.remove('active');
+        if (nr) {
+          if (S.active && nr.classList.contains('active')) { nr.classList.remove('active'); S.nextHeld = true; }
+          else if (!S.active && S.nextHeld) { nr.classList.add('active'); S.nextHeld = false; }
+        }
       }
-      if (S.active && (!alive(S.active) || !list.includes(S.active))) leave(false);
+      // 埋め込みのあるゲームは、その再生の仕組みを付ける
+      for (const g of list) if (g !== S.active && !g.__rpePlay && embedOf(g)) playHook(g);
+      // 操作中の盤面が消えたら止める。見えなくなっただけのとき(演出で一瞬隠れるなど)は、少し続いたら止める
+      if (S.active) {
+        if (!alive(S.active)) leave(false);
+        else if (!list.includes(S.active)) { if (++goneFrames > 30) leave(false); }
+        else goneFrames = 0;
+      }
       // 別の2人のリプレイになったら、自動の入れ替えを元に戻す
       if (S.swapAuto && list.length === 2 && pairKey(list) !== S.swapKey) { S.swap = false; S.swapAuto = false; S.swapKey = null; }
       if (!S.active && S.auto && list.length) {
@@ -1003,18 +1338,32 @@
         // 60 フレーム/秒でゲームを進める(一時停止中なので TETR.IO 自身は進めない)
         acc += Math.min(100, now - last) / 1000;
         let steps = 0;
-        while (!deadAt && acc >= 1 / 60 && steps < 6) {
+        while (!deadAt && !wrongAt && acc >= 1 / 60 && steps < 6) {
           acc -= 1 / 60; steps++;
           stepping = true; preClear = null;
           try { n.lm.Update(); } finally { stepping = false; }
           const p = n.gsm.stats.piecesplaced || 0;
           if (p !== placed && !deadAt) {
-            // ミノを置いた: 次のミノが出たこの時点を、1手戻す先として積む
             placed = p;
-            try { undo.push({ state: n.siom.EjectState(), frame: n.esm.frame, pre: preClear }); } catch (e) {}
-            if (undo.length > 300) undo.splice(1, 1);
-            redo = [];
+            // マネ練習: 手本と違う所に置いたら、少し見せてから置く前に戻す
+            const tg = S.practice && targets[undo.length - 1];
+            if (tg && lastLock && !sameCells(targetCells(tg, lastLock.board), lastLock.cells)) {
+              wrongAt = now;
+              S.msg = 'ちがう場所です。置く前に戻します';
+            } else {
+              // ミノを置いた: 次のミノが出たこの時点を、1手戻す先として積む(前の場面からの操作の記録も持つ)
+              const prevLen = undo.reduce((s, u) => s + (u.seg ? u.seg.length : 0), 0);
+              try { undo.push({ state: n.siom.EjectState(), frame: n.esm.frame, pre: preClear, seg: rec.slice(prevLen) }); } catch (e) {}
+              if (undo.length > 300) { undo[2].seg = undo[1].seg.concat(undo[2].seg); undo.splice(1, 1); }
+              redo = [];
+              if (tg) S.msg = `${undo.length - 1}手目 OK`;
+            }
+            lastLock = null;
           }
+        }
+        if (wrongAt && now - wrongAt > 600) {
+          jump(undo[undo.length - 1]);
+          S.msg = 'ちがう場所でした。光っている所に置いてください';
         }
         if (deadAt) {
           acc = 0;
@@ -1030,8 +1379,10 @@
       }
       last = now;
       draw();
+      drawTarget(now);
     } catch (e) { console.warn(TAG, e); last = now; }
   };
+  let goneFrames = 0;
   raf = requestAnimationFrame(loop);
 
   // ---- 片付け(押し直し・自動更新のとき) ----
@@ -1043,11 +1394,14 @@
     removeEventListener('keyup', onKey, true);
     removeEventListener('keypress', onKey, true);
     removeEventListener('blur', onBlur);
+    document.removeEventListener('visibilitychange', onVis);
     clearInterval(W.__rpeUpd);
     panel.remove(); mini.remove();
+    if (ov) ov.remove();
+    for (const g of games) unplay(g);
     W.__rpeTeardown = null;
     unswapAll();
-    return { auto: S.auto, side: S.side, noGravity: S.noGravity, swap: S.swap, sideName: S.sideName, swapAuto: S.swapAuto, swapKey: S.swapKey, counter: S.counter, panelClosed: upd ? S.panelClosed : false };
+    return { auto: S.auto, side: S.side, noGravity: S.noGravity, swap: S.swap, sideName: S.sideName, swapAuto: S.swapAuto, swapKey: S.swapKey, counter: S.counter, practice: S.practice, embMode: S.embMode, panelClosed: upd ? S.panelClosed : false };
   };
 
   // ---- 自動更新(操作中は待つ) ----
