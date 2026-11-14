@@ -7,7 +7,7 @@
    macOS, Windows and Linux; nothing runs without the player's click. */
 (()=>{
  const {app,ipcMain}=require('electron');
- const fs=require('fs'),path=require('path'),os=require('os'),crypto=require('crypto'),https=require('https'),{spawn}=require('child_process');
+ const fs=require('fs'),path=require('path'),os=require('os'),crypto=require('crypto'),https=require('https'),{spawn,spawnSync}=require('child_process');
  // Node's https, not Electron net.fetch: the TETR.IO app filters its own sessions and
  // net.fetch failed there (net::ERR_UNEXPECTED). https only; follows GitHub's redirects.
  function get(url,redirects=5,headers={}){
@@ -107,20 +107,31 @@
    let child;
    if(OS_NAME==='Windows'){
     const script=path.join(work,'update.ps1');
-    // ASCII only (Windows PowerShell 5.1 reads a BOM-less script as ANSI). The launcher is
-    // started with the call operator, which quotes paths with spaces / non-ASCII correctly.
+    // v4.8277 (user: on Windows TETR.IO quit but the update never ran): a child of the app
+    // can be killed together with it (Windows job object), even when detached. The waiter
+    // is started through WMI (Win32_Process.Create), so it is not a child of TETR.IO.
+    // A WMI process gets no environment from us: the values are written into the script,
+    // as base64 UTF-8 (the script itself stays ASCII for Windows PowerShell 5.1).
+    const lit=v=>"([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('"+Buffer.from(String(v),'utf8').toString('base64')+"')))";
     fs.writeFileSync(script,[
      '$ErrorActionPreference="Continue"',
-     '$p=[int]$env:QP_PID',
+     '$env:QP_LAUNCHER='+lit(launcher),'$env:QP_LOG='+lit(log),'$env:QP_APP_EXEC='+lit(process.execPath),
+     '$p='+Number(process.pid),
+     '"waiter started" | Out-File -FilePath $env:QP_LOG -Encoding utf8',
      'while(Get-Process -Id $p -ErrorAction SilentlyContinue){Start-Sleep -Milliseconds 500}',
      '$i=0;while((Get-Process -Name "TETR.IO","tetrio","tetrio-desktop" -ErrorAction SilentlyContinue) -and $i -lt 360){Start-Sleep -Milliseconds 500;$i++}',
-     '"waited " + ($i/2) + "s for TETR.IO to exit" | Out-File -FilePath $env:QP_LOG -Encoding utf8',
+     '"waited " + ($i/2) + "s for TETR.IO to exit" | Out-File -FilePath $env:QP_LOG -Encoding utf8 -Append',
      '$code=1',
      'try{ & $env:QP_LAUNCHER 2>&1 | Out-File -FilePath $env:QP_LOG -Encoding utf8 -Append; $code=$LASTEXITCODE }catch{ ($_ | Out-String) | Out-File -FilePath $env:QP_LOG -Encoding utf8 -Append }',
      '"exit=" + $code | Out-File -FilePath $env:QP_LOG -Encoding utf8 -Append',
      'if($code -ne 0 -and $env:QP_APP_EXEC){ Start-Process -FilePath $env:QP_APP_EXEC }'
     ].join('\r\n'),'ascii');
-    child=spawn('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden','-File',script],{detached:true,stdio:'ignore',windowsHide:true,env});
+    const cmdLine='powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "'+script+'"';
+    const starter="$r=Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine="+lit(cmdLine)+"};if($r.ReturnValue -ne 0){exit 3}";
+    let viaWmi=false;
+    try{const r=spawnSync('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-Command',starter],{windowsHide:true,timeout:20000});viaWmi=r.status===0}catch{}
+    // Fallback (no WMI): the old detached child.
+    child=viaWmi?{unref(){}}:spawn('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden','-File',script],{detached:true,stdio:'ignore',windowsHide:true,env});
    }else{
     const script=path.join(work,'update.sh');
     const busy=OS_NAME==='Mac'?'/usr/bin/pgrep -f "[/]TETR.IO.app/Contents/MacOS/" >/dev/null 2>&1':'{ pgrep -x tetrio-desktop >/dev/null 2>&1 || pgrep -x tetrio >/dev/null 2>&1; }';
