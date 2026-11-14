@@ -163,7 +163,7 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
   return LocalNative.solo(mode,aiName);
  });
  const qp=document.createElement('div');qp.id='game_qp_offline';qp.className='scroller_item has_image has_description ns';
- const icon=document.createElement('img');icon.src='https://kei1215.github.io/tetrio-hub/bookmarklets/offline-va4.8283/qpo.svg';icon.alt='';qp.appendChild(icon);
+ const icon=document.createElement('img');icon.src='https://kei1215.github.io/tetrio-hub/bookmarklets/offline-va4.8284/qpo.svg';icon.alt='';qp.appendChild(icon);
  const qpTitle=document.createElement('h1');qpTitle.textContent='QP OFFLINE';qp.appendChild(qpTitle);
  const qpHint=document.createElement('p');qpHint.textContent='LOCAL ONLY · NO OPPONENTS · NO KILLS';qp.appendChild(qpHint);
  const zenithMenu=document.getElementById('zenithmenu');

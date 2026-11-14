@@ -2,7 +2,7 @@
 (() => {
   // This runs only in the vA overlay, so the title itself is a reliable way
   // to confirm that vA—not a previous vO build—was installed.
-  document.title = 'TETR.IO — OFFLINE BOOKMARKLET vA-4.8283';
+  document.title = 'TETR.IO — OFFLINE BOOKMARKLET vA-4.8284';
   document.documentElement.dataset.qpPatchKind = 'A';
   const ENGINE = [
     'ai-policy-model.js', 'reinforcement-core.js', 'ai-behavior.js', 'ai-spin-templates.js', 'ai-preview.js',
@@ -12,7 +12,7 @@
     'reinforcement-charts.js', 'ai-manager.js',
     'mode-capabilities.js', 'postgame-coach.js', 'qp-ai-options.js', 'ai-weight-tuner.js'
   ];
-  const state = { loaded: false, loading: null, enabled: false, model: null, engineVersion: 'vA-4.8283' };
+  const state = { loaded: false, loading: null, enabled: false, model: null, engineVersion: 'vA-4.8284' };
   const script = src => new Promise((resolve, reject) => {
     const tag = document.createElement('script'); tag.src = src; tag.async = false;
     tag.onload = resolve; tag.onerror = () => reject(Error('AIモジュールを読み込めません: ' + src));
@@ -24,10 +24,10 @@
     state.loading = (async () => {
       // vA is the AI edition: load the complete local engine here so that the
       // AI LAB card and Tab controls always address the same initialized API.
-      for (const name of ENGINE) await script('https://kei1215.github.io/tetrio-hub/bookmarklets/offline-va4.8283/engine/' + name);
+      for (const name of ENGINE) await script('https://kei1215.github.io/tetrio-hub/bookmarklets/offline-va4.8284/engine/' + name);
       state.model = window.LocalBotLearning?.modeLearner?.('qp')?.snapshot?.() || null;
       state.loaded = true;
-      document.title = 'TETR.IO — OFFLINE BOOKMARKLET vA-4.8283';
+      document.title = 'TETR.IO — OFFLINE BOOKMARKLET vA-4.8284';
       document.documentElement.dataset.qpPatchKind = 'A';
       return state;
     })();
