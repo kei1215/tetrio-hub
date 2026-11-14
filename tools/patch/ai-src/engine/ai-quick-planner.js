@@ -175,17 +175,25 @@
   if(plan.hold&&!LocalAIInformation.holdAllowed({game:{...state,setoptions:game.options}},game._aiAllowHold!==false))return false;
   return true;
  }
- function drive(game,getPPS=()=>1){let mimicPiece=-1,mimicInterval=null;let target=null,search=null,lastPiece=-1,lastFrame=-1,attempts=0,lastDropFrame=null,policyKey='',lastHeldPiece=-1,rotations=0,forecastCache=null;
+ function drive(game,getPPS=()=>1){let mimicPiece=-1,mimicInterval=null;let target=null,search=null,lastPiece=-1,lastFrame=-1,attempts=0,lastDropFrame=null,dueFrame=null,pieceStart=0,policyKey='',lastHeldPiece=-1,rotations=0,forecastCache=null;
   const stats=game._localAIStats={plannedDrops:0,matchedDrops:0,mismatchedDrops:0,naturalLocks:0,routeFailures:0,emergencyDrops:0,spinLocks:0,spinRouteMisses:0,spinHeightMisses:0,holdCommands:0,holdPlannedDrops:0,holdBlocked:0,holdFailures:0,holdCandidates:0,holdSelected:0,reusedPlans:0,cacheRejected:0,rootCandidatesChecked:0,futureCandidatesChecked:0,forcedByPPS:0,searchTimeMs:0,searchSlices:0,maxSliceMs:0,budgetSkips:0,humanProtectedFrames:0};let expected=null,commanded=false;
   const observe=piece=>{if(!expected){if(!commanded)stats.naturalLocks++;commanded=false;return}commanded=false;if(piece.type===expected.type&&piece.x===expected.x&&Math.ceil(piece.y)===expected.y&&piece.r===expected.rotation)stats.matchedDrops++;else stats.mismatchedDrops++;expected=null};game.on?.('lock','local-bot-route-check',observe);
   const tick=()=>{
    if(!game.isPlaying()||game.state.pause||game.state.zenith?.incapacitated)return;
    if(game.state.falling.flags&128)return;
    const frame=game.getFrame();if(frame===lastFrame)return;lastFrame=frame;
-   const pps=Math.min(20,Math.max(.1,Number(getPPS())||1));if(game._aiMimicTiming&&mimicPiece!==game.state.stats.piecesplaced){mimicPiece=game.state.stats.piecesplaced;mimicInterval=LocalAIBehavior.interval(game._aiBehavior,game.state)}const sync=syncPeer(game),interval=sync?sync.interval:game._aiMimicTiming&&mimicInterval!==null?mimicInterval:60/pps;const turnReady=(slack=0)=>sync?sync.ahead():frame-lastDropFrame>=interval-slack;
-   if(lastDropFrame===null)lastDropFrame=frame;
+   const pps=Math.min(20,Math.max(.1,Number(getPPS())||1));if(game._aiMimicTiming&&mimicPiece!==game.state.stats.piecesplaced){mimicPiece=game.state.stats.piecesplaced;mimicInterval=LocalAIBehavior.interval(game._aiBehavior,game.state)}const sync=syncPeer(game),interval=sync?sync.interval:game._aiMimicTiming&&mimicInterval!==null?mimicInterval:60/pps;// v4.8283 (user: PPS が守られていない / REN のときだけ速くなる / 常に一定の速度): piece n is due
+   // on a fixed clock (dueFrame += interval). A late piece is made up only a little (catchUp) on
+   // the next one, never with a burst. Lockstep: the player's piece count decides (sync.ahead);
+   // the BOT still gets a minimum think time after its piece appears (minThink), so a fast
+   // player does not cut every outside-AI search at once (user: PtoP だと CC が弱い).
+   const catchUp=Math.min(10,interval*.25),minThink=sync?Math.max(6,Math.min(40,sync.interval*.6)):0;
+   const turnReady=(slack=0)=>sync?sync.ahead():frame>=dueFrame-slack;
+   const thinkDue=(slack=0)=>sync?sync.ahead()&&frame>=pieceStart+minThink:frame>=dueFrame-slack;
+   const dropped=()=>{lastDropFrame=frame;dueFrame=Math.max((dueFrame??frame)+interval,frame+interval-catchUp)};
+   if(lastDropFrame===null){lastDropFrame=frame;dueFrame=frame+interval}
    const deadline=timing(game),hurry=deadline.total<12,pace=pacing(interval,deadline.urgent),humanActive=humanPlaying(game);
-   if(deadline.total<=2){releaseKeys(game,target);search?.dispose?.();search=null;expected=null;game._rlDecision=null;if(requestLock(game)){target=null;commanded=true;stats.emergencyDrops++;lastDropFrame=frame;game._localBotIntent='固定期限優先：探索・PPS待機を打ち切って配置'}return}
+   if(deadline.total<=2){releaseKeys(game,target);search?.dispose?.();search=null;expected=null;game._rlDecision=null;if(requestLock(game)){target=null;commanded=true;stats.emergencyDrops++;dropped();game._localBotIntent='固定期限優先：探索・PPS待機を打ち切って配置'}return}
    const strategy=policy(game),task=strategy.prompt?.id,key=task+':'+strategy.protect+':'+strategy.ownDanger+':'+strategy.warlock+':'+strategy.lastClearSpin;
    game._localBotIntent=task?'蘇生課題: '+strategy.prompt.label.replace(/\n/g,' '):strategy.protect?'相方保護・攻撃抑制':strategy.warlock?'Warlock: 重複消去回避':'通常プレイ';
    const piece=game.state.stats.piecesplaced;
@@ -205,7 +213,7 @@
     if(target&&target.boardKey!==bk){releaseKeys(game,target);stats.boardMoved=(stats.boardMoved||0)+1;target=null;search?.dispose?.();search=null;lastPiece=-1}}
    if(game.state.stats.piecesplaced!==lastPiece){
     releaseKeys(game,target);
-    lastPiece=game.state.stats.piecesplaced;search?.dispose?.();search=null;target=null;
+    lastPiece=game.state.stats.piecesplaced;pieceStart=frame;search?.dispose?.();search=null;target=null;
     const cache=forecastCache;forecastCache=null;
     if(cache){if(cachedNextMatches(game,cache)){target={...cache.plan,held:false,turned:false,softHeld:false,routeIndex:0};stats.reusedPlans++}
      else stats.cacheRejected++}
@@ -214,7 +222,7 @@
      // over forcing a giant native branch on the final gravity frames.
      if(game._useLocalBotLearning&&deadline.total<=6){const quick=createSearch({...game,_useLocalBotLearning:false},strategy);target={...quick.step(100).best,fast:true};
       if(!humanActive)search=window.LocalCombatAI.createSearch(game,strategy,{fast:true,rootOnly:true,realtime:true,rootBudget:8,beamWidth:1,stepBudgetMs:1})
-     }else search=createSearch(game,strategy,{realtime:true,humanActive,get dueAt(){return sync?(sync.ahead()?game.getFrame():Infinity):lastDropFrame+interval},interval,rootBudget:humanActive?Math.min(16,pace.rootBudget):pace.rootBudget,beamWidth:humanActive?2:pace.beamWidth,stepBudgetMs:humanActive?1:pace.stepBudgetMs,maxDepth:Math.min(humanActive?3:pace.maxDepth,Math.max(focusTSpinForGame(game,strategy)?3:1,game._aiDepth==='visible'?1+LocalAIInformation.nextCount(game.options,game._aiNextCount):Number(game._aiDepth)||(interval>=30?3:2)))})
+     }else search=createSearch(game,strategy,{realtime:true,humanActive,get dueAt(){return sync?(sync.ahead()?Math.max(game.getFrame(),pieceStart+minThink):Infinity):dueFrame},interval,rootBudget:humanActive?Math.min(16,pace.rootBudget):pace.rootBudget,beamWidth:humanActive?2:pace.beamWidth,stepBudgetMs:humanActive?1:pace.stepBudgetMs,maxDepth:Math.min(humanActive?3:pace.maxDepth,Math.max(focusTSpinForGame(game,strategy)?3:1,game._aiDepth==='visible'?1+LocalAIInformation.nextCount(game.options,game._aiNextCount):Number(game._aiDepth)||(interval>=30?3:2)))})
     }
     attempts=0;rotations=0;
    }
@@ -237,7 +245,7 @@
     // Preview reconstruction is optional UI work. Keep 60fps input more
     // important than redrawing the same plan for every search slice.
     if(!humanActive||result.done||frame%6===0)window.LocalAIPreview?.set(game,result.best,{searching:!result.done,choices:result.previewChoices});
-    const reserve=Math.min(8,Math.max(1,Math.floor(interval/4))),due=turnReady(reserve);
+    const reserve=Math.min(8,Math.max(1,Math.floor(interval/4))),due=thinkDue(reserve);
     // Only commit an actually verified native route, never a theoretical
     // straight-drop estimate merely to satisfy the PPS clock.
     if(!result.done&&(hurry||due)&&result.best?.route){
@@ -279,6 +287,13 @@
      stats.inputSteps=(stats.inputSteps||0);
     }
     const ex=target.exec;
+    // A route that touches the floor (soft drop / spin) starts late enough that the piece does
+    // not lock by lock delay before its PPS time (that placed spins early). Hard-drop routes
+    // wait at their final spot instead.
+    if(!ex.started){
+     if(!sync&&ex.steps.some(s=>s.kind==='drop')){const est=ex.steps.length*2+12;if(frame<dueFrame-est-12&&deadline.total>est+30){game._localBotIntent='PPS待ち（接地する経路）';return}}
+     ex.started=true;
+    }
     const matches=(to,checkY)=>!!to&&f.x===to.x&&f.r===to.r&&(!checkY||Math.ceil(f.y)===to.y);
     if(ex.pending){
      const step=ex.pending;
@@ -294,8 +309,16 @@
        if(f.x!==step.to.x){const back=f.x>step.to.x?'moveLeft':'moveRight';if(!step.fixes)step.fixes=0;if(step.fixes++>3){fail('長押し位置');return}tap(game,back);return}
        if(f.r!==step.to.r){fail('長押し回転');return}
        ex.pending=null;ex.i++;stats.dasHolds=(stats.dasHolds||0)+1;
-      }else if(ex.wait>90){fail('長押し停止');return}
-      else return;
+      }else{
+       // v4.8283 (user: 操作が反応しない / ミノが滑る, AI 戦): the piece stopped short of the planned
+       // column (blocked lower down) and the key stayed held until the lock deadline, up to 79
+       // frames in the TTRMs, while the piece slid on. Release once it has not moved for 3 frames
+       // after DAS, and plan again.
+       if(step.lastX!==f.x){step.lastX=f.x;step.still=0}else step.still=(step.still||0)+1;
+       const dasF=Math.max(1,Number(game.options?.handling?.das)||10);
+       if(ex.wait>dasF+2&&step.still>=Math.max(3,(Number(game.options?.handling?.arr)||0)+2)||ex.wait>90){releaseKeys(game,target);stats.holdStuck=(stats.holdStuck||0)+1;fail('長押し停止');return}
+       return;
+      }
      }else if(step.kind==='drop'){
       ex.wait++;
 
@@ -318,7 +341,7 @@
     }
     if(f.x!==target.final.x||f.r!==target.final.rotation||(ex.grounded&&Math.ceil(f.y)!==target.final.y)||(target.spin&&!(f.flags&8))){fail('最終位置');return}
     const ready=turnReady(),spinNow=!!(target.spin&&(f.flags&8)),fire=spinNow?{hold:false,urgent:true}:attackTiming(game,target,strategy,frame,ready);if(fire.hold){game._localBotIntent='TL: 火力待機（上限あり・被弾時解除）';return}
-    if((ready||fire.urgent)&&!((game.state.garbageareentries||[]).length&&deadline.total>12)||deadline.total<=2){search?.dispose?.();search=null;if(!requestLock(game))return;expected=target?.final?{type:target.type,...target.final}:null;if(expected){stats.plannedDrops++;if(target?.hold)stats.holdPlannedDrops++}if(spinNow)stats.spinLocks++;if(target?.next?.path&&target?.snapshot?.game)forecastCache={plan:target.next,state:target.snapshot.game,knownNext:(target.snapshot._aiKnownNext||[]).slice(0,2)};game._rlDecision=target?.rl||null;commanded=true;lastDropFrame=frame;game._localBotIntent='vAI: '+(target.hold?'HOLD・':'')+(target.spin?'スピン・':'')+(game._aiSeedAccess?'シード参照ON・':'')+'NEXT '+target.depth+'手評価 / '+(target.features[10]?'サージ放出':target.features[9]?'B2B蓄積':'盤面構築');target=null}
+    if(ready&&!((game.state.garbageareentries||[]).length&&deadline.total>12)||deadline.total<=2){search?.dispose?.();search=null;if(!requestLock(game))return;expected=target?.final?{type:target.type,...target.final}:null;if(expected){stats.plannedDrops++;if(target?.hold)stats.holdPlannedDrops++}if(spinNow)stats.spinLocks++;if(target?.next?.path&&target?.snapshot?.game)forecastCache={plan:target.next,state:target.snapshot.game,knownNext:(target.snapshot._aiKnownNext||[]).slice(0,2)};game._rlDecision=target?.rl||null;commanded=true;dropped();game._localBotIntent='vAI: '+(target.hold?'HOLD・':'')+(target.spin?'スピン・':'')+(game._aiSeedAccess?'シード参照ON・':'')+'NEXT '+target.depth+'手評価 / '+(target.features[10]?'サージ放出':target.features[9]?'B2B蓄積':'盤面構築');target=null}
     return;
    }
    if(target?.pre){ // legacy route format (fast/cached plans)
@@ -381,7 +404,7 @@
     }
     if(target.turn&&(f.r!==target.final.rotation||f.x!==target.final.x||Math.ceil(f.y)!==target.final.y||(target.spin&&!(f.flags&8)))){if(target.spin)stats.spinRouteMisses++;target=null;lastPiece=-1;stats.routeFailures++;return}
     const ready=turnReady(),spinNow=!!(target.turn&&target.spin&&(f.flags&8)),fire=spinNow?{hold:false,urgent:true}:attackTiming(game,target,strategy,frame,ready);if(fire.hold){game._localBotIntent='TL: 火力待機（上限あり・被弾時解除）';return}
-    if((ready||fire.urgent)&&!((game.state.garbageareentries||[]).length&&deadline.total>12)||deadline.total<=2){search?.dispose?.();search=null;if(!requestLock(game))return;expected=target?.final?{type:target.type,...target.final}:null;if(expected){stats.plannedDrops++;if(target?.hold)stats.holdPlannedDrops++}if(spinNow)stats.spinLocks++;if(target?.next?.pre&&target?.snapshot?.game)forecastCache={plan:target.next,state:target.snapshot.game,knownNext:(target.snapshot._aiKnownNext||[]).slice(0,2)};game._rlDecision=target?.rl||null;commanded=true;lastDropFrame=frame;game._localBotIntent='vAI: '+(target.hold?'HOLD・':'')+(target.spin?'スピン・':'')+(game._aiSeedAccess?'シード参照ON・':'')+'NEXT '+target.depth+'手評価 / '+(target.features[10]?'サージ放出':target.features[9]?'B2B蓄積':'盤面構築');target=null}
+    if(ready&&!((game.state.garbageareentries||[]).length&&deadline.total>12)||deadline.total<=2){search?.dispose?.();search=null;if(!requestLock(game))return;expected=target?.final?{type:target.type,...target.final}:null;if(expected){stats.plannedDrops++;if(target?.hold)stats.holdPlannedDrops++}if(spinNow)stats.spinLocks++;if(target?.next?.pre&&target?.snapshot?.game)forecastCache={plan:target.next,state:target.snapshot.game,knownNext:(target.snapshot._aiKnownNext||[]).slice(0,2)};game._rlDecision=target?.rl||null;commanded=true;dropped();game._localBotIntent='vAI: '+(target.hold?'HOLD・':'')+(target.spin?'スピン・':'')+(game._aiSeedAccess?'シード参照ON・':'')+'NEXT '+target.depth+'手評価 / '+(target.features[10]?'サージ放出':target.features[9]?'B2B蓄積':'盤面構築');target=null}
     return;
    }
    if(target&&attempts++<24){const f=game.state.falling;
@@ -392,7 +415,7 @@
    if(deadline.total<=2||(!game._useLocalBotLearning&&turnReady())){
     search?.dispose?.();search=null;expected=target?.final?{type:target.type,...target.final}:null;
     if(expected)stats.plannedDrops++;else stats.emergencyDrops++;
-    game._rlDecision=target?.rl||null;if(!requestLock(game))return;commanded=true;lastDropFrame=frame;target=null;
+    game._rlDecision=target?.rl||null;if(!requestLock(game))return;commanded=true;dropped();target=null;
    }
   };tick.dispose=()=>{releaseKeys(game,null);game.remove?.('lock','local-bot-route-check');search?.dispose?.();game.source.Push('keyup',{key:'softDrop',subframe:.5})};return tick;
  }

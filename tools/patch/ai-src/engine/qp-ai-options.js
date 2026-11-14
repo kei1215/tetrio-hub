@@ -32,6 +32,12 @@
   flag('qp-ai-misdrop','置きミスを再現',false);
   const ppsLabel=document.createElement('label');ppsLabel.style.display='block';ppsLabel.append(document.createTextNode('BOT目標PPS '));
   const pps=document.createElement('input');pps.type='number';pps.min='0.1';pps.max='20';pps.step='0.1';pps.value=localStorage.getItem('qp-local-bot-pps')||'2';pps.addEventListener('change',()=>{const value=Math.max(.1,Math.min(20,Number(pps.value)||2));pps.value=String(value);localStorage.setItem('qp-local-bot-pps',String(value))});ppsLabel.appendChild(pps);section.appendChild(ppsLabel);
+  // v4.8283 (user: BOT だけミノの落下をなしにできる設定と、両方の落下をなしにできる設定): gravity 0 in
+  // local TL / CUSTOM rooms, for the BOT boards only or for both boards (local-ai-room.js).
+  const gravLabel=document.createElement('label');gravLabel.style.display='block';gravLabel.append(document.createTextNode('ミノの落下（TL/CUSTOM） '));
+  const grav=document.createElement('select');for(const [v,n] of [['off','通常'],['bot','BOTだけなし'],['both','両方なし']]){const o=document.createElement('option');o.value=v;o.textContent=n;grav.appendChild(o)}
+  grav.value=['bot','both'].includes(localStorage.getItem('qp-ai-no-gravity'))?localStorage.getItem('qp-ai-no-gravity'):'off';grav.addEventListener('change',()=>localStorage.setItem('qp-ai-no-gravity',grav.value));
+  gravLabel.appendChild(grav);section.appendChild(gravLabel);
   // Compute power: auto measures this PC and fits the plan to the target PPS.
   const powerLabel=document.createElement('label');powerLabel.style.display='block';powerLabel.textContent='計算量 ';
   const powerSelect=document.createElement('select');powerSelect.setAttribute('aria-label','AIの計算量');

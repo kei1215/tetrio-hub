@@ -30,6 +30,7 @@
 - 2026-11-13(未ビルド・ai-src):「外部AI対戦」の入り口(engine/ai-external.js)。外部AIはパッチに入れず、ユーザーが読み込む。CC2 S2 パッケージは private-ai/package(非公開)。
 - v4.8256:QP DUO のリプレイ保存(オンラインは duo-save を常に有効、オフラインはローカル記録へ)、Warlock の Spin ルール(all+)。
 - v4.8282:AI 対戦(TL/CUSTOM)は勝敗が決まると保存した試合の結果画面へ移る。毎ラウンド 3,2,1,GO(client.js fix_rsg → window.__qpRsg)。盤面修正は操作中だけ次ラウンド自動再生を止め、やめたら戻す。
+- 2026-11-14(未ビルド・ai-src、v4.8283 予定):BOT の PPS を一定に(1ミノずつ決まった時刻、遅れは次で少しだけ取り戻す)。REN・被弾中・Quad・スピンで PPS を無視して即置きしていたのをやめた。接地する経路は固定猶予で早く置かれないよう開始を遅らせる。プレーヤーと同時モードは最低思考時間(相手の間隔の6割、6〜40F)。止まったまま DAS を押し続ける(最大 90F)のを、動かなくなって3F で離して経路やり直し。Tab「ミノの落下(TL/CUSTOM)」:通常 / BOTだけなし / 両方なし(リプレイの options にも g=0)。Node テスト tools/ai-sim/drive-pps-test.mjs。
 
 ### サイトとブックマークレット(docs/)
 - 盤面回転:
@@ -100,6 +101,8 @@
 | vA の受ける/相殺の重みが効かない | bot-ai(と versus)が残り高さで cancelW を毎回上書きしていた。T_STYLE に cancelW:0 と takeMax を入れ、planner が高さで判断する | 被弾中、高さ+被弾 ≤14 なら相殺せず受け、超えたら相殺する。B2B を切って相殺しない |
 | 先読み幅を広げると vA が弱くなる | 評価の甘い所(Tスロットの見込み点など)を広い探索が拾う。Spin B2B では幅 24 まで | Node 対戦で幅 24 が 48・96 より勝つ |
 | アプリ内で vA の Web Worker が動かない(async 0、毎手打ち切り) | ローカル配信の CSP が worker-src 'none' だった。build_release.py で worker-src 'self' blob: に変える(v4.8268) | ローカル TTRM の aiDebug.plan.async が 0 でない、cut が手数とほぼ同じにならない |
+| REN のときだけ BOT が PPS より速い・PPS が守られない | attackTiming が攻撃あり+被弾中・Quad・スピンを urgent にし、PPS の待ちを飛ばしていた(REN は毎手消去なので毎回即置き) | node tools/ai-sim/drive-pps-test.mjs:PPS 1/2/3、REN+被弾中、接地経路でも間隔が一定(旧版は1〜2F/ミノ) |
+| BOT が DAS を押したまま止まる・ミノが滑る(AI 戦 TTRM で 27〜79F) | 長押しはミノが目標列に着くまで離さず、途中で止まると固定期限か 90F まで押し続けた | 同テスト:止まった長押しを 9F で離す(旧版 91F) |
 
 ## 3. 守ること(ユーザーのルール)
 - 旧サイト kei1215/kei1215.github.io は読み取り専用。

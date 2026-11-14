@@ -36,6 +36,7 @@
  const profileFor=(value,fallback)=>{if(value==='player')return null;const id=String(value||'');return window.LocalBotLearning?.getProfile?.(id.startsWith('ai:')?id.slice(3):fallback)};
  const safePlaying=game=>{try{return !!game?.isPlaying?.()}catch{return false}};
  function send(source,target,amount){if(!safePlaying(target)||!Number.isFinite(amount)||amount<=0)return;const ack=source.state.garbageacknowledgements;if(!ack?.incoming||!ack?.outgoing)return;const iid=source.state.interactionid=(Number(source.state.interactionid)||0)+1,ackiid=ack.incoming[target.id]||0,pending=ack.outgoing;(pending[target.id]??=[]).push({iid,amt:amount});target.source.Push('ige',{id:'local-tl-'+(++packetId),type:'interaction',data:{type:'garbage',gameid:source.id,username:source.options.username,iid,ackiid,amt:amount,x:4.5,y:30,active:false}})}
+ function noGravity(g){try{g.options.g=0;g.options.gincrease=0;if(g.state)g.state.g=0;const ro=g.replay?.options;if(ro&&ro!==g.options){ro.g=0;ro.gincrease=0}g._localNoGravity=true}catch{}}
  function stop(){const old=session;if(!old)return;session=null;old.stopped=true;for(const dispose of old.cleanup.splice(0))try{dispose()}catch{}for(const game of old.games){try{game._localLiveBot?.stop?.();game.source?.Push?.('keyup',{key:'softDrop',subframe:.5})}catch{}try{if(safePlaying(game))game.endNow?.()}catch{}try{game.state.playing=false}catch{}}try{old.games[1]?.destroy?.()}catch{}hideScore()}
  function attachBot(game,profile,state,external){
   const model=window.LocalBotLearning?.cloneLearner?.(profile.model);if(!model)throw Error('AI学習データを読み込めませんでした');
@@ -90,6 +91,10 @@
   // v4.8280 (user: 毎回ゲーム開始時の演出と音): the mission shout + mission_versus sound play in the
   // native countdown (after prestart); only the first round of a match keeps them.
   if(config._continuing)for(const g of games){try{g.options.mission=''}catch{}}
+  // v4.8283 (user: BOT だけ / 両方 ミノの落下をなし): Tab 'ミノの落下' sets gravity 0 before the
+  // countdown (no piece has fallen yet). The replay options get it too, so the saved round
+  // plays back the same.
+  {const ng=localStorage.getItem('qp-ai-no-gravity');games.forEach((g,i)=>{if(!(ng==='both'||ng==='bot'&&profiles[i]))return;noGravity(g)})}
   if(music){for(const g of games){try{g.options.neverstopbgm=true}catch{}}if(!config._continuing){const lead=games.find(g=>g._localTestMode==='solo')||games[0];try{lead.options.song='RANDOMbattle'}catch{}}}
   window.dispatchEvent(new CustomEvent('local-ai-match-start',{detail:{games,names,config}}));return games;
  }
