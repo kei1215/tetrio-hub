@@ -284,6 +284,19 @@ def fix_wheel_volume(text):
     return replace_once(text, WHEEL_VOL_OLD, WHEEL_VOL_NEW, 'O/offline/client.js wheel volume')
 
 
+# v4.8280 (user: 勝った時にボードを全部無くした状態で出る点数上昇の演出): expose the native round
+# score slide (#scoreslide) as window.__qpScoreSlide(winners, {modename, rb:{leaderboard, options}})
+# for the local TL/CUSTOM room (local-ai-room.js). Idempotent.
+SCORESLIDE_OLD = 'function Ce(e,t){const n=2===t.rb.leaderboard.length,s=e[0].username;'
+SCORESLIDE_NEW = 'window.__qpScoreSlide=(...a)=>Ce(...a);' + SCORESLIDE_OLD
+
+
+def fix_scoreslide(text):
+    if SCORESLIDE_NEW in text:
+        return text
+    return replace_once(text, SCORESLIDE_OLD, SCORESLIDE_NEW, 'O/offline/client.js score slide')
+
+
 def fix_offline_client(text):
     for old, new, count in OFFLINE_CLIENT_FIXES:
         if text.count(old) != count:
@@ -490,7 +503,7 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                 text = data.decode('utf-8')
                 if not incremental:
                     text = fix_offline_client(text)
-                data = fix_wheel_volume(fix_warn_toggles(fix_tl_siren(fix_custom_opts(fix_warlock_mini(text))))).encode('utf-8')
+                data = fix_scoreslide(fix_wheel_volume(fix_warn_toggles(fix_tl_siren(fix_custom_opts(fix_warlock_mini(text)))))).encode('utf-8')
             elif offline and name == 'O/local-main.js':
                 data = add_editor_window(data.decode('utf-8')).encode('utf-8')
             elif has_offline and offline and name == 'O/offline/index.html':
