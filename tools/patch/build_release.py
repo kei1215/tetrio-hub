@@ -317,6 +317,18 @@ TL_BGM_OLD = "tlRound(config={}){\n  this.resetResults();$i(false);Hi('none');Sa
 TL_BGM_NEW = "tlRound(config={}){\n  window.__qpBgmFade??=t=>Sa.BgmFadeOut(t);this.resetResults();$i(false);Hi('none');config.keepBgm||Sa.BgmFadeOut();"
 
 
+# v4.8282 (user: カウントダウンの追加3,2,1,go): expose the native room start shout (re(): "3", "2",
+# "1", "GO!" with the rsg sounds) as window.__qpRsg for the local TL/CUSTOM room. Idempotent.
+RSG_OLD = 'function re(){document.body.classList.contains("inpair")'
+RSG_NEW = 'window.__qpRsg=()=>re();' + RSG_OLD
+
+
+def fix_rsg(text):
+    if RSG_NEW in text:
+        return text
+    return replace_once(text, RSG_OLD, RSG_NEW, 'O/offline/client.js room countdown')
+
+
 def fix_tl_bgm(text):
     if TL_BGM_NEW in text:
         return text
@@ -529,7 +541,7 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                 text = data.decode('utf-8')
                 if not incremental:
                     text = fix_offline_client(text)
-                data = fix_replay_c_key(fix_tl_bgm(fix_scoreslide(fix_wheel_volume(fix_warn_toggles(fix_tl_siren(fix_custom_opts(fix_warlock_mini(text))))))), 'O/offline/client.js').encode('utf-8')
+                data = fix_replay_c_key(fix_rsg(fix_tl_bgm(fix_scoreslide(fix_wheel_volume(fix_warn_toggles(fix_tl_siren(fix_custom_opts(fix_warlock_mini(text)))))))), 'O/offline/client.js').encode('utf-8')
             elif offline and name == 'O/local-main.js':
                 data = add_editor_window(data.decode('utf-8')).encode('utf-8')
             elif has_offline and offline and name == 'O/offline/index.html':

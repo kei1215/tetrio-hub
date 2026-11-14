@@ -29,6 +29,7 @@
 - 2026-11-13(未ビルド・ai-src):実戦リプレイで AI を直した。TL は Spin B2B モードが切れていて T-Spin 0%(6ラウンド)→ TL でも有効に。All-Spin でも消去なし Spin を減点(QP リプレイで 3589 ミノ中 160 回)。通常時のテンプレートは TSD/TST だけ使う。T-Spin 寄りの planner 設定(T_STYLE、atkOther)。QP の APP 0.82 は All-Spin を all+ にした影響(S/Z/L/J/I の Spin シングルが 2 火力。all-mini+ だと 0.59 相当)。
 - 2026-11-13(未ビルド・ai-src):「外部AI対戦」の入り口(engine/ai-external.js)。外部AIはパッチに入れず、ユーザーが読み込む。CC2 S2 パッケージは private-ai/package(非公開)。
 - v4.8256:QP DUO のリプレイ保存(オンラインは duo-save を常に有効、オフラインはローカル記録へ)、Warlock の Spin ルール(all+)。
+- v4.8282:AI 対戦(TL/CUSTOM)は勝敗が決まると保存した試合の結果画面へ移る。毎ラウンド 3,2,1,GO(client.js fix_rsg → window.__qpRsg)。盤面修正は操作中だけ次ラウンド自動再生を止め、やめたら戻す。
 
 ### サイトとブックマークレット(docs/)
 - 盤面回転:

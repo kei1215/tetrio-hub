@@ -692,10 +692,14 @@
       const list = shown();
       applySwap(list);
       for (const g of list) hookLocks(g);
-      // パッチ版: 盤面修正を ON にしている間は、次のラウンドへの自動再生を切る
-      if (W.__qpEmbedded && list.length) {
+      // パッチ版: 盤面を操作している間だけ、次のラウンドへの自動再生を止める。
+      // 操作をやめたら元に戻す(ユーザー: 連続再生が盤面修正発動時にうまく働かない)。
+      if (W.__qpEmbedded) {
         const nr = document.getElementById('replaytools_button_nextround');
-        if (nr && nr.classList.contains('active')) nr.classList.remove('active');
+        if (nr) {
+          if (S.active && nr.classList.contains('active')) { nr.classList.remove('active'); S.nextHeld = true; }
+          else if (!S.active && S.nextHeld) { nr.classList.add('active'); S.nextHeld = false; }
+        }
       }
       if (S.active && (!alive(S.active) || !list.includes(S.active))) leave(false);
       // 別の2人のリプレイになったら、自動の入れ替えを元に戻す
