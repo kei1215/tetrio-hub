@@ -101,10 +101,11 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
  const localSettings=document.createElement('details');localSettings.id='local-speed-settings';const localSettingsTitle=document.createElement('summary');localSettingsTitle.textContent='オフライン専用設定・ゲーム速度';localSettings.appendChild(localSettingsTitle);
  const speedRow=document.createElement('label');speedRow.textContent='ゲーム時間速度 ';const speedSelect=document.createElement('select');for(const value of [0,.25,.5,1,1.5,2,3,4,8]){const option=document.createElement('option');option.value=String(value);option.textContent=value===0?'0×（停止）':value+'×';speedSelect.appendChild(option)}speedSelect.value=localStorage.getItem('qp-local-game-speed')||'1';speedSelect.onchange=()=>LocalNative.setGameSpeed(Number(speedSelect.value));speedRow.appendChild(speedSelect);localSettings.appendChild(speedRow);
  const fpsRow=document.createElement('label');fpsRow.textContent='描画FPS上限 ';const fpsSelect=document.createElement('select');for(const [value,label]of [[0,'制限なし'],[60,'60 FPS'],[120,'120 FPS'],[240,'240 FPS']]){const option=document.createElement('option');option.value=String(value);option.textContent=label;fpsSelect.appendChild(option)}fpsSelect.value=localStorage.getItem('qp-local-fps-limit')||'60';fpsSelect.onchange=()=>LocalNative.setFrameLimit(Number(fpsSelect.value));fpsRow.appendChild(fpsSelect);localSettings.appendChild(fpsRow);
+ // v4.8281 (user: 基本オフ、オンにしてたら維持): these five toggles are off unless set to '1'.
  // v4.8280 (user: separate ON/OFF for the warning sound and the warning mino): read by the
  // native WarningSiren / HyperTopoutWarning sounds and HoldWarning (client.js fix_warn_toggles).
- const warnState=()=>{window.__qpWarn={sound:localStorage.getItem('qp-local-warn-sound')!=='0',piece:localStorage.getItem('qp-local-warn-piece')!=='0'}};warnState();
- for(const [key,label] of [['qp-local-warn-sound','危険時の警告音'],['qp-local-warn-piece','警告ミノ（次に出るミノが置けないときの表示）'],['qp-local-rise-line','せり上がり予告線（次にゴミが上がったときの上端を盤面の上に線で表示）'],['qp-local-tl-score-rise','TL/CUSTOM 対戦の点数上昇演出（+1）'],['qp-local-tl-scoreslide','TL/CUSTOM 勝敗後の点数画面（ボードを消して表示）']]){const row=document.createElement('label'),input=document.createElement('input');row.style.display='block';input.type='checkbox';input.checked=localStorage.getItem(key)!=='0';input.addEventListener('change',()=>{localStorage.setItem(key,input.checked?'1':'0');warnState()});row.append(input,' '+label);localSettings.appendChild(row)}
+ const warnState=()=>{window.__qpWarn={sound:localStorage.getItem('qp-local-warn-sound')==='1',piece:localStorage.getItem('qp-local-warn-piece')==='1'}};warnState();
+ for(const [key,label] of [['qp-local-warn-sound','危険時の警告音'],['qp-local-warn-piece','警告ミノ（次に出るミノが置けないときの表示）'],['qp-local-rise-line','せり上がり予告線（次にゴミが上がったときの上端を盤面の上に線で表示）'],['qp-local-tl-score-rise','TL/CUSTOM 対戦の点数上昇演出（+1）'],['qp-local-tl-scoreslide','TL/CUSTOM 勝敗後の点数画面（ボードを消して表示）']]){const row=document.createElement('label'),input=document.createElement('input');row.style.display='block';input.type='checkbox';input.checked=localStorage.getItem(key)==='1';input.addEventListener('change',()=>{localStorage.setItem(key,input.checked?'1':'0');warnState()});row.append(input,' '+label);localSettings.appendChild(row)}
  const replaySettings=document.createElement('details');replaySettings.id='local-replay-settings';const replaySettingsTitle=document.createElement('summary');replaySettingsTitle.textContent='リプレイ表示設定';replaySettings.appendChild(replaySettingsTitle);
  const replayToggle=(label,key,enabled=true)=>{const row=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.checked=localStorage.getItem(key)!==(enabled?'0':'1');input.addEventListener('change',()=>{localStorage.setItem(key,input.checked?'1':'0');window.dispatchEvent(new CustomEvent('qp-replay-settings-changed',{detail:{key,value:input.checked}}))});row.append(label,input);replaySettings.appendChild(row);return input};
  replayToggle('QPリプレイ背景', 'qp-replay-qp-background-v1');
@@ -474,10 +475,10 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
    the stack's top edge shifted up by the next garbage rise (impending garbage, capped by
    garbagecap) is drawn as a line, only where it would stick out above the board, on a
    sprite placed just under the falling piece layer. Nothing is drawn while any block is
-   already above the board. Tab panel toggle qp-local-rise-line (default on). */
+   already above the board. Tab panel toggle qp-local-rise-line (default off). */
 (() => {
  const games=new Set();let raf=0;
- const enabled=()=>localStorage.getItem('qp-local-rise-line')!=='0';
+ const enabled=()=>localStorage.getItem('qp-local-rise-line')==='1';
  function layer(game){
   const H=game.source?.self?.hm?.H,stack=H?.stackobj,falling=H?.fallingobj;if(!stack?.parent||falling?.parent!==stack.parent)return null;
   if(game.__qpRise&&game.__qpRise.sprite.parent===stack.parent&&!game.__qpRise.sprite.destroyed)return game.__qpRise;
