@@ -566,6 +566,11 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                 data = add_updater(data.decode('utf-8')).encode('utf-8')
             elif name == 'O/offline/reverse-hyper-browser.js' and not incremental:
                 data = replace_once(data.decode('utf-8'), OLD_MUSIC, NEW_MUSIC, name).encode('utf-8')
+            # v4.8283 (user: バージョンの表記(上のバー)が崩れている / 4.8232 のまま): stamp the
+            # current version into the window title (vA ai-loader.js) and the render diagnostics.
+            if name in ('A/offline/ai-loader.js', 'O/offline/render-diagnostics.js'):
+                data = re.sub(rb'vA-4\.\d+', b'vA-4.' + str(new).encode(), data)
+                data = re.sub('描画診断 v4\\.\\d+'.encode(), ('描画診断 v4.' + str(new)).encode(), data)
             elif name == 'package.json':
                 pkg = json.loads(data)
                 if pkg.get('kind') != kind or pkg.get('update') != int(old):
