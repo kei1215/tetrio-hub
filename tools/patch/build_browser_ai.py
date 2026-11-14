@@ -9,7 +9,7 @@ Builds docs/bookmarklets/offline-va<VER>/ from a vA source zip:
 
 Usage: python3 build_browser_ai.py VA_ZIP DOCS --version 4.8283 --tetrio tetrio.js --extra-from docs/bookmarklets/offline-v4.8255
 """
-import argparse, re, subprocess, sys, zipfile
+import argparse, re, shutil, subprocess, sys, zipfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -57,7 +57,18 @@ def main():
         raise SystemExit('local-shell tag')
     t = t.replace(shell, shell + f'\n<script src="{base}ai-loader.js"></script>')
     (out / 'offline-template.html').write_text(t, encoding='utf-8')
-    vo = (a.docs / 'bookmarklets' / 'tetrio-offline-standalone-v4.8255.txt').read_text(encoding='utf-8')
+    # Own copy of the core client patch (user: O版の最新とズレてても動く様に): a later vO browser
+    # rebuild must not change the client this AI folder runs on.
+    loader_path = out / 'standalone-loader.js'
+    loader = loader_path.read_text(encoding='utf-8')
+    core = re.search(r"const CORE_VERSION = '([^']+)';", loader)
+    if core and core.group(1) != tag:
+        src_dir = a.docs / 'bookmarklets' / f'offline-v{core.group(1)}'
+        for n in ('client.patch.json', 'client.patch.bin'):
+            shutil.copy2(src_dir / n, out / n)
+        loader = loader.replace(core.group(0), f"const CORE_VERSION = '{tag}';")
+        loader_path.write_text(loader, encoding='utf-8')
+    vo =(a.docs / 'bookmarklets' / 'tetrio-offline-standalone-v4.8255.txt').read_text(encoding='utf-8')
     old_dir = re.search(r"bookmarklets/(offline-v[\w.]+)/standalone-loader\.js", vo).group(1)
     old_cache = re.search(r"n='([^']+)'", vo).group(1)
     bm = vo.replace(old_dir, f'offline-v{tag}').replace(old_cache, f'tetrio-patch-offline-v{tag}-core1')

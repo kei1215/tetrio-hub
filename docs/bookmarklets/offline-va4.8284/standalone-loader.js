@@ -2,7 +2,7 @@
 (() => {
   'use strict';
   const VERSION = 'a4.8284';
-  const CORE_VERSION = '4.8255';   // client.patch.* (vO 4.8255 client, patched against the TETR.IO client of 2026-11-10)
+  const CORE_VERSION = 'a4.8284';   // client.patch.* (vO 4.8255 client, patched against the TETR.IO client of 2026-11-10)
   const BASE = `https://kei1215.github.io/tetrio-hub/bookmarklets/offline-v${VERSION}/`;
   const CORE_BASE = `https://kei1215.github.io/tetrio-hub/bookmarklets/offline-v${CORE_VERSION}/`;
   const CACHE = `tetrio-patch-offline-v${VERSION}-hold1`;
