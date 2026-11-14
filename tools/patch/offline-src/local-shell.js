@@ -3,6 +3,10 @@
  offlineStyle.textContent=`
  body.qp-local-mode .ceriad,body.qp-local-mode [data-cid]{display:none!important;min-height:0!important;height:0!important;margin:0!important;padding:0!important}
  body.qp-local-mode.qp-local-playing #pixi{display:block!important}
+ /* v4.8277 (user: CONFIG "no background in menus" broke the display): the native CSS hides
+    #pixi unless body is .ingame; local TL / outside-AI rooms and replays never set it. Show the
+    board canvas whenever the menus are hidden. */
+ body.qp-local-mode:has(#menus.hidden) #pixi{display:block!important}
  body.qp-local-mode .qp-online-unavailable{position:relative;cursor:not-allowed}
  body.qp-local-mode .qp-online-unavailable::after{content:'OFFLINE — ONLINE PLAY IS UNAVAILABLE';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(30,0,0,.85);color:white;font:700 clamp(16px,2vw,36px) sans-serif;text-align:center;z-index:20;pointer-events:none}
  body.qp-local-mode .qp-online-unavailable>*{opacity:.35}
