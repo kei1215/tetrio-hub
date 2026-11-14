@@ -79,7 +79,7 @@
       const REDIRECT = 'https://kei1215.github.io/tetrio-hub/bookmarklets/auth.html';
       const CACHE = 'qp-ai-discord-v1';
       const KEEP_MS = 24 * 60 * 60 * 1000;
-      const BASE = 'https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.8284/';
+      const BASE = 'https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.8285/';
       const view = document.getElementById('view');
       const store = {
         get(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } },
@@ -108,7 +108,7 @@
         const ul = el('ul');
         for (const [os, ext] of [['Mac', '.command'], ['Windows', '.cmd'], ['Linux', '.sh']]) {
           const li = el('li');
-          li.append(el('a', `${os}(tetrio-patch-${os}-vA4.8284${ext})`, { href: BASE + `tetrio-patch-${os}-vA4.8284${ext}` }));
+          li.append(el('a', `${os}(tetrio-patch-${os}-vA4.8285${ext})`, { href: BASE + `tetrio-patch-${os}-vA4.8285${ext}` }));
           ul.append(li);
         }
         view.append(ul);
@@ -116,7 +116,7 @@
         // AI 版 QP OFFLINE(ブラウザのブックマークレット)。ログイン確認後だけ表示する
         const bmHead = el('h3', 'ブラウザ版(AI 入り QP OFFLINE)', { class: 'h5 mt-4' });
         const bm = el('a', 'QP OFFLINE AI 版', { class: 'btn btn-primary', href: '#' });
-        fetch('./tetrio-offline-ai-v4.8284.txt', { cache: 'no-store' }).then(r => r.text()).then(code => bm.setAttribute('href', code.trim())).catch(() => {});
+        fetch('./tetrio-offline-ai-v4.8285.txt', { cache: 'no-store' }).then(r => r.text()).then(code => bm.setAttribute('href', code.trim())).catch(() => {});
         const bmRow = el('p'); bmRow.append(bm);
         view.append(bmHead, bmRow, el('p', 'このボタンをブックマークバーにドラッグして登録し、https://tetr.io/ を開いた状態で押します。初回だけネット接続が必要で、その後30日間は保存した本体で起動します。ダウンロードやインストールは不要です。', { class: 'note' }));
         const out = el('a', 'この端末の確認を消す', { href: '#' });

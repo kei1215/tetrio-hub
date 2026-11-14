@@ -1,0 +1,5 @@
+[
+ {"label":"Cold Clear 2 S2(いちばん強い)","files":["vA-external-ai-cc2.js","cold_clear_2_s2.wasm"]},
+ {"label":"Cold Clear 1","files":["vA-external-ai-cc1.js","cold_clear_1.wasm"]},
+ {"label":"MisaMino","files":["vA-external-ai-misamino.js","misamino.wasm"]}
+]

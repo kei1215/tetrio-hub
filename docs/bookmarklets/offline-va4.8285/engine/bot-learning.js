@@ -121,7 +121,7 @@
  // they already made their own AIs (before, only an empty list got it).
  const starterKey='qp-local-ai-starter-installed-v1';
  if(localStorage.getItem(starterKey)===null){
-  fetch('https://kei1215.github.io/tetrio-hub/bookmarklets/offline-va4.8284/engine/ai-starter-profile.json').then(r=>{if(!r.ok)throw Error('初期モデルを読み込めません');return r.text()})
+  fetch('https://kei1215.github.io/tetrio-hub/bookmarklets/offline-va4.8285/engine/ai-starter-profile.json').then(r=>{if(!r.ok)throw Error('初期モデルを読み込めません');return r.text()})
    .then(json=>{if(localStorage.getItem(starterKey)!==null)return;const name=JSON.parse(json).name;if(!api.profiles().some(p=>p.name===name))api.importProfile(json);localStorage.setItem(starterKey,'1');window.dispatchEvent(new Event('local-ai-profiles'))})
    .catch(error=>probeLog('初期AIモデル: '+error.message));
  }
