@@ -129,7 +129,8 @@
     fumenPage: (() => { try { return JSON.parse(localStorage.getItem('rpe-fumen-v1') || '{}').page || 'piece'; } catch (e) { return 'piece'; } })(),
     fumenGray: (() => { try { return JSON.parse(localStorage.getItem('rpe-fumen-v1') || '{}').gray || 'none'; } catch (e) { return 'none'; } })(),
     panelClosed: updated ? !!keep.panelClosed : false,
-    practice: keep.practice ?? false,   // 地形のマネ練習(リプレイで実際に置いた所を目標に出す)
+    practice: keep.practice ?? false,
+    embMode: keep.embMode ?? 'edit',   // 地形のマネ練習(リプレイで実際に置いた所を目標に出す)
     active: null,                // 操作中のゲーム
     lastEdit: null,              // 最後に操作した内容(.ttrm に埋め込むため)
     msg: '',
@@ -138,12 +139,14 @@
   // .ttrm に埋め込む修正(各プレイヤーの replay.results の中。TETR.IO は知らない項目を無視するので、
   // このツールがなければ普通のリプレイとして再生される)
   const EMB = 'qp_replay_edit';
-  const embedOf = n => {
+  // 埋め込みのある .ttrm の再生のしかた: 'edit' 修正後 / 'practice' 修正後 + 地形練習 / 'orig' 元の版
+  const embedRaw = n => {
     try {
       const r = n.esm.replay, e = r && r.results && r.results[EMB];
       return e && e.v === 1 && Number.isFinite(e.frame) && Number.isFinite(e.end) && e.state && Array.isArray(e.events) ? e : null;
     } catch (x) { return null; }
   };
+  const embedOf = n => S.embMode === 'orig' ? null : embedRaw(n);
   S.embedFrame = n => { const e = n && embedOf(n); return e ? e.frame : null; };   // スピンカウンターが使う
   S.practiceTargets = () => targets;   // 確認用(マネ練習の手本)
   let rec = [], recGrav;         // 操作の記録(埋め込み用): {f, t:'d'|'u', k} キー / {f, t:'g', v} 重力なし / {f, t:'h', h} ハンドリング
@@ -767,7 +770,7 @@
   const removeEmbed = () => {
     if (S.active) leave(true);
     const n = pick(shown());
-    const e = n && embedOf(n);
+    const e = n && embedRaw(n);
     if (!e) { S.msg = '埋め込みはありません'; return; }
     delete n.esm.replay.results[EMB];
     S.lastEdit = null;
@@ -874,9 +877,18 @@
     draw();
   });
   const bEmbed = btn('修正を .ttrm に埋め込んで保存', () => { saveEmbed(); draw(); });
+  const MODES = { edit: '修正後', practice: '地形練習', orig: '元の版' };
+  const bEmbMode = btn('', () => {
+    const order = ['edit', 'practice', 'orig'];
+    S.embMode = order[(order.indexOf(S.embMode) + 1) % 3];
+    S.practice = S.embMode === 'practice';
+    if (S.active) leave(true);
+    S.msg = '埋め込みの再生: ' + MODES[S.embMode] + '(再生中ならシークし直すと反映)';
+    draw();
+  });
   const bUnembed = btn('埋め込みを外す', () => { removeEmbed(); draw(); });
   const bClose = btn('パネルを閉じる', () => setClosed(true));
-  panel.append(status, bAuto, bSide, bSwap, bGrav, bReset, bPractice, bEmbed, bUnembed, bFumen, bFumenPage, bFumenGray, bCounter, bClose);
+  panel.append(status, bAuto, bSide, bSwap, bGrav, bReset, bPractice, bEmbMode, bEmbed, bUnembed, bFumen, bFumenPage, bFumenGray, bCounter, bClose);
   const mini = document.createElement('div');
   mini.id = '__rpemini';
   mini.textContent = '盤面修正';
@@ -929,8 +941,10 @@
     const tgt = pick(list);
     bSide.textContent = '操作する盤面: ' + (tgt ? name(tgt) : '-') + (list.length > 1 ? '(押すと切り替え)' : '');
     bPractice.textContent = 'マネ練習(手本の配置を目標に出す): ' + (S.practice ? 'ON' : 'OFF');
-    const emb = tgt && embedOf(tgt);
+    const emb = tgt && embedRaw(tgt);
     bUnembed.style.display = emb ? '' : 'none';
+    bEmbMode.style.display = emb ? '' : 'none';
+    bEmbMode.textContent = '埋め込みの再生: ' + MODES[S.embMode] + '(押すと切り替え)';
     bEmbed.style.opacity = (S.active && rec.some(e => e.t === 'd' || e.t === 'u')) || S.lastEdit ? '1' : '.6';
     let t;
     if (S.active) {
@@ -1090,7 +1104,7 @@
     for (const g of games) unplay(g);
     W.__rpeTeardown = null;
     unswapAll();
-    return { auto: S.auto, side: S.side, noGravity: S.noGravity, swap: S.swap, sideName: S.sideName, swapAuto: S.swapAuto, swapKey: S.swapKey, counter: S.counter, practice: S.practice, panelClosed: upd ? S.panelClosed : false };
+    return { auto: S.auto, side: S.side, noGravity: S.noGravity, swap: S.swap, sideName: S.sideName, swapAuto: S.swapAuto, swapKey: S.swapKey, counter: S.counter, practice: S.practice, embMode: S.embMode, panelClosed: upd ? S.panelClosed : false };
   };
 
   // ---- 自動更新(操作中は待つ) ----
