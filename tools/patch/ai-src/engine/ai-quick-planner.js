@@ -137,8 +137,11 @@
   try{if(!peer.isPlaying?.())return null}catch{return null}
   const mine=()=>Number(game.state.stats?.piecesplaced)||0,theirs=()=>Number(peer.state.stats?.piecesplaced)||0;
   // the player's own pace (frames per piece) sizes the plan
+  // v4.8279 (user: not the same piece count, e.g. 10:9): player:BOT piece ratio from the Tab
+  // panel (qp-ai-sync-ratio, "10:9"); the BOT may place floor(player pieces x 9/10).
+  let ratio=1;try{const m=/^\s*(\d+(?:\.\d+)?)\s*[:：]\s*(\d+(?:\.\d+)?)\s*$/.exec(localStorage.getItem('qp-ai-sync-ratio')||'');if(m&&+m[1]>0&&+m[2]>0)ratio=Math.max(.1,Math.min(10,+m[2]/+m[1]))}catch{}
   const pf=Number(peer.getFrame?.())||0,pp=theirs();
-  return {ahead:()=>theirs()>mine(),interval:pp>2?Math.max(3,Math.min(120,pf/pp)):30};
+  return {ahead:()=>Math.floor(theirs()*ratio+1e-9)>mine(),interval:pp>2?Math.max(3,Math.min(120,pf/pp/ratio)):30};
  }
  function humanPlaying(game){
   const peer=game?._localTLPeer||game?.source?.self?.zthm?.duoOtherSideGame;

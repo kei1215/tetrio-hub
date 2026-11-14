@@ -23,6 +23,11 @@
   flag('qp-local-ai-tspin-b2b','BOT: Spin B2B モード（既定ON。QP・40L・TL・CUSTOMで、T-Spin多めのSpinだけでB2Bをつなぐ。攻撃が来たら相殺か受けるかを高さで決める）',true);
   flag('qp-win-gauge','対戦の勝率予測ゲージを表示（TL・CUSTOM。盤面から左右の勝率を予測）',true);
   flag('qp-ai-sync-player','プレーヤーと同時に置く（TL・CUSTOM の対プレーヤー戦。プレーヤーが1つ置くたびにBOTも1つ置き、PPSを揃える）',false);
+  // player:BOT piece ratio for the flag above (v4.8279)
+  const ratioLabel=document.createElement('label');ratioLabel.style.display='block';ratioLabel.append(document.createTextNode('同時に置くときのミノ数の比 プレーヤー:BOT（例 10:9 でBOTが1割少なく置く。既定 1:1）'));
+  const ratio=document.createElement('input');ratio.type='text';ratio.placeholder='1:1';ratio.style.width='6em';ratio.value=localStorage.getItem('qp-ai-sync-ratio')||'1:1';
+  ratio.addEventListener('change',()=>{const m=/^\s*(\d+(?:\.\d+)?)\s*[:：]\s*(\d+(?:\.\d+)?)\s*$/.exec(ratio.value);if(!m||!(+m[1]>0)||!(+m[2]>0)){ratio.value=localStorage.getItem('qp-ai-sync-ratio')||'1:1';return}ratio.value=m[1]+':'+m[2];localStorage.setItem('qp-ai-sync-ratio',ratio.value)});
+  ratioLabel.appendChild(ratio);section.appendChild(ratioLabel);
   flag('qp-ai-misdrop','置きミスを再現する（既定OFF。ときどき1列ずれて置く。悪い手として扱い、学習や修正ツールの指摘には使わない）',false);
   const ppsLabel=document.createElement('label');ppsLabel.style.display='block';ppsLabel.append(document.createTextNode('BOT目標PPS（0.1〜20・ゲーム内時間基準）'));
   const pps=document.createElement('input');pps.type='number';pps.min='0.1';pps.max='20';pps.step='0.1';pps.value=localStorage.getItem('qp-local-bot-pps')||'2';pps.addEventListener('change',()=>{const value=Math.max(.1,Math.min(20,Number(pps.value)||2));pps.value=String(value);localStorage.setItem('qp-local-bot-pps',String(value))});ppsLabel.appendChild(pps);section.appendChild(ppsLabel);
