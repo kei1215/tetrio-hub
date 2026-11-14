@@ -455,7 +455,7 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
  for(const [id,mode] of [['start_40l','40l'],['start_blitz','blitz'],['start_zen','zen'],['start_custom','custom']]){
   document.getElementById(id).addEventListener('click',event=>{event.preventDefault();event.stopImmediatePropagation();playSolo(mode)},true);
  }
- LocalUIHealth.check().then(()=>{if(!window.OriginalReplay)throw Error('OFFLINE本体の初期化に失敗しました');return window.OriginalReplay.init()}).then(()=>{LocalUIHealth.stage('メニュー初期化');LocalNative.menus();LocalNative.view('play1p');const fps=localStorage.getItem('qp-local-fps-limit');if(fps!==null)LocalNative.setFrameLimit(fps);LocalUIHealth.complete();panel.hidden=true}).catch(error=>{LocalUIHealth.fail(null,error);probeLog(error.stack)});
+ LocalUIHealth.check().then(()=>{if(!window.OriginalReplay)throw Error('OFFLINE本体の初期化に失敗しました');return window.OriginalReplay.init()}).then(()=>{LocalUIHealth.stage('メニュー初期化');LocalNative.menus();try{window.__qpCustomOpts?.()}catch(error){probeLog('CUSTOM設定: '+error.message)}LocalNative.view('play1p');const fps=localStorage.getItem('qp-local-fps-limit');if(fps!==null)LocalNative.setFrameLimit(fps);LocalUIHealth.complete();panel.hidden=true}).catch(error=>{LocalUIHealth.fail(null,error);probeLog(error.stack)});
  window.addEventListener('pagehide' ,()=>{const game=window.OriginalReplay?.game?.();if(game?.options.zenlevels&&game.isPlaying())game.endNow()});
  // The Tab panel belongs only to the isolated local origin. Never install
  // this shortcut on the online TETR.IO page.

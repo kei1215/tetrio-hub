@@ -225,6 +225,21 @@ def fix_warlock_mini(text):
     return replace_once(text, WARLOCK_MINI_NEW, WARLOCK_MINI_OLD, 'O/offline/client.js warlock T mini popup (undo)')
 
 
+# v4.8279 (user: offline CUSTOM config shows no settings): the native builds the CUSTOM options
+# list in an En.ready callback, and En.ready never fires offline (the preload screen is never
+# finished). The list builder becomes window.__qpCustomOpts (outside the callback, so the
+# offline shell can call it); the callback still calls it online. Idempotent.
+CUSTOM_OPTS_OLD = 'En.ready((function(){xt("room_opts_save").outerHTML=es(Jn,"room_opts")+xt("room_opts_save").outerHTML,xt("custom_content_container").innerHTML=es(Zn,"custom_opts"),'
+CUSTOM_OPTS_NEW = ('window.__qpCustomOpts=()=>{const c=xt("custom_content_container");c&&!c.innerHTML.trim()&&(c.innerHTML=es(Zn,"custom_opts"))};'
+                   'En.ready((function(){xt("room_opts_save").outerHTML=es(Jn,"room_opts")+xt("room_opts_save").outerHTML,window.__qpCustomOpts(),')
+
+
+def fix_custom_opts(text):
+    if CUSTOM_OPTS_NEW in text:
+        return text
+    return replace_once(text, CUSTOM_OPTS_OLD, CUSTOM_OPTS_NEW, 'O/offline/client.js CUSTOM options builder')
+
+
 def fix_offline_client(text):
     for old, new, count in OFFLINE_CLIENT_FIXES:
         if text.count(old) != count:
@@ -431,7 +446,7 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                 text = data.decode('utf-8')
                 if not incremental:
                     text = fix_offline_client(text)
-                data = fix_warlock_mini(text).encode('utf-8')
+                data = fix_custom_opts(fix_warlock_mini(text)).encode('utf-8')
             elif offline and name == 'O/local-main.js':
                 data = add_editor_window(data.decode('utf-8')).encode('utf-8')
             elif has_offline and offline and name == 'O/offline/index.html':
