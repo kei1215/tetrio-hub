@@ -34,10 +34,14 @@ p.rounds.forEach((round, ri) => {
     if (sg.keep) rep.events = rep.events.filter((e) => e.type !== "keydown" && e.type !== "keyup");
     const s = new PlayerSim(rep, pl);
     while (s.frame < sg.frame) s.step();
-    if (!sg.keep) for (const f of [...s.byFrame.keys()]) if (f >= sg.frame) s.byFrame.delete(f);
+    if (!sg.keep) for (const [f, l] of [...s.byFrame]) if (f >= sg.frame) { const r = sg.ige ? l.filter((x) => x.type !== "keydown" && x.type !== "keyup") : []; if (r.length) s.byFrame.set(f, r); else s.byFrame.delete(f); }
     for (const x of sg.events) { let l = s.byFrame.get(x.f); if (!l) s.byFrame.set(x.f, (l = [])); l.push({ frame: x.f, type: x.t === "d" ? "keydown" : "keyup", data: { key: x.k, subframe: x.s || 0 } }); }
-    let atk = 0; s.onLock = (r) => { atk += (r.rawGarbage || []).reduce((a, b) => a + b, 0); };
+    let atk = 0; const lf = []; s.onLock = (r, f) => { atk += (r.rawGarbage || []).reduce((a, b) => a + b, 0); lf.push(f); };
+    const p0 = s.engine.stats.pieces, rc0 = s.engine.stats.garbage?.receive ?? 0;
     while (!s.finished && s.frame <= sg.end) s.step();
-    console.log("round", ri, "fix @", sg.frame, "-", sg.end, "replayed attack", atk, "fix said", sg.cc ?? "-", "player", sg.orig ?? "-");
+    // the player's lock frames for the same piece numbers
+    const o = new PlayerSim(structuredClone(pl.replay), pl), of = []; o.onLock = (_r, f) => of.push(f); while (!o.finished) o.step();
+    const shift = lf.map((f, i) => f - (of[p0 + i] ?? f)); if (process.env.SHIFTS) console.log(shift.join(" ")); const maxShift = Math.max(0, ...shift.map(Math.abs));
+    console.log("round", ri, "fix @", sg.frame, "-", sg.end, "attack", atk, "(fix said", sg.cc ?? "-", "player", sg.orig ?? "-", ") garbage in", (s.engine.stats.garbage?.receive ?? 0) - rc0, "lock shift max", maxShift, "frames");
   }
 });

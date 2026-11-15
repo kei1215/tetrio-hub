@@ -357,6 +357,7 @@
     if (editBase && snapFrame >= editBase.frame) {
       ed = { v: 1, frame: editBase.frame, end, state: stateOfSeg(editBase) || JSON.parse(JSON.stringify(undo[0].state)), events: editBase.events.filter(e => e.f < snapFrame).concat(ed.events) };
       // 操作中は元のおじゃまを流さないので、keep(CC 盤面修正)は止めた場面までにする
+      if (editBase.ige) { ed.ige = true; ed.igeUntil = Math.min(snapFrame, editBase.igeUntil ?? Infinity); }
       if (editBase.keep) { ed.keep = true; ed.keepUntil = Math.min(snapFrame, editBase.keepUntil ?? Infinity); if (editBase.by) ed.by = editBase.by; }
     }
     // 手で直した修正: 前からある修正(続けて直したものは置き換え)と合わせて、場所の順に並べる
@@ -751,6 +752,8 @@
           const st0 = stateOfSeg(s); if (st0) injectAt(n, st0, s.frame);
           return pull0.call(this);
         }
+        // ige: 修正の間も元のプレイで受けたおじゃま(キー以外のイベント)は来る(CC 盤面修正の弱い所)
+        if (s.ige && f < (s.igeUntil ?? Infinity)) { try { this._replay.GetEventsAtFrame(f).forEach(ev => { if (ev.type !== 'keydown' && ev.type !== 'keyup') this.Emit(ev); }); } catch (x) { } }
         for (const ev of eventsAt(s, f)) {
           if (ev.t === 'g') n.__rpeGrav = !!ev.v;
           else if (ev.t === 'h') applyHandling(n, ev.h);

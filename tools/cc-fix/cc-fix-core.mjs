@@ -50,6 +50,9 @@ async function fixOne(info, rep, bot, opt, T) {
   s0.onLock = (_r, f) => lockFrames.push(f);
   while (!s0.finished) s0.step();
   const firstKey = (rep.events.find((e) => e.type === "keydown") || { frame: 0 }).frame;
+  // the player's own timing: the first key pressed for each piece (after the previous lock)
+  const downs = rep.events.filter((e) => e.type === "keydown").map((e) => e.frame).sort((a, b) => a - b);
+  const firstDownAfter = (f) => { for (const d of downs) if (d > f) return d; return null; };
   const endFrame = s0.endFrame;
   const gaps = lockFrames.slice(1).map((f, i) => f - lockFrames[i]);
   const avgGap = gaps.length ? Math.max(4, Math.round(gaps.reduce((a, b) => a + b, 0) / gaps.length)) : 20;
@@ -63,7 +66,8 @@ async function fixOne(info, rep, bot, opt, T) {
   let pieceStart = 0;
   if (range) {
     while (sim.frame < range.F && !sim.finished) sim.step();
-    for (const f of [...sim.byFrame.keys()]) if (f >= range.F) sim.byFrame.delete(f);
+    // from F the player's keys are gone; incoming garbage (ige) still arrives as in the original
+    for (const [f, list] of [...sim.byFrame]) if (f >= range.F) { const rest = list.filter((x) => !KEY.has(x.type)); if (rest.length) sim.byFrame.set(f, rest); else sim.byFrame.delete(f); }
     pieceStart = e.stats.pieces;
   }
   const out = [], stat = { pieces: 0, planned: 0, matched: 0, miss: 0, noplan: 0, attack: 0, topout: false };
@@ -128,7 +132,8 @@ async function fixOne(info, rep, bot, opt, T) {
     return job.result();
   };
 
-  let plan = null, keys = null, target = null, want = null, sd = false, pieceAt = -1;
+  let plan = null, keys = null, target = null, want = null, sd = false, pieceAt = -1, sched = null, doneN = 0, gSince = -1;
+  const lockT = Number(sim.options.locktime) || 30;
   const idleTo = (f) => { while (sim.frame < f && !sim.finished) sim.step(); };
   if (!range) idleTo(firstKey);
   while (!sim.finished) {
@@ -164,19 +169,37 @@ async function fixOne(info, rep, bot, opt, T) {
         if (!keys) { stat.miss++; keys = []; target = null; } else want = plan.cells;
       } else keys = [];
       keys = keys.concat(["hardDrop"]);
+      // spread the keys like the player: from the frame the player first pressed a key for this
+      // piece to the frame the player locked it (hard drop there)
       const need = keys.length + keys.filter((k) => k === "softDrop").length * 2;
-      if (sim.frame < due - need && !grounded()) { keys = null; sim.step(); continue; }
+      const prevL = n > 0 && n - 1 < lockFrames.length ? lockFrames[n - 1] : firstKey - 1;
+      let st = firstDownAfter(prevL);
+      if (st == null || st > due - need) st = due - need;
+      sched = { st, due, total: keys.length }; doneN = 0; gSince = -1;
+    }
+    if (!sd) {
+      const at = keys[0] === "hardDrop" ? sched.due : Math.min(sched.due, Math.round(sched.st + doneN * (sched.due - sched.st) / Math.max(1, sched.total - 1)));
+      // on the floor the lock delay runs: wait only while it surely can not lock (a few frames spare)
+      const gr = grounded();
+      if (!gr) gSince = -1; else if (gSince < 0) gSince = sim.frame;
+      if (sim.frame < at && (!gr || sim.frame - gSince < lockT - 4)) { sim.step(); continue; }
+      // the piece may have fallen while waiting: find the way again from where it is now
+      if (doneN > 0 && want && keys[0] !== "hardDrop") {
+        const f = e.falling, t = low(f.symbol), rows = rowsOf(), h = rows.length;
+        const np = path(rows, t, f.location[0], h - 1 - Math.floor(f.location[1]), f.rotation, target);
+        if (np) keys = np.concat(["hardDrop"]);
+      }
     }
     const k = keys[0];
     if (k === "softDrop") {
       if (!sd) { push("keydown", "softDrop"); sd = true; sim.step(); continue; }
       if (!grounded() && sd < 120) { sd++; sim.step(); continue; }
-      push("keyup", "softDrop"); sd = false; keys.shift(); sim.step(); continue;
+      push("keyup", "softDrop"); sd = false; keys.shift(); doneN++; sim.step(); continue;
     }
-    push("keydown", k); push("keyup", k, 0.5); keys.shift();
+    push("keydown", k); push("keyup", k, 0.5); keys.shift(); doneN++;
     sim.step();
   }
-  if (range) return { seg: { v: 1, frame: range.F, end: sim.frame, state: null, lazy: true, by: opt.engineId || "cc", events: out }, stat };
+  if (range) return { seg: { v: 1, frame: range.F, end: sim.frame, state: null, lazy: true, ige: true, by: opt.engineId || "cc", events: out }, stat };
   const end = stat.topout ? sim.frame : endFrame;
   return { embed: { v: 1, frame: 0, end, state: null, keep: true, by: opt.engineId || "cc", events: out, sends }, stat };
 }
