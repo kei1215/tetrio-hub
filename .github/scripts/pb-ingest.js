@@ -122,6 +122,13 @@ module.exports.collect = async () => {
     const name = String(it.record?.name || '').replace(/[\u0000-\u001f<>@`]/g, '').trim().slice(0, 32) || 'LOCAL';
     const rec = clean(it.record, { id, user: 'name:' + name.toLowerCase(), src: 'game' });
     if (typeof rec === 'string') { log.push(id + ': ' + rec); continue; }
+    // GAS が Discord に投稿済みならそれを使う(TTR は取りに行かない)
+    if (it.discord && /^\d{5,25}$/.test(String(it.discord.message || ''))) {
+      const m = await add(rec, null, it.discord);
+      log.push(id + ': ' + m.text.split('\n')[0]);
+      if (m.ok) { added++; have.add(id); }
+      continue;
+    }
     let buf = null;
     try {
       const res = await fetch(api + '?ttr=' + id, { redirect: 'follow' });

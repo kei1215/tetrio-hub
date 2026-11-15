@@ -1,6 +1,8 @@
 # QP PB ランキングの送信のしくみ
 
 ## 流れ
+(2026-11-16 v2) GAS にスクリプト プロパティ `DISCORD_WEBHOOK` を入れると、GAS が受け付けた時点で Discord に投稿する(ドライブには置かない)。ランキングページは開くたびに GAS の `?list=1` を読み、まだ records.json にない記録もすぐ表に出す(リプレイは Discord の URL、なければ GAS の `?ttr=ID`)。Actions は後から records.json に移すだけ。
+
 1. オフライン版(アプリ版・ブラウザ版)の記録一覧で「ランキングに送る」を押す。送れるのはオフラインの記録だけ。
 2. ゲームが、`docs/ranking/api.json` の `url`(GAS ウェブアプリ)に、記録と TTR を POST する。
 3. GAS(`gas/Code.gs`)の受付:

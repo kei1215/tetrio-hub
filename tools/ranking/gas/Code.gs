@@ -1,8 +1,9 @@
-// QP PB ランキングの受付窓口(Google Apps Script のウェブアプリ)。秘密の値は持たない。
-// ゲーム内の「ランキングに送る」→ doPost が記録と TTR を受け取り、Google ドライブに一時保存する。
-// GitHub Actions(pb-collect.yml)が10分ごとに doGet で受付一覧と TTR を取りに来る。
-// Actions が Discord に TTR を投稿し(webhook は GitHub の Secret)、records.json に足す。
-// 受付は3日で消える(取り込み済みかどうかは GitHub 側が id で判断する)。
+// QP PB ランキングの受付窓口(Google Apps Script のウェブアプリ)。
+// ゲーム内の「ランキングに送る」→ doPost が記録と TTR を受け取る。
+//  ・スクリプト プロパティ DISCORD_WEBHOOK があれば、その場で Discord に順位・記録・TTR を投稿する(user: discordへの投稿はGASから)
+//  ・なければ TTR を Google ドライブに一時保存し、GitHub Actions が Discord に投稿する
+// ランキングページは開くたびに doGet(?list=1)で受付一覧を読み、まだ records.json にない記録もすぐ表に出す。
+// GitHub Actions(pb-collect.yml)が受付を records.json に移す。受付は3日で消える(取り込み済みかは id で判断)。
 const RECORDS = 'https://kei1215.github.io/tetrio-hub/ranking/data/records.json';
 const MODS = ['expert', 'nohold', 'messy', 'gravity', 'volatile', 'doublehole', 'invisible', 'allspin', 'duo'];
 const TTR_MAX = 9.5 * 1024 * 1024; // Discord の添付の上限(10MB)に収める
@@ -27,7 +28,7 @@ function doGet(e) {
   const p = (e && e.parameter) || {};
   if (p.list) {
     const all = PropertiesService.getScriptProperties().getProperties();
-    const items = Object.keys(all).filter(function (k) { return k.indexOf('q:') === 0; }).map(function (k) { return { id: Number(k.slice(2)), record: JSON.parse(all[k]) }; });
+    const items = Object.keys(all).filter(function (k) { return k.indexOf('q:') === 0; }).map(function (k) { const v = JSON.parse(all[k]); return v && v.record ? { id: Number(k.slice(2)), record: v.record, discord: v.discord || null } : { id: Number(k.slice(2)), record: v }; });
     items.sort(function (a, b) { return a.id - b.id; });
     return out({ ok: true, items: items });
   }
@@ -73,11 +74,21 @@ function doPost(e) {
     } catch (x) {}
 
     const id = Date.now();
-    const rec = JSON.stringify(d);
+    const item = { record: d };
+    const hook = PropertiesService.getScriptProperties().getProperty('DISCORD_WEBHOOK');
+    if (hook) {
+      const label = (rank ? '#' + rank + ' ' : '') + name + ' ' + (d.mode === 'zenithex' ? 'EXPERT ' : '') + Number(d.altitude).toFixed(2) + 'm (F' + d.floor + ')' +
+        (d.mods.length ? ' MOD ' + d.mods.join(', ') : '') + (d.floor10 ? (d.lull === false ? ' 10F相当・猶予なし' : ' 10F相当・猶予あり') : '') + (d.hyper ? ' HYPERSPEED' : '');
+      const content = ('🏔 ' + label + '\n```json\n' + JSON.stringify(Object.assign({ id: id }, d)) + '\n```').slice(0, 1990);
+      const blob = Utilities.newBlob(ttr, 'application/json', 'PB-' + id + '.ttr');
+      const dr = UrlFetchApp.fetch(hook + '?wait=true', { method: 'post', muteHttpExceptions: true, payload: { payload_json: JSON.stringify({ content: content, allowed_mentions: { parse: [] } }), 'files[0]': blob } });
+      if (dr.getResponseCode() < 300) { const m = JSON.parse(dr.getContentText()); item.discord = { message: String(m.id), url: m.attachments && m.attachments[0] ? m.attachments[0].url : null }; }
+    }
+    if (!item.discord) folder().createFile(id + '.ttr', ttr, 'application/json');
+    const rec = JSON.stringify(item);
     if (rec.length > 8000) return out({ ok: false, text: '記録データが大きすぎます' });
-    folder().createFile(id + '.ttr', ttr, 'application/json');
     PropertiesService.getScriptProperties().setProperty('q:' + id, rec);
-    return out({ ok: true, rank: rank, text: '受け付けました: ' + (rank ? '#' + rank + '(目安) ' : '') + name + ' ' + Number(d.altitude).toFixed(1) + 'm\n10〜30分ほどでランキングに載ります' });
+    return out({ ok: true, rank: rank, text: '送りました: ' + (rank ? '#' + rank + ' ' : '') + name + ' ' + Number(d.altitude).toFixed(1) + 'm\nランキングにすぐ載ります' });
   } catch (x) {
     return out({ ok: false, text: '受付でエラー: ' + String(x).slice(0, 200) });
   } finally { try { lock.releaseLock(); } catch (x) {} }

@@ -82,7 +82,7 @@
     const t = el('table', null, 'rk-table'), head = t.createTHead().insertRow();
     for (const [label, , cls] of cols) { const th = el('th', label); if (cls) th.className = cls; head.appendChild(th); }
     const body = t.createTBody();
-    list.forEach((r, i) => { const row = body.insertRow(); for (const [, get, cls] of cols) { const td = row.insertCell(); const v = get(r, i); if (cls === 'replay') { if (v && /^https:\/\/(cdn|media)\.discordapp\.(com|net)\/attachments\//.test(v)) { const a = el('a', '↓ TTR'); a.href = v; a.rel = 'noopener'; a.target = '_blank'; td.appendChild(a); } } else td.textContent = v; if (cls && cls !== 'replay') td.className = cls; } });
+    list.forEach((r, i) => { const row = body.insertRow(); for (const [, get, cls] of cols) { const td = row.insertCell(); const v = get(r, i); if (cls === 'replay') { if (v && (/^https:\/\/(cdn|media)\.discordapp\.(com|net)\/attachments\//.test(v) || /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec\?ttr=\d{13}$/.test(v))) { const a = el('a', '↓ TTR'); a.href = v; a.rel = 'noopener'; a.target = '_blank'; td.appendChild(a); } } else td.textContent = v; if (cls && cls !== 'replay') td.className = cls; } });
     return t;
   };
   // 表は順位・名前・高さだけ(user: top3のリプレイと高さのみ表示)。上位3人は Discord に保存したリプレイ(.ttr)へのリンク
@@ -121,7 +121,25 @@
   try { const t = localStorage.getItem('rk-tab'); if (TABS.some(x => x[0] === t)) tab = t; } catch {}
   for (const x of $('tabs').children) x.setAttribute('aria-selected', String(x.dataset.k === tab));
   for (const id of ['fMode', 'fDuo', 'fMod']) $(id).addEventListener('change', render);
-  fetch('data/records.json', { cache: 'no-store' }).then(r => r.json()).then(d => { records = (d.records || []).filter(r => r && typeof r.altitude === 'number'); render(); })
+  // 開くたびに GAS の受付一覧も読み、まだ records.json に移っていない記録もすぐ出す(user: GASに取りに来ればいい 毎回開いた時に)
+  const MODK = MODS.map(x => x[0]);
+  const fromGas = (it, api) => {
+    const d = it && it.record, id = Number(it && it.id);
+    if (!d || d.v !== 1 || !(id > 1e12) || (d.mode !== 'zenith' && d.mode !== 'zenithex') || d.bot === true || d.engine) return null;
+    const alt = Number(d.altitude), floor = Number(d.floor);
+    if (!(alt >= 0.01 && alt <= 100000) || !(floor >= 1 && floor <= 10) || !(Number(d.apm ?? 0) <= 10000) || !(Number(d.pps ?? 0) <= 100)) return null;
+    const mods = [...new Set((Array.isArray(d.mods) ? d.mods : []).map(String))].sort();
+    if (mods.some(m => !MODK.includes(m.replace(/_reversed$/, '')))) return null;
+    const name = String(d.name || '').replace(/[\u0000-\u001f<>@`]/g, '').trim().slice(0, 32) || 'LOCAL';
+    const url = it.discord && /^https:\/\/(cdn|media)\.discordapp\.(com|net)\/attachments\//.test(it.discord.url || '') ? it.discord.url : api + '?ttr=' + id;
+    return { id, user: 'name:' + name.toLowerCase(), name, mode: d.mode, altitude: Math.round(alt * 100) / 100, floor, revives: Number(d.revives) || 0, mods,
+      floor10: d.floor10 === true, lull: d.lull !== false, hyper: d.hyper === true, test: ['solo', 'duo-dead', 'duo-reverse-dead'].includes(d.test) ? d.test : 'solo', bot: false, replayUrl: url, pending: true };
+  };
+  const pending = () => fetch('api.json', { cache: 'no-store' }).then(r => r.json()).then(a => {
+    if (!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(a.url || '')) return;
+    return fetch(a.url + '?list=1').then(r => r.json()).then(l => { const have = new Set(records.map(r => r.id)); for (const it of l.items || []) { const r = fromGas(it, a.url); if (r && !have.has(r.id)) { records.push(r); have.add(r.id); } } render(); });
+  }).catch(() => {});
+  fetch('data/records.json', { cache: 'no-store' }).then(r => r.json()).then(d => { records = (d.records || []).filter(r => r && typeof r.altitude === 'number'); render(); pending(); })
     .catch(() => { $('out').textContent = 'ランキングを読み込めませんでした。'; });
 })();
 </script>
