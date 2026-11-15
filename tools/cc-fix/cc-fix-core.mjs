@@ -59,7 +59,11 @@ async function fixOne(info, rep, bot, opt, T) {
   const sim = new PlayerSim(r2, info), e = sim.engine;
   const out = [], stat = { pieces: 0, planned: 0, matched: 0, miss: 0, noplan: 0, attack: 0, topout: false };
   let lockRes = null;
-  sim.onLock = (r) => { lockRes = r; };
+  // CC's sent garbage (after cancelling), for the opponent's board in the replay edit:
+  // [frame, amount, ackiid]. ackiid = the last attack id of the opponent this player had received then.
+  const sends = [], recv = rep.events.filter((x) => x.type === "ige" && x.data?.type === "interaction" && x.data.data?.type === "garbage").map((x) => [x.frame, x.data.data.iid || 0]);
+  const ackAt = (f) => { let a = 0; for (const [rf, iid] of recv) if (rf <= f && iid > a) a = iid; return a; };
+  sim.onLock = (r) => { lockRes = r; const s = (r.garbage || []).reduce((a, b) => a + b, 0); if (s > 0) sends.push([sim.frame, s, ackAt(sim.frame)]); };
   const push = (type, key, s = 0) => {
     const ev = { frame: sim.frame, type, data: { key, subframe: s } };
     let list = sim.byFrame.get(sim.frame); if (!list) sim.byFrame.set(sim.frame, (list = []));
@@ -163,7 +167,7 @@ async function fixOne(info, rep, bot, opt, T) {
     sim.step();
   }
   const end = stat.topout ? sim.frame : endFrame;
-  return { embed: { v: 1, frame: 0, end, state: null, keep: true, by: opt.engineId || "cc", events: out }, stat };
+  return { embed: { v: 1, frame: 0, end, state: null, keep: true, by: opt.engineId || "cc", events: out, sends }, stat };
 }
 
 /**

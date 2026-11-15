@@ -147,7 +147,9 @@
     } catch (x) { return null; }
   };
   const embedOf = n => S.embMode === 'orig' ? null : embedRaw(n);
-  S.embedFrame = n => { const e = n && embedOf(n); return e ? e.frame : null; };   // スピンカウンターが使う
+  // 手で直した修正は1つのリプレイに何か所でも入れられる(segs)。それぞれ、そこに来たら修正を見せ、終わったら元のプレイに戻る
+  const segsOf = e => (e && Array.isArray(e.segs) && e.segs.length ? e.segs : e ? [e] : []);
+  S.embedFrame = n => { const e = n && embedOf(n); return !e ? null : e.keep ? e.frame : n.__rpeSeg ? n.__rpeSeg.frame : null; };   // スピンカウンターが使う
   S.practiceTargets = () => targets;   // 確認用(マネ練習の手本)
   let rec = [], recGrav;         // 操作の記録(埋め込み用): {f, t:'d'|'u', k} キー / {f, t:'g', v} 重力なし / {f, t:'h', h} ハンドリング
   let editBase = null;           // 埋め込みの再生中に止めたときの、その埋め込み(続けて直すと1つにまとめる)
@@ -242,10 +244,12 @@
     let over = false;
     const undoOver = swap(n.gom, 'GameOver', function () { over = true; });
     simLock = (g, piece) => { if (g !== n) return; const cells = lockCells(n.fm, piece); if (cells) out.push({ f: n.esm.frame, type: String(piece.type || 'x'), cells, board: n.gsm.board.map(row => row.slice()) }); };
-    const t0 = performance.now();
+    const t0 = performance.now(), seg0 = n.__rpeSeg, done0 = n.__rpeDoneSet && new Set(n.__rpeDoneSet);
     try {
-      fastRun(n, i => !over && out.length < 80 && !n.esm.IsFinished() && ((i & 31) || performance.now() - t0 < 400));
+      // 修正の途中から: その修正が終わる(元のプレイに戻る)所まで
+      fastRun(n, i => !over && out.length < 80 && !n.esm.IsFinished() && !(seg0 && n.__rpeSeg !== seg0) && ((i & 31) || performance.now() - t0 < 400));
     } finally {
+      n.__rpeSeg = seg0; n.__rpeDoneSet = done0;
       simLock = null; undoOver();
       injectAt(n, state, frame);
     }
@@ -263,10 +267,10 @@
     S.snapFrame = snapFrame;   // スピンカウンターが「止めたフレームまではリプレイの分」を数えるのに使う
     const st = n.gsm.stats;
     base = { attack: st.garbage.attack || 0, lines: st.lines || 0, pieces: st.piecesplaced || 0 };
-    { const e = embedOf(n); editBase = e && snapFrame >= e.frame ? e : null; }
+    { const e = embedOf(n); editBase = !e ? null : e.keep ? (snapFrame >= e.frame ? e : null) : (n.__rpeSeg && snapFrame >= n.__rpeSeg.frame ? n.__rpeSeg : null); }
     targets = []; lastLock = null; wrongAt = 0;
     // マネ練習は埋め込んだ修正(後から足した所)の中だけ。修正より前の手は目標なし(null)、修正の後は出さない
-    const pe = S.practice && embedOf(n);
+    const pe0 = S.practice && embedOf(n), pe = pe0 && (pe0.keep ? pe0 : n.__rpeSeg);
     if (pe && snapFrame <= pe.end) {
       try { targets = simulate(n, snap, snapFrame).filter(x => x.f <= pe.end).map(x => x.f >= pe.frame ? x : null); } catch (e) { console.warn(TAG, 'practice', e); targets = []; }
       if (!targets.some(Boolean)) targets = [];
@@ -336,13 +340,19 @@
   // 今の操作を、埋め込む形にまとめる(止めた場面の状態 + そこからの操作)。
   // 埋め込みの再生中に止めて直したときは、前の埋め込みの続きとして1つにする
   const buildEdit = n => {
-    if (!rec.some(e => e.t === 'd' || e.t === 'u')) return null;
+    if (!rec.some(e => e.t === 'd')) return null;   // 押したキーがない(止めて再開しただけ)なら修正ではない(前の修正を消さない)
     const end = n.esm.frame;
     let ed = { v: 1, frame: snapFrame, end, state: JSON.parse(JSON.stringify(undo[0].state)), events: rec.slice() };
     if (editBase && snapFrame >= editBase.frame) {
       ed = { v: 1, frame: editBase.frame, end, state: editBase.state, events: editBase.events.filter(e => e.f < snapFrame).concat(ed.events) };
       // 操作中は元のおじゃまを流さないので、keep(CC 盤面修正)は止めた場面までにする
       if (editBase.keep) { ed.keep = true; ed.keepUntil = Math.min(snapFrame, editBase.keepUntil ?? Infinity); if (editBase.by) ed.by = editBase.by; }
+    }
+    // 手で直した修正: 前からある修正(続けて直したものは置き換え)と合わせて、場所の順に並べる
+    const old = (S.lastEdit && S.lastEdit.game === n && S.lastEdit.edit) || embedRaw(n);   // まだ保存していない前の修正も合わせる
+    if (!ed.keep && old && !old.keep) {
+      const segs = segsOf(old).filter(x => x !== editBase).map(x => { const c = { ...x }; delete c.segs; return c; }).concat([ed]).sort((a, b) => a.frame - b.frame);
+      if (segs.length > 1) ed = { ...segs[0], segs };
     }
     return { game: n, edit: ed };
   };
@@ -712,6 +722,28 @@
       const e = S.active !== n && embedOf(n), f = this._frame;
       if (n.__rpeHold && (!e || f <= e.end)) { n.gsm.pause = false; n.__rpeHold = false; }
       if (!e || f < e.frame) return pull0.call(this);
+      // 手で直した修正(keep なし)は差し込み: 修正を見せたあと止めた場面に戻り、元のプレイを続ける。
+      // その間、相手の時間は止める(partnerHook)
+      if (!e.keep) {
+        let s = n.__rpeSeg;
+        if (!s) {
+          s = segsOf(e).find(x => x.frame === f && !(n.__rpeDoneSet && n.__rpeDoneSet.has(x)));
+          if (!s) return pull0.call(this);
+          n.__rpeSeg = s; n.__rpeGrav = false; injectAt(n, s.state, f);
+        }
+        if (f > s.end) {           // 修正が終わった: 止めた場面に戻して、次の修正か試合の終わりまで元のプレイ
+          (n.__rpeDoneSet || (n.__rpeDoneSet = new Set())).add(s);
+          n.__rpeSeg = null; n.__rpeGrav = false;
+          injectAt(n, s.state, s.frame);
+          return pull0.call(this);
+        }
+        for (const ev of eventsAt(s, f)) {
+          if (ev.t === 'g') n.__rpeGrav = !!ev.v;
+          else if (ev.t === 'h') applyHandling(n, ev.h);
+          else if (ev.t === 'd' || ev.t === 'u') this.Emit({ frame: f, type: ev.t === 'd' ? 'keydown' : 'keyup', data: { key: ev.k, subframe: ev.s || 0 } });
+        }
+        return;
+      }
       if (f === e.frame) {
         if (e.state) injectAt(n, e.state, f);
         else if (!internal) { try { n.__rpeState0 = JSON.parse(JSON.stringify(siom.EjectState())); } catch (x) { } }
@@ -728,19 +760,94 @@
     }));
     P.undo.push(swap(fm, 'GetEffectiveGravity', function (...a) {
       const e = S.active !== n && embedOf(n);
-      if (e && n.__rpeGrav && n.esm.frame >= e.frame) return 0;
+      if (e && n.__rpeGrav && (e.keep ? n.esm.frame >= e.frame : !!n.__rpeSeg)) return 0;
       return grav0.apply(this, a);
     }));
     P.undo.push(swap(siom, 'InjectState', function (st, ...r) {
       const res = inject0.call(this, st, ...r);
       try {
         const e = !internal && S.active !== n && embedOf(n);
-        if (e && st && st.frame > e.frame) fastForward(n, e, st.frame);
+        if (e && !e.keep) {        // シーク: そこより前から始まる修正は済んだことにする(元のプレイ)
+          const X = st && Number.isFinite(st.frame) ? st.frame : 0;
+          n.__rpeSeg = null; n.__rpeDoneSet = new Set(segsOf(e).filter(x => x.frame < X));
+        }
+        else if (e && st && st.frame > e.frame) fastForward(n, e, st.frame);
       } catch (x) { console.warn(TAG, 'embed seek', x); }
       return res;
     }));
   };
+  // 相手の盤面。
+  // ・手で直した修正(keep なし): 修正を見せている間は相手の時間を止め(止めた場面の状態を取っておく)、終わったらそこへ戻して続ける
+  // ・CC 盤面修正(keep + sends): 相手は止めずに動かし、元の相手が受けた「直した側からのおじゃま」の代わりに、
+  //   CC が送った火力(sends: [frame, 量, ackiid])をおじゃまとして届ける(本当の対戦と同じく 20F 後に予告、30F 後に確定)
+  const ownerOf = g => games.find(x => x !== g && x.__rpePlay && embedOf(x));   // 直している最中も相手は止めたまま
+  const gidOf = n => { try { return n.esm.replay.options.gameid; } catch (x) { return undefined; } };
+  const sendIndex = new WeakMap();
+  const sendsAt = (e, f) => {
+    let m = sendIndex.get(e);
+    if (!m) {
+      m = new Map(); let iid = 1e5;
+      for (const [sf, amt, ack] of e.sends || []) {
+        iid++;
+        for (const [d, type] of [[20, 'interaction'], [30, 'interaction_confirm']]) {
+          const at = sf + d; if (!m.has(at)) m.set(at, []);
+          m.get(at).push({ type, iid, sf, amt, ack: ack || 0 });
+        }
+      }
+      sendIndex.set(e, m);
+    }
+    return m.get(f) || [];
+  };
+  const partnerHook = g => {
+    if (g.__rpePartner) return;
+    const pull0 = g.esm.Pull, inject0 = g.siom.InjectState;
+    const u1 = swap(g.esm, 'Pull', function () {
+      const f = this._frame, o = ownerOf(g), e = o && embedOf(o);
+      const Z = g.__rpeFrozen;
+      if (Z) {
+        if (e && !e.keep && segsOf(e).includes(Z.s) && f <= Z.s.end) return;           // 止めたまま
+        g.__rpeFrozen = null; g.gsm.pause = false;
+        injectAt(g, Z.state, Z.f);
+        return pull0.call(this);
+      }
+      if (e && !e.keep) {
+        const s = segsOf(e).find(x => f <= x.end && (o.__rpeSeg === x || (x.frame === f && !(o.__rpeDoneSet && o.__rpeDoneSet.has(x)))));
+        if (s) { try { g.__rpeFrozen = { state: JSON.parse(JSON.stringify(g.siom.EjectState())), f, s }; g.gsm.pause = true; return; } catch (x) { g.__rpeFrozen = null; } }
+      }
+      if (e && e.keep && Array.isArray(e.sends) && f >= e.frame) {
+        if (f === e.frame && !internal) { try { g.__rpeSnap = { state: JSON.parse(JSON.stringify(g.siom.EjectState())), f, e }; } catch (x) { } }
+        const gid = gidOf(o);
+        try {
+          this._replay.GetEventsAtFrame(f).forEach(ev => {
+            const d = ev.type === 'ige' && ev.data, gd = d && d.data;
+            // 直した側から元のプレイで来ていたおじゃま(e.frame 以降に送られたもの)は届けない
+            if (d && /^interaction/.test(d.type) && gd && gd.type === 'garbage' && (gid === undefined || gd.gameid === gid) && (gd.frame ?? ev.frame) >= e.frame) return;
+            this.Emit(ev);
+          });
+        } catch (x) { return pull0.call(this); }
+        // id は TETR.IO が重複を捨てる(_seenIGEs)ので、送るごとに別の番号
+        for (const s of sendsAt(e, f)) this.Emit({ frame: f, type: 'ige', data: { id: 9e5 + s.iid * 2 + (s.type === 'interaction' ? 0 : 1), frame: s.sf, type: s.type, data: { type: 'garbage', amt: s.amt, gameid: gid, frame: s.sf, cid: s.iid, iid: s.iid, ackiid: s.ack, x: 4, y: 30, size: 1 } } });
+        return;
+      }
+      return pull0.call(this);
+    });
+    const u2 = swap(g.siom, 'InjectState', function (st, ...a) {
+      if (!internal && g.__rpeFrozen) { g.__rpeFrozen = null; try { g.gsm.pause = false; } catch (x) { } }
+      const res = inject0.call(this, st, ...a);
+      // CC 盤面修正のシーク: 相手も最初から CC の火力を受けた形で同じ所まで早送りする
+      try {
+        const o = !internal && ownerOf(g), e = o && embedOf(o), Z = g.__rpeSnap;
+        if (e && e.keep && Z && Z.e === e && st && st.frame > e.frame) {
+          internal++;
+          try { injectAt(g, Z.state, Z.f); fastRun(g, () => g.esm.frame < st.frame); } finally { internal--; }
+        }
+      } catch (x) { console.warn(TAG, 'partner seek', x); }
+      return res;
+    });
+    g.__rpePartner = () => { u1(); u2(); if (g.__rpeFrozen) { g.__rpeFrozen = null; try { g.gsm.pause = false; } catch (x) { } } delete g.__rpePartner; };
+  };
   const unplay = n => {
+    if (n && n.__rpePartner) { try { n.__rpePartner(); } catch (e) { } }
     const P = n && n.__rpePlay;
     if (!P) return;
     while (P.undo.length) { try { P.undo.pop()(); } catch (e) { } }
@@ -1042,6 +1149,7 @@
       }
       // 埋め込みのあるゲームは、その再生の仕組みを付ける
       for (const g of list) if (g !== S.active && !g.__rpePlay && embedOf(g)) playHook(g);
+      if (list.some(g => g.__rpePlay)) for (const g of list) if (!g.__rpePlay && !g.__rpePartner) partnerHook(g);
       // 操作中の盤面が消えたら止める。見えなくなっただけのとき(演出で一瞬隠れるなど)は、少し続いたら止める
       if (S.active) {
         if (!alive(S.active)) leave(false);
