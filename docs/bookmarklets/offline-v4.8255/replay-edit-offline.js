@@ -518,6 +518,11 @@
   let wrongAt = 0;               // 手本と違う所に置いた時刻
   let doneAt = 0;                // マネ練習の手本を最後まで置いた時刻(1秒後に元へ戻す)
   let snap = null;               // 止めたときの状態(TETR.IO の EjectState)
+  // v5.03 (user: 元版でも動きを真似 / 火力がしっかり送られてくる / 相手もリプレイと同じ動き / 攻撃タイミングや上昇のズレなし):
+  // 元のプレイを手本にするマネ練習では、リプレイのおじゃま(キー以外のイベント)を元と同じフレームで流し、
+  // 相手の盤面も同じフレームまでリプレイどおりに進める(戻すとき・1手戻すときは相手も戻す)
+  let feedOrig = false;
+  let partners = [];             // [{ g, st, f }] 練習を始めたときの相手の状態
   let snapFrame = 0, base = null;
   let queue = [];                // ゲームに入れるキー操作
   const held = new Set();
@@ -636,8 +641,10 @@
     S.pracOn = S.practice || !!segP;
     // マネ練習は埋め込んだ修正(後から足した所)の中だけ。修正より前の手は目標なし(null)、修正の後は出さない
     const pe0 = S.pracOn && embedOf(n), pe = pe0 && (pe0.keep ? pe0 : n.__rpeSeg);
+    feedOrig = false; partners = [];
     if (S.pracOn && !pe0) {   // 元の版 / 埋め込みなし: リプレイで実際に置いた所が手本
       try { targets = simulate(n, snap, snapFrame); } catch (e) { console.warn(TAG, 'practice', e); targets = []; }
+      feedOrig = targets.length > 0;
     } else if (pe && snapFrame <= pe.end) {
       try { targets = simulate(n, snap, snapFrame).filter(x => x.f <= pe.end).map(x => x.f >= pe.frame ? x : null); } catch (e) { console.warn(TAG, 'practice', e); targets = []; }
       if (!targets.some(Boolean)) targets = [];
@@ -657,6 +664,8 @@
       const now = queue.filter(e => e.frame <= f);
       queue = queue.filter(e => e.frame > f);
       for (const e of now) { rec.push({ f, t: e.type === 'keydown' ? 'd' : 'u', k: e.data.key }); this.Emit({ ...e, frame: f }); if (e.type === 'keydown') pressKey = e.data.key; }
+      // 元のプレイが手本のマネ練習: リプレイのおじゃまなど(キー以外)を元のフレームで受ける
+      if (feedOrig) { try { this._replay.GetEventsAtFrame(f).forEach(ev => { if (ev.type !== 'keydown' && ev.type !== 'keyup' && ev.type !== 'end') this.Emit(ev); }); } catch (x) { } }
     });
     own(esm, 'IsFinished', () => false);
     // 2) リプレイ画面への通知(シークバーの位置・終了)を止める。操作中にシークバーは動かない
@@ -701,7 +710,17 @@
     n.gsm.setoptions.noreplay = true;
     applyHandling(n);
     rec = [{ f: snapFrame, t: 'h', h: { ...n.gsm.handling } }]; recGrav = undefined;
-    undo = [{ state: snap, frame: snapFrame, seg: rec.slice() }]; redo = []; placed = st.piecesplaced || 0;
+    if (feedOrig) {
+      for (const g of shown()) {
+        if (g === n || !alive(g)) continue;
+        try {
+          partners.push({ g, st: g.siom.EjectState(), f: g.esm.frame });
+          const e0 = g.elm.emit;   // 相手を進めている間は、シークバー・終了の通知を止める
+          own(g.elm, 'emit', function (type, ...a) { if (stepping && (type === 'frame' || type === 'end' || type === 'start')) return undefined; return e0.call(this, type, ...a); });
+        } catch (e) { console.warn(TAG, 'partner', e); }
+      }
+    }
+    undo = [{ state: snap, frame: snapFrame, seg: rec.slice(), ps: partners.map(x => ({ g: x.g, st: x.st, f: x.f })) }]; redo = []; placed = st.piecesplaced || 0;
     syncKeys(n);
     // 再生ボタンなどにフォーカスが残っていると、スペース(ハードドロップ)でそのボタンが押されてしまうので外す
     unfocus();
@@ -739,7 +758,9 @@
     while (patches.length) { try { patches.pop()(); } catch (e) { console.warn(TAG, e); } }
     if (restore && snap) {
       try { injectAt(n, snap, snapFrame); } catch (e) { console.warn(TAG, 'restore failed', e); }
+      for (const x of partners) { try { if (alive(x.g)) injectAt(x.g, x.st, x.f); } catch (e) { console.warn(TAG, 'partner restore', e); } }
     }
+    partners = []; feedOrig = false;
     if (sp) {   // 練習を終えた: その修正は済んだことにして、修正の前の元の盤面から元のプレイを続ける
       n.__rpeSegPlay = null; n.__rpeWantPause = false; n.__rpeHoldT = 0;
       if (restore && n.__rpeSeg === sp) {
@@ -778,6 +799,7 @@
     const n = S.active;
     if (!n || !u) return;
     try { injectAt(n, u.state, u.frame); } catch (e) { console.warn(TAG, 'jump failed', e); }
+    if (u.ps) for (const x of u.ps) { try { if (alive(x.g)) injectAt(x.g, x.st, x.f); } catch (e) { } }
     n.gsm.setoptions.noreplay = true;
     applyHandling(n);
     placed = n.gsm.stats.piecesplaced || 0;
@@ -1124,6 +1146,8 @@
     if (n.__rpePlay) return;
     const esm = n.esm, fm = n.fm, siom = n.siom;
     const P = n.__rpePlay = { undo: [] };
+    // 元のプレイの状態(付けた時点)。修正の途中へシークしたとき、その修正の始まりの状態を作るのに使う
+    try { n.__rpeStart = { st: JSON.parse(JSON.stringify(siom.EjectState())), f: n.esm.frame }; } catch (x) { }
     const pull0 = esm.Pull, grav0 = fm.GetEffectiveGravity, inject0 = siom.InjectState, fin0 = esm.IsFinished;
     // トップアウト救済は死んだ所(リプレイの最後)の先まで続くことがある(REN の終わりまで)。その間はリプレイを終わらせない
     P.undo.push(swap(esm, 'IsFinished', function (...a) { const s = n.__rpeSeg; if (s && s.rescue && S.active !== n && this._frame <= s.end) return false; return fin0.apply(this, a); }));
@@ -1228,7 +1252,27 @@
         const e = !internal && S.active !== n && embedOf(n);
         if (e && !e.keep) {        // シーク: そこより前から始まる修正は済んだことにする(元のプレイ)
           const X = st && Number.isFinite(st.frame) ? st.frame : 0;
-          n.__rpeSeg = null; n.__rpeDoneSet = new Set(segsOf(e).filter(x => x.frame < X));
+          n.__rpeSeg = null; n.__rpeDoneSet = new Set(segsOf(e).filter(x => x.frame < X)); n.__rpeEmb = e;
+          // v5.04 (user: ren系のまねがうまく動かない(途中から直しを見た場合)): 修正の途中へシークしたら、その修正を
+          // 済んだことにせず、始まりの状態から修正のとおりに進めてそのフレームへ(以前は元のプレイが流れ、手本も元のプレイだった)
+          const mid = !simulating && segsOf(e).filter(x => !x.alt && x.frame < X && X <= x.end).pop();
+          if (mid) {
+            let st0 = stateOfSeg(mid);
+            const B = n.__rpeStart;
+            if (!st0 && B && B.f <= mid.frame) {
+              internal++; n.__rpeOrigOnly = true;
+              try { injectAt(n, B.st, B.f); fastRun(n, () => n.esm.frame < mid.frame); if (n.esm.frame === mid.frame) segState.set(mid, (st0 = JSON.parse(JSON.stringify(siom.EjectState())))); }
+              catch (y) { console.warn(TAG, 'seek seg start', y); st0 = null; } finally { n.__rpeOrigOnly = false; internal--; }
+            }
+            if (st0) {
+              internal++;
+              try {
+                n.__rpeDoneSet.delete(mid); n.__rpeSeg = mid; n.__rpeGrav = false; n.__rpeEmb = e;
+                injectAt(n, st0, mid.frame); fastRun(n, () => n.esm.frame < X);
+              } catch (y) { console.warn(TAG, 'seek into seg', y); n.__rpeSeg = null; n.__rpeDoneSet.add(mid); }
+              finally { internal--; }
+            } else if (!stateOfSeg(mid)) { try { inject0.call(this, st, ...r); } catch (y) { } }
+          }
           n.__rpeSegPlay = null; n.__rpeWantPause = false; n.__rpeHoldT = 0; n.gsm.pause = false; n.__rpeRescueHold = false; n.__rpeShowFor = null; n.__rpeAltWant = null; n.__rpeAltStart = null;
           const sp = n.__rpeSpd; if (sp) { if (n.lm.H.playbackSpeed === sp[1]) n.lm.H.playbackSpeed = sp[0]; n.__rpeSpd = null; }
         }
@@ -1790,7 +1834,11 @@
         while (!deadAt && !wrongAt && acc >= 1 / 60 && steps < 6) {
           acc -= 1 / 60; steps++;
           stepping = true; preClear = null;
-          try { n.lm.Update(); } finally { stepping = false; }
+          try {
+            n.lm.Update();
+            // 相手も同じフレームまでリプレイどおりに進める
+            for (const x of partners) { const g = x.g; if (!alive(g)) continue; for (let k = 0; k < 4 && g.esm.frame < n.esm.frame; k++) { const b = g.esm.frame; g.lm.Update(); if (g.esm.frame === b) break; } }
+          } finally { stepping = false; }
           if (pressKey) { try { const fp = n.gsm.falling; presses.push({ key: pressKey, type: String(fp.type || 'x'), cells: lockCells(n.fm, fp) }); } catch (e) { } pressKey = null; }
           const p = n.gsm.stats.piecesplaced || 0;
           if (p !== placed && !deadAt) {
@@ -1803,7 +1851,7 @@
             } else {
               // ミノを置いた: 次のミノが出たこの時点を、1手戻す先として積む(前の場面からの操作の記録も持つ)
               const prevLen = undo.reduce((s, u) => s + (u.seg ? u.seg.length : 0), 0);
-              try { undo.push({ state: n.siom.EjectState(), frame: n.esm.frame, pre: preClear, seg: rec.slice(prevLen), presses }); } catch (e) {}
+              try { undo.push({ state: n.siom.EjectState(), frame: n.esm.frame, pre: preClear, seg: rec.slice(prevLen), presses, ps: partners.length ? partners.map(x => ({ g: x.g, st: x.g.siom.EjectState(), f: x.g.esm.frame })) : null }); } catch (e) {}
               presses = [];
               if (undo.length > 300) { undo[2].seg = undo[1].seg.concat(undo[2].seg); undo.splice(1, 1); }
               redo = [];

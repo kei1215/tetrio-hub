@@ -1,8 +1,8 @@
-/* tetrio-patch a5.02 standalone Blob OFFLINE loader (30-day cache). Based on the v4.8233 loader. */
+/* tetrio-patch a5.04 standalone Blob OFFLINE loader (30-day cache). Based on the v4.8233 loader. */
 (() => {
   'use strict';
-  const VERSION = 'a5.02';
-  const CORE_VERSION = 'a5.02';   // client.patch.* (vO 4.8255 client, patched against the TETR.IO client of 2026-11-10)
+  const VERSION = 'a5.04';
+  const CORE_VERSION = 'a5.04';   // client.patch.* (vO 4.8255 client, patched against the TETR.IO client of 2026-11-10)
   const BASE = `https://kei1215.github.io/tetrio-hub/bookmarklets/offline-v${VERSION}/`;
   const CORE_BASE = `https://kei1215.github.io/tetrio-hub/bookmarklets/offline-v${CORE_VERSION}/`;
   const CACHE = `tetrio-patch-offline-v${VERSION}-hold1`;
