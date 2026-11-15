@@ -23,18 +23,21 @@ const { json, report } = await ccFix(src, user, bot, { thinkMs: Number(think), e
 console.log("time", ((Date.now() - t0) / 1000).toFixed(1) + "s");
 for (const r of report) console.log(JSON.stringify(r));
 fs.writeFileSync(outPath, JSON.stringify(json));
-// replay check: what the replay edit plays (keep = original non-key events + embedded keys)
+// replay check: each fix = the original up to its frame, then only the embedded keys
 const p = parseReplayFile(structuredClone(json));
 p.rounds.forEach((round, ri) => {
   const pl = round.find((x) => x.username.toLowerCase() === user.toLowerCase());
   const em = pl && pl.replay.results && pl.replay.results[EMB];
   if (!em) return;
-  const rep = structuredClone(pl.replay);
-  rep.events = rep.events.filter((e) => e.type !== "keydown" && e.type !== "keyup")
-    .concat(em.events.map((x) => ({ frame: x.f, type: x.t === "d" ? "keydown" : "keyup", data: { key: x.k, subframe: x.s || 0 } })))
-    .sort((a, b) => a.frame - b.frame);
-  const s = new PlayerSim(rep, pl);
-  while (!s.finished && !(s.engine.toppedOut)) s.step();
-  const rr = report.find((x) => x.round === ri);
-  console.log("round", ri, "replayed pieces", s.engine.stats.pieces, "attack", s.locks.reduce((a, l) => a + (l.res.rawGarbage || []).reduce((x, y) => x + y, 0), 0), "fix said attack", rr.attack);
+  for (const sg of em.segs || [em]) {
+    const rep = structuredClone(pl.replay);
+    if (sg.keep) rep.events = rep.events.filter((e) => e.type !== "keydown" && e.type !== "keyup");
+    const s = new PlayerSim(rep, pl);
+    while (s.frame < sg.frame) s.step();
+    if (!sg.keep) for (const f of [...s.byFrame.keys()]) if (f >= sg.frame) s.byFrame.delete(f);
+    for (const x of sg.events) { let l = s.byFrame.get(x.f); if (!l) s.byFrame.set(x.f, (l = [])); l.push({ frame: x.f, type: x.t === "d" ? "keydown" : "keyup", data: { key: x.k, subframe: x.s || 0 } }); }
+    let atk = 0; s.onLock = (r) => { atk += (r.rawGarbage || []).reduce((a, b) => a + b, 0); };
+    while (!s.finished && s.frame <= sg.end) s.step();
+    console.log("round", ri, "fix @", sg.frame, "-", sg.end, "replayed attack", atk, "fix said", sg.cc ?? "-", "player", sg.orig ?? "-");
+  }
 });

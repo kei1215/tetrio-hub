@@ -143,11 +143,14 @@
   const embedRaw = n => {
     try {
       const r = n.esm.replay, e = r && r.results && r.results[EMB];
-      return e && e.v === 1 && Number.isFinite(e.frame) && Number.isFinite(e.end) && (e.state || e.frame === 0) && Array.isArray(e.events) ? e : null;
+      return e && e.v === 1 && Number.isFinite(e.frame) && Number.isFinite(e.end) && (e.state || e.frame === 0 || e.lazy) && Array.isArray(e.events) ? e : null;
     } catch (x) { return null; }
   };
   const embedOf = n => S.embMode === 'orig' ? null : embedRaw(n);
   // 手で直した修正は1つのリプレイに何か所でも入れられる(segs)。それぞれ、そこに来たら修正を見せ、終わったら元のプレイに戻る
+  // lazy の修正(CC 盤面修正の弱い所)は状態を持たない: 再生がそこに来たとき(元のプレイの状態)を取っておく
+  const segState = new WeakMap();
+  const stateOfSeg = s => (s && (s.state || segState.get(s))) || null;
   const segsOf = e => (e && Array.isArray(e.segs) && e.segs.length ? e.segs : e ? [e] : []);
   S.embedFrame = n => { const e = n && embedOf(n); return !e ? null : e.keep ? e.frame : n.__rpeSeg ? n.__rpeSeg.frame : null; };   // スピンカウンターが使う
   S.practiceTargets = () => targets;   // 確認用(マネ練習の手本)
@@ -352,7 +355,7 @@
     const end = n.esm.frame;
     let ed = { v: 1, frame: snapFrame, end, state: JSON.parse(JSON.stringify(undo[0].state)), events: rec.slice() };
     if (editBase && snapFrame >= editBase.frame) {
-      ed = { v: 1, frame: editBase.frame, end, state: editBase.state, events: editBase.events.filter(e => e.f < snapFrame).concat(ed.events) };
+      ed = { v: 1, frame: editBase.frame, end, state: stateOfSeg(editBase) || JSON.parse(JSON.stringify(undo[0].state)), events: editBase.events.filter(e => e.f < snapFrame).concat(ed.events) };
       // 操作中は元のおじゃまを流さないので、keep(CC 盤面修正)は止めた場面までにする
       if (editBase.keep) { ed.keep = true; ed.keepUntil = Math.min(snapFrame, editBase.keepUntil ?? Infinity); if (editBase.by) ed.by = editBase.by; }
     }
@@ -738,12 +741,14 @@
         if (!s) {
           s = segsOf(e).find(x => x.frame === f && !(n.__rpeDoneSet && n.__rpeDoneSet.has(x)));
           if (!s) return pull0.call(this);
-          n.__rpeSeg = s; n.__rpeGrav = false; injectAt(n, s.state, f);
+          n.__rpeSeg = s; n.__rpeGrav = false;
+          if (s.state) injectAt(n, s.state, f);
+          else { try { segState.set(s, JSON.parse(JSON.stringify(siom.EjectState()))); } catch (x) { } }
         }
         if (f > s.end) {           // 修正が終わった: 止めた場面に戻して、次の修正か試合の終わりまで元のプレイ
           (n.__rpeDoneSet || (n.__rpeDoneSet = new Set())).add(s);
           n.__rpeSeg = null; n.__rpeGrav = false;
-          injectAt(n, s.state, s.frame);
+          const st0 = stateOfSeg(s); if (st0) injectAt(n, st0, s.frame);
           return pull0.call(this);
         }
         for (const ev of eventsAt(s, f)) {
@@ -792,7 +797,8 @@
   // ・手で直した修正(keep なし): 修正を見せている間は相手の時間を止め(止めた場面の状態を取っておく)、終わったらそこへ戻して続ける
   // ・CC 盤面修正(keep + sends): 相手は止めずに動かし、元の相手が受けた「直した側からのおじゃま」の代わりに、
   //   CC が送った火力(sends: [frame, 量, ackiid])をおじゃまとして届ける(本当の対戦と同じく 20F 後に予告、30F 後に確定)
-  const ownerOf = g => games.find(x => x !== g && x.__rpePlay && embedOf(x));   // 直している最中も相手は止めたまま
+  // 直している最中も相手は止めたまま。前のラウンド・前に開いたリプレイのゲームは数えない(いちばん新しい生きているもの)
+  const ownerOf = g => { for (let i = games.length - 1; i >= 0; i--) { const x = games[i]; if (x !== g && x.__rpePlay && alive(x) && embedOf(x)) return x; } return null; };
   const gidOf = n => { try { return n.esm.replay.options.gameid; } catch (x) { return undefined; } };
   const sendIndex = new WeakMap();
   const sendsAt = (e, f) => {

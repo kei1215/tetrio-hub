@@ -73,10 +73,12 @@ function open() {
 <label>リプレイ(.ttr / .ttrm)</label><input data-k="file" type="file" accept=".ttr,.ttrm,.json">
 <label>直すプレイヤー</label><select data-k="user"></select>
 <label>AI</label><select data-k="engine">${Object.entries(ENGINES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join("")}</select>
+<label>直し方</label><select data-k="mode"><option value="weak">弱い所だけ(火力が出ていない所・REN/QUAD を見直し、何か所でも)</option><option value="all">全部 AI が置き直す</option></select>
 <label>1手の考える時間(ミリ秒)</label><input data-k="ms" type="number" min="20" max="3000" value="150">
 <div class="row"><button data-a="go" disabled>作る</button><button data-a="close">閉じる</button></div>
 <div class="s"></div>
-<div class="n">相手の記録と受けたおじゃまは元のまま、選んだプレイヤーの置き方だけ AI のものになります。ミノを置く速さは元のプレイヤーと同じです。
+<div class="n">弱い所だけ:プレイヤーの置き方はそのままで、10手ずつ見て、火力が平均より出ていない所や REN・QUAD の所を AI が同じミノで置き直し、火力が 2 以上増えた所だけを修正にします。再生ではその所に来ると修正を見せ(相手は止まる)、終わると元のプレイに戻ります。
+全部:最初から最後まで AI が置き直します(相手は動き、AI の火力が届きます)。ミノを置く速さは元のプレイヤーと同じです。
 開くには CONFIG の REPLAY BOARD EDIT を ON にして、パネルの「埋め込みの再生」で 修正後 / 元の版 を切り替えます(マネ練習はどちらでも使えます)。</div>`;
   document.body.appendChild(root);
   const $ = (q) => root.querySelector(q), status = (t) => { $(".s").textContent = t; };
@@ -105,8 +107,8 @@ function open() {
       const ms = Math.max(20, Math.min(3000, Number($('[data-k="ms"]').value) || 150));
       const idle = () => new Promise((r) => setTimeout(r, 0));
       const { json, report } = await ccFix(text, user, bot, {
-        thinkMs: ms, engineId: id, idle,
-        onProgress: (p) => status(`ラウンド ${p.round + 1}/${p.rounds}  ${p.pieces} 手目  (${Math.round(p.frame / Math.max(1, p.end) * 100)}%)`),
+        thinkMs: ms, engineId: id, idle, mode: $('[data-k="mode"]').value,
+        onProgress: (p) => status(`ラウンド ${p.round + 1}/${p.rounds}  ` + (p.spots ? `候補 ${p.spot}/${p.spots}  ` : "") + `${p.pieces} 手目`),
       });
       const m = /^(.*?)(\.ttrm|\.ttr|\.json)?$/i.exec(name);
       const out = m[1] + "-" + id + (m[2] && m[2] !== ".json" ? m[2] : ".ttrm");
@@ -114,7 +116,8 @@ function open() {
       a.href = URL.createObjectURL(new Blob([JSON.stringify(json)], { type: "application/json" }));
       a.download = out; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-      const sum = report.map((r) => `R${r.round + 1}: ${r.pieces} 手 / 置けた ${r.matched} / 火力 ${r.attack}${r.topout ? " / 窒息" : ""}`).join("\n");
+      const sum = report.map((r) => r.fixed ? `R${r.round + 1}: 修正 ${r.fixed.length} か所` + r.fixed.map((x) => `\n  ${x.piece} 手目から 火力 ${x.orig} → ${x.cc}${x.ren ? " (REN)" : ""}${x.quad ? " (QUAD)" : ""}`).join("")
+        : `R${r.round + 1}: ${r.pieces} 手 / 置けた ${r.matched} / 火力 ${r.attack}${r.topout ? " / 窒息" : ""}`).join("\n");
       status(`保存しました: ${out}(${((performance.now() - t0) / 1000).toFixed(0)} 秒)\n${sum}`);
     } catch (err) { console.warn("[cc fix]", err); status("できませんでした: " + (err.message || err)); }
     busy = false; $('[data-a="go"]').disabled = false;

@@ -53,10 +53,19 @@ async function fixOne(info, rep, bot, opt, T) {
   const endFrame = s0.endFrame;
   const gaps = lockFrames.slice(1).map((f, i) => f - lockFrames[i]);
   const avgGap = gaps.length ? Math.max(4, Math.round(gaps.reduce((a, b) => a + b, 0) / gaps.length)) : 20;
-  // pass 2: same replay without its keys; ours go in frame by frame
+  // pass 2: same replay without its keys; ours go in frame by frame.
+  // range {F, K} (weak spot): the original runs up to frame F, then K pieces are the AI's and nothing
+  // else of the original is played (the replay edit plays such a segment without the original's events).
+  const range = opt.range || null;
   const r2 = structuredClone(rep);
-  r2.events = r2.events.filter((e) => !KEY.has(e.type));
+  if (!range) r2.events = r2.events.filter((e) => !KEY.has(e.type));
   const sim = new PlayerSim(r2, info), e = sim.engine;
+  let pieceStart = 0;
+  if (range) {
+    while (sim.frame < range.F && !sim.finished) sim.step();
+    for (const f of [...sim.byFrame.keys()]) if (f >= range.F) sim.byFrame.delete(f);
+    pieceStart = e.stats.pieces;
+  }
   const out = [], stat = { pieces: 0, planned: 0, matched: 0, miss: 0, noplan: 0, attack: 0, topout: false };
   let lockRes = null;
   // CC's sent garbage (after cancelling), for the opponent's board in the replay edit:
@@ -121,7 +130,7 @@ async function fixOne(info, rep, bot, opt, T) {
 
   let plan = null, keys = null, target = null, want = null, sd = false, pieceAt = -1;
   const idleTo = (f) => { while (sim.frame < f && !sim.finished) sim.step(); };
-  idleTo(firstKey);
+  if (!range) idleTo(firstKey);
   while (!sim.finished) {
     if (lockRes) {
       if (want && sim.lastLock && ckey(sim.lastLock.cells || []) === ckey(want)) stat.matched++;
@@ -131,6 +140,7 @@ async function fixOne(info, rep, bot, opt, T) {
       lockRes = null;
     }
     if (stat.topout) break;
+    if (range && e.stats.pieces - pieceStart >= range.K) break;
     const n = e.stats.pieces;
     if (n !== pieceAt) {
       // a new piece: ask the AI (the board does not change until this piece locks)
@@ -166,8 +176,45 @@ async function fixOne(info, rep, bot, opt, T) {
     push("keydown", k); push("keyup", k, 0.5); keys.shift();
     sim.step();
   }
+  if (range) return { seg: { v: 1, frame: range.F, end: sim.frame, state: null, lazy: true, by: opt.engineId || "cc", events: out }, stat };
   const end = stat.topout ? sim.frame : endFrame;
   return { embed: { v: 1, frame: 0, end, state: null, keep: true, by: opt.engineId || "cc", events: out, sends }, stat };
+}
+
+// The original line piece by piece: lock frame, attack, clear, and the first frame after each lock
+// with no key held (a fix starts there, so nothing held carries into it).
+function analyze(info, rep) {
+  const s = new PlayerSim(structuredClone(rep), info), locks = [];
+  s.onLock = (r, f) => locks.push({ f, atk: (r.rawGarbage || []).reduce((a, b) => a + b, 0), lines: r.lines || 0, spin: r.spin || "none", combo: r.stats?.combo || 0 });
+  while (!s.finished) s.step();
+  const keys = rep.events.filter((x) => KEY.has(x.type)).sort((a, b) => a.frame - b.frame || (a.data?.subframe || 0) - (b.data?.subframe || 0));
+  const held = new Set(); let k = 0;
+  const freeAfter = locks.map(() => null);
+  for (let i = 0; i < locks.length; i++) {
+    const lim = i + 1 < locks.length ? locks[i + 1].f : s.endFrame;
+    for (let f = locks[i].f + 1; f < lim; f++) {
+      while (k < keys.length && keys[k].frame < f) { const x = keys[k++]; if (x.type === "keydown") held.add(x.data.key); else held.delete(x.data.key); }
+      if (!held.size) { freeAfter[i] = f; break; }
+    }
+  }
+  return { locks, freeAfter, endFrame: s.endFrame };
+}
+
+// Candidate spots: the game cut into stretches of W pieces. A stretch is tried when its attack per
+// piece is under 80% of the player's average (it pulls the average APM down) or it has a REN (combo 2+)
+// or a QUAD (those get a second look). The caller keeps a stretch only when the AI does clearly better.
+function weakSpots(an, W, max) {
+  const a = an.locks.map((l) => l.atk), n = a.length;
+  if (n < W + 2) return [];
+  const avg = a.reduce((x, y) => x + y, 0) / n, out = [];
+  for (let i = 1; i + 3 <= n && out.length < max; i += W) {
+    let s = i; while (s < i + W && an.freeAfter[s - 1] == null) s++;
+    const K = Math.min(W, n - s); if (K < 3 || an.freeAfter[s - 1] == null) continue;
+    const L = an.locks.slice(s, s + K), sum = L.reduce((x, l) => x + l.atk, 0);
+    const ren = L.some((l) => l.combo >= 2), quad = L.some((l) => l.lines >= 4);
+    if (sum / K < avg * 0.8 || ren || quad) out.push({ i: s, sum, avg, F: an.freeAfter[s - 1], K, ren, quad });
+  }
+  return out;
 }
 
 /**
@@ -177,7 +224,7 @@ async function fixOne(info, rep, bot, opt, T) {
  */
 export async function ccFix(json, username, bot, opt = {}) {
   const j = structuredClone(typeof json === "string" ? JSON.parse(json) : json);
-  const o = { thinkMs: 150, sliceMs: 20, idle: async () => {}, ...opt };
+  const o = { thinkMs: 150, sliceMs: 20, idle: async () => {}, mode: "weak", ...opt };
   const p = parseReplayFile(structuredClone(j));
   const report = [];
   let found = 0;
@@ -189,10 +236,24 @@ export async function ccFix(json, username, bot, opt = {}) {
     if (!ref || !Array.isArray(pl.replay.events)) continue;
     const T = tables(pl.replay.options?.kickset);
     const prog = o.onProgress;
-    const { embed, stat } = await fixOne(pl, pl.replay, bot, { ...o, onProgress: prog && ((x) => prog({ ...x, round: ri, rounds: p.rounds.length })) }, T);
     if (!ref.results || typeof ref.results !== "object") ref.results = {};
-    ref.results[EMB] = embed;
-    report.push({ round: ri, ...stat, events: embed.events.length });
+    if (o.mode === "all") {
+      const { embed, stat } = await fixOne(pl, pl.replay, bot, { ...o, onProgress: prog && ((x) => prog({ ...x, round: ri, rounds: p.rounds.length })) }, T);
+      ref.results[EMB] = embed;
+      report.push({ round: ri, ...stat, events: embed.events.length });
+      continue;
+    }
+    // weak spots only: the player's own play stays; each spot is a fix the replay edit inserts there
+    const an = analyze(pl, pl.replay), spots = weakSpots(an, o.window || 10, o.maxSpots || 30), segs = [], kept = [];
+    for (let si = 0; si < spots.length; si++) {
+      const sp = spots[si];
+      const { seg, stat } = await fixOne(pl, pl.replay, bot, { ...o, range: sp, onProgress: prog && ((x) => prog({ ...x, round: ri, rounds: p.rounds.length, spot: si + 1, spots: spots.length })) }, T);
+      // used only when the AI attacks more than the player did with the same pieces
+      if (!stat.topout && stat.attack >= sp.sum + (o.minGain ?? 2)) { segs.push({ ...seg, orig: sp.sum, cc: stat.attack }); kept.push({ piece: sp.i + 1, frame: sp.F, orig: sp.sum, cc: stat.attack, ren: sp.ren, quad: sp.quad }); }
+    }
+    if (segs.length) ref.results[EMB] = { ...segs[0], segs };
+    else delete ref.results[EMB];
+    report.push({ round: ri, spots: spots.length, fixed: kept });
   }
   if (!found) throw new Error("このリプレイに「" + username + "」はいません");
   return { json: j, report };
