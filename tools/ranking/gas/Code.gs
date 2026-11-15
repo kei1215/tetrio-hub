@@ -1,36 +1,56 @@
 // QP PB ランキングの受付窓口(Google Apps Script のウェブアプリ)。
 // ゲーム内の「ランキングに送る」→ doPost が記録と TTR を受け取る。
+//  ・記録はスプレッドシート「QP PB ranking」に1行ずつ残す(user: すぷ氏にでもまとめてほしい)。消さない
 //  ・スクリプト プロパティ DISCORD_WEBHOOK があれば、その場で Discord に順位・記録・TTR を投稿する(user: discordへの投稿はGASから)
-//  ・なければ TTR を Google ドライブに一時保存し、GitHub Actions が Discord に投稿する
-// ランキングページは開くたびに doGet(?list=1)で受付一覧を読み、まだ records.json にない記録もすぐ表に出す。
-// GitHub Actions(pb-collect.yml)が受付を records.json に移す。受付は3日で消える(取り込み済みかは id で判断)。
+//  ・なければ TTR を Google ドライブ「qp-pb-queue」に置き、GitHub Actions が Discord に投稿する
+// ランキングページは開くたびに doGet(?list=1)で一覧を読み、まだ records.json にない記録もすぐ表に出す。
+// GitHub Actions(pb-collect.yml)が一覧を records.json に移す(取り込み済みかは id で判断)。
 const RECORDS = 'https://kei1215.github.io/tetrio-hub/ranking/data/records.json';
 const MODS = ['expert', 'nohold', 'messy', 'gravity', 'volatile', 'doublehole', 'invisible', 'allspin', 'duo'];
 const TTR_MAX = 9.5 * 1024 * 1024; // Discord の添付の上限(10MB)に収める
-const KEEP_MS = 3 * 24 * 3600 * 1000;
 const FOLDER = 'qp-pb-queue';
+const HEAD = ['id', '受付日時', '名前', 'モード', '高さ(m)', 'フロア', 'MOD', '10F相当', '猶予', 'HYPERSPEED', 'テスト', 'リバイブ', 'APM', 'PPS', 'Discord メッセージ', 'TTR(Discord)', '記録データ(JSON)'];
 
 function out(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 function num(v, lo, hi) { const n = Number(v); return isFinite(n) && n >= lo && n <= hi ? n : null; }
 function folder() { const it = DriveApp.getFoldersByName(FOLDER); return it.hasNext() ? it.next() : DriveApp.createFolder(FOLDER); }
+function sheet() {
+  const props = PropertiesService.getScriptProperties();
+  let id = props.getProperty('SHEET_ID'), ss = null;
+  if (id) { try { ss = SpreadsheetApp.openById(id); } catch (x) { ss = null; } }
+  if (!ss) { ss = SpreadsheetApp.create('QP PB ranking'); props.setProperty('SHEET_ID', ss.getId()); }
+  const sh = ss.getSheets()[0];
+  if (sh.getLastRow() === 0) { sh.appendRow(HEAD); sh.setFrozenRows(1); }
+  return sh;
+}
+function addRow(id, d, discord) {
+  sheet().appendRow([String(id), new Date(id), d.name, d.mode, Number(d.altitude), Number(d.floor), (d.mods || []).join(' '), d.floor10 ? 'あり' : '', d.floor10 ? (d.lull === false ? 'なし' : 'あり') : '',
+    d.hyper ? 'あり' : '', d.test || 'solo', Number(d.revives) || 0, Number(d.apm) || 0, Number(d.pps) || 0, discord ? discord.message : '', discord && discord.url ? discord.url : '', JSON.stringify(d)]);
+}
 
-// 初回だけエディタで実行して、ドライブの権限を許可する
-function setup() { folder(); prune(); Logger.log('ok'); }
-
-function prune() {
-  const props = PropertiesService.getScriptProperties(), all = props.getProperties(), now = Date.now();
-  Object.keys(all).forEach(function (k) { if (k.indexOf('q:') === 0 && now - Number(k.slice(2)) > KEEP_MS) props.deleteProperty(k); });
-  const files = folder().getFiles();
-  while (files.hasNext()) { const f = files.next(); if (now - f.getDateCreated().getTime() > KEEP_MS) f.setTrashed(true); }
+// エディタで1回実行: 権限の許可・スプレッドシート作成・前の受付(スクリプト プロパティ q:…)をシートへ移す
+function setup() {
+  folder();
+  const sh = sheet(), props = PropertiesService.getScriptProperties(), all = props.getProperties();
+  const have = {}; sh.getDataRange().getValues().slice(1).forEach(function (r) { have[String(r[0])] = 1; });
+  Object.keys(all).filter(function (k) { return k.indexOf('q:') === 0; }).sort().forEach(function (k) {
+    const id = k.slice(2), v = JSON.parse(all[k]), d = v && v.record ? v.record : v;
+    if (!have[id]) addRow(Number(id), d, v && v.discord);
+    props.deleteProperty(k);
+  });
+  Logger.log('ok: ' + sh.getParent().getUrl());
 }
 
 function doGet(e) {
   const p = (e && e.parameter) || {};
   if (p.list) {
-    const all = PropertiesService.getScriptProperties().getProperties();
-    const items = Object.keys(all).filter(function (k) { return k.indexOf('q:') === 0; }).map(function (k) { const v = JSON.parse(all[k]); return v && v.record ? { id: Number(k.slice(2)), record: v.record, discord: v.discord || null } : { id: Number(k.slice(2)), record: v }; });
-    items.sort(function (a, b) { return a.id - b.id; });
-    return out({ ok: true, items: items });
+    const rows = sheet().getDataRange().getValues().slice(1);
+    const items = [];
+    rows.forEach(function (r) {
+      let d = null; try { d = JSON.parse(r[16]); } catch (x) {}
+      if (d) items.push({ id: Number(r[0]), record: d, discord: r[14] ? { message: String(r[14]), url: r[15] || null } : null });
+    });
+    return out({ ok: true, items: items.slice(-1000) });
   }
   if (p.ttr && /^\d{13}$/.test(p.ttr)) {
     const it = folder().getFilesByName(p.ttr + '.ttr');
@@ -62,7 +82,6 @@ function doPost(e) {
     if (n >= 30) return out({ ok: false, text: '送信が混んでいます。少し待ってから送ってください' });
     if (cache.get(nk)) return out({ ok: false, text: '続けて送れません。1分待ってください' });
     cache.put(slot, String(n + 1), 700); cache.put(nk, '1', 60);
-    prune();
 
     // 今の順位の目安(総合: 同じモード・ソロ・BOT なし・1人1記録)
     let rank = null;
@@ -85,9 +104,7 @@ function doPost(e) {
       if (dr.getResponseCode() < 300) { const m = JSON.parse(dr.getContentText()); item.discord = { message: String(m.id), url: m.attachments && m.attachments[0] ? m.attachments[0].url : null }; }
     }
     if (!item.discord) folder().createFile(id + '.ttr', ttr, 'application/json');
-    const rec = JSON.stringify(item);
-    if (rec.length > 8000) return out({ ok: false, text: '記録データが大きすぎます' });
-    PropertiesService.getScriptProperties().setProperty('q:' + id, rec);
+    addRow(id, d, item.discord);
     return out({ ok: true, rank: rank, text: '送りました: ' + (rank ? '#' + rank + ' ' : '') + name + ' ' + Number(d.altitude).toFixed(1) + 'm\nランキングにすぐ載ります' });
   } catch (x) {
     return out({ ok: false, text: '受付でエラー: ' + String(x).slice(0, 200) });
