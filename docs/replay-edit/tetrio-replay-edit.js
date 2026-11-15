@@ -802,6 +802,8 @@
     if (n.__rpePlay) return;
     const esm = n.esm, fm = n.fm, siom = n.siom;
     const P = n.__rpePlay = { undo: [] };
+    // 元のプレイの状態(付けた時点)。修正の途中へシークしたとき、その修正の始まりの状態を作るのに使う
+    try { n.__rpeStart = { st: JSON.parse(JSON.stringify(siom.EjectState())), f: n.esm.frame }; } catch (x) { }
     const pull0 = esm.Pull, grav0 = fm.GetEffectiveGravity, inject0 = siom.InjectState, fin0 = esm.IsFinished;
     // トップアウト救済は死んだ所(リプレイの最後)の先まで続くことがある(REN の終わりまで)。その間はリプレイを終わらせない
     P.undo.push(swap(esm, 'IsFinished', function (...a) { const s = n.__rpeSeg; if (s && s.rescue && S.active !== n && this._frame <= s.end) return false; return fin0.apply(this, a); }));
@@ -906,7 +908,27 @@
         const e = !internal && S.active !== n && embedOf(n);
         if (e && !e.keep) {        // シーク: そこより前から始まる修正は済んだことにする(元のプレイ)
           const X = st && Number.isFinite(st.frame) ? st.frame : 0;
-          n.__rpeSeg = null; n.__rpeDoneSet = new Set(segsOf(e).filter(x => x.frame < X));
+          n.__rpeSeg = null; n.__rpeDoneSet = new Set(segsOf(e).filter(x => x.frame < X)); n.__rpeEmb = e;
+          // v5.04 (user: ren系のまねがうまく動かない(途中から直しを見た場合)): 修正の途中へシークしたら、その修正を
+          // 済んだことにせず、始まりの状態から修正のとおりに進めてそのフレームへ(以前は元のプレイが流れ、手本も元のプレイだった)
+          const mid = !simulating && segsOf(e).filter(x => !x.alt && x.frame < X && X <= x.end).pop();
+          if (mid) {
+            let st0 = stateOfSeg(mid);
+            const B = n.__rpeStart;
+            if (!st0 && B && B.f <= mid.frame) {
+              internal++; n.__rpeOrigOnly = true;
+              try { injectAt(n, B.st, B.f); fastRun(n, () => n.esm.frame < mid.frame); if (n.esm.frame === mid.frame) segState.set(mid, (st0 = JSON.parse(JSON.stringify(siom.EjectState())))); }
+              catch (y) { console.warn(TAG, 'seek seg start', y); st0 = null; } finally { n.__rpeOrigOnly = false; internal--; }
+            }
+            if (st0) {
+              internal++;
+              try {
+                n.__rpeDoneSet.delete(mid); n.__rpeSeg = mid; n.__rpeGrav = false; n.__rpeEmb = e;
+                injectAt(n, st0, mid.frame); fastRun(n, () => n.esm.frame < X);
+              } catch (y) { console.warn(TAG, 'seek into seg', y); n.__rpeSeg = null; n.__rpeDoneSet.add(mid); }
+              finally { internal--; }
+            } else if (!stateOfSeg(mid)) { try { inject0.call(this, st, ...r); } catch (y) { } }
+          }
           n.__rpeSegPlay = null; n.__rpeWantPause = false; n.__rpeHoldT = 0; n.gsm.pause = false; n.__rpeRescueHold = false; n.__rpeShowFor = null; n.__rpeAltWant = null; n.__rpeAltStart = null;
           const sp = n.__rpeSpd; if (sp) { if (n.lm.H.playbackSpeed === sp[1]) n.lm.H.playbackSpeed = sp[0]; n.__rpeSpd = null; }
         }
