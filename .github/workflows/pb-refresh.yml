@@ -1,0 +1,35 @@
+name: PB ranking replay links
+# Discord の CDN の URL(約1日で切れる)を6時間ごとに新しくする
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: pb-ranking
+  cancel-in-progress: false
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refresh
+        id: r
+        uses: actions/github-script@v7
+        env:
+          PB_DISCORD_WEBHOOK: ${{ secrets.PB_DISCORD_WEBHOOK }}
+        with:
+          script: |
+            const n = await require('./.github/scripts/pb-refresh.js')();
+            core.info('updated ' + n);
+            core.setOutput('n', String(n));
+      - name: Commit
+        if: steps.r.outputs.n != '0'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add docs/ranking/data/records.json
+          git commit -m "PB ranking: refresh replay links" || exit 0
+          git pull --rebase origin main
+          git push origin HEAD:main

@@ -47,8 +47,8 @@
   <section class="my-5">
     <p class="text-uppercase text-primary fw-bold mb-2">QP OFFLINE</p>
     <h1 class="display-5 fw-bold">QP PB ランキング</h1>
-    <p class="lead">QP OFFLINE(パッチ・ブックマークレット)で出した記録のランキングです。1人1記録(各ランキングでいちばん高いもの)を高度順に並べます。</p>
-    <p>登録のしかた: オフラインの記録一覧で、記録の「ランキングに送る」を押すと登録ページが開きます。そのまま送ると自動で載ります(GitHub のアカウントが必要です)。記録は自己申告です。</p>
+    <p class="lead">QP OFFLINE(パッチ・ブックマークレット)で出した記録のランキングです。1人1記録(各ランキングでいちばん高いもの)を高さ順に並べます。上位3人はリプレイを見られます。</p>
+    <p>登録のしかた: オフライン(アプリ版・ブラウザ版)の記録一覧で、記録の「ランキングに送る」を押します。確認のあと、記録とリプレイがそのまま送られ、数分で載ります(アカウントは要りません)。送れないときは GitHub の登録ページが開くので、保存されたリプレイ(.ttr.json)を「リプレイ」欄にドラッグして送ってください。記録は自己申告です。</p>
   </section>
   <section class="card shadow-sm mb-4"><div class="card-body p-4">
     <div class="rk-tabs" role="tablist" id="tabs"></div>
@@ -66,7 +66,7 @@
 (() => {
   const MODS = [['expert','EXPERT'],['nohold','NO HOLD'],['messy','MESSY'],['gravity','GRAVITY'],['volatile','VOLATILE'],['doublehole','DOUBLE HOLE'],['invisible','INVISIBLE'],['allspin','ALL-SPIN'],['duo','DUO']];
   const modName = m => { const base = m.replace(/_reversed$/, ''), n = (MODS.find(x => x[0] === base) || [base, base.toUpperCase()])[1]; return m.endsWith('_reversed') ? '裏' + n : n; };
-  const TABS = [['all','総合'],['nomod','MODなし'],['mod','MOD別'],['combo','組み合わせ別'],['floor10','10F相当'],['revive','リバイブ回数']];
+  const TABS = [['all','総合'],['nomod','MODなし'],['mod','MOD別'],['combo','組み合わせ別'],['floor10','10F相当'],['floor10lull','10F相当(猶予あり)'],['floor10nolull','10F相当(猶予なし)'],['hyper','HYPERSPEED'],['revive','リバイブ回数']];
   let records = [], tab = 'all';
   const $ = id => document.getElementById(id);
   const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
@@ -83,34 +83,42 @@
     const t = el('table', null, 'rk-table'), head = t.createTHead().insertRow();
     for (const [label, , cls] of cols) { const th = el('th', label); if (cls) th.className = cls; head.appendChild(th); }
     const body = t.createTBody();
-    list.forEach((r, i) => { const row = body.insertRow(); for (const [, get, cls] of cols) { const td = row.insertCell(); const v = get(r, i); td.textContent = v; if (cls) td.className = cls; } });
+    list.forEach((r, i) => { const row = body.insertRow(); for (const [, get, cls] of cols) { const td = row.insertCell(); const v = get(r, i); if (cls === 'replay') { if (v && /^https:\/\/(cdn|media)\.discordapp\.(com|net)\/attachments\//.test(v)) { const a = el('a', '↓ TTR'); a.href = v; a.rel = 'noopener'; a.target = '_blank'; td.appendChild(a); } } else td.textContent = v; if (cls && cls !== 'replay') td.className = cls; } });
     return t;
   };
-  const COLS = [['#', (r, i) => i + 1, 'num'], ['名前', r => r.name + (r.bot ? ' (BOT' + (r.engine ? ' ' + r.engine : '') + ')' : '')], ['高度', r => r.altitude.toFixed(1) + ' m', 'num'], ['F', r => r.floor, 'num'],
-    ['リバイブ', r => r.revives, 'num'], ['時間', r => fmtTime(r.time), 'num'], ['APM', r => r.apm || '-', 'num'], ['PPS', r => r.pps || '-', 'num'], ['MOD', r => r.mods.map(modName).join(' ') || '-', 'rk-mods'], ['日付', r => (r.date || r.added || '').slice(0, 10)]];
+  // 表は順位・名前・高さだけ(user: top3のリプレイと高さのみ表示)。上位3人は Discord に保存したリプレイ(.ttr)へのリンク
+  const replayCell = (r, i) => i < 3 && r.replayUrl ? r.replayUrl : '';
+  const COLS = [['#', (r, i) => i + 1, 'num'], ['名前', r => r.name + (r.bot ? ' (BOT' + (r.engine ? ' ' + r.engine : '') + ')' : '')], ['高さ', r => r.altitude.toFixed(1) + ' m', 'num'], ['リプレイ', replayCell, 'replay']];
   const render = () => {
-    const out = $('out'); out.replaceChildren(); $('modPick').hidden = tab !== 'mod';
+    const out = $('out'); out.replaceChildren(); $('modPick').hidden = tab !== 'mod' && tab !== 'hyper';
     const list = base();
     if (tab === 'all') out.appendChild(table(best(list), COLS));
     else if (tab === 'nomod') out.appendChild(table(best(list.filter(r => !r.mods.length && !r.floor10)), COLS));
-    else if (tab === 'mod') { const m = $('fMod').value; out.appendChild(table(best(list.filter(r => r.mods.includes(m))), COLS)); }
+    else if (tab === 'mod') { const m = $('fMod').value; out.appendChild(table(best(list.filter(r => m === '-' ? !r.mods.length : r.mods.includes(m))), COLS)); }
+    // HYPERSPEED: MOD ごと(user: hyperspeedはmodごとに作ってほしい)
+    else if (tab === 'hyper') { const m = $('fMod').value; out.appendChild(table(best(list.filter(r => r.hyper && (m === '-' ? !r.mods.length : r.mods.includes(m)))), COLS)); }
     else if (tab === 'floor10') out.appendChild(table(best(list.filter(r => r.floor10)), COLS));
-    else if (tab === 'revive') out.appendChild(table(best(list, r => r.revives * 1e6 + r.altitude), [COLS[0], COLS[1], ['リバイブ', r => r.revives, 'num'], COLS[2], COLS[3], COLS[8], COLS[9]]));
+    // 猶予あり = 火力が来ない時間(まれに最大10秒)を入れた記録、猶予なし = 入れない今までの間隔
+    else if (tab === 'floor10lull') out.appendChild(table(best(list.filter(r => r.floor10 && r.lull !== false)), COLS));
+    else if (tab === 'floor10nolull') out.appendChild(table(best(list.filter(r => r.floor10 && r.lull === false)), COLS));
+    else if (tab === 'revive') out.appendChild(table(best(list, r => r.revives * 1e6 + r.altitude), [COLS[0], COLS[1], ['リバイブ', r => r.revives + ' 回', 'num'], COLS[2], COLS[3]]));
     else if (tab === 'combo') {
       // 組み合わせ別: 記録のある MOD の組み合わせ(10F相当は別の組み合わせ)ごとに表を出す
       const groups = new Map();
-      for (const r of list) { const k = (r.mods.join('+') || 'MODなし') + (r.floor10 ? ' / 10F相当' : ''); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
+      // user: 複合modは全部ありまたは1つありの表裏のみ → MOD 1つ(表/裏)と、DUO 以外の全部(表/裏)だけ
+      const ALL = MODS.map(x => x[0]).filter(x => x !== 'duo'), comboKey = mods => { const m = mods.filter(x => x.replace(/_reversed$/, '') !== 'duo'); if (m.length === 1 && mods.length === 1) return mods[0]; if (m.length === ALL.length && ALL.every(x => m.includes(x))) return '全部(表)'; if (m.length === ALL.length && ALL.every(x => m.includes(x + '_reversed'))) return '全部(裏)'; return null; };
+      for (const r of list) { const ck = comboKey(r.mods); if (!ck) continue; const k = ck + (r.floor10 ? (r.lull === false ? ' / 10F相当・猶予なし' : ' / 10F相当・猶予あり') : ''); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
       if (!groups.size) out.appendChild(el('p', 'まだ記録がありません。'));
       [...groups.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0])).forEach(([k, rs], i) => {
         const d = el('details', null, 'rk-group'); d.open = i < 3;
-        const label = k.split(' / ')[0].split('+').map(x => x === 'MODなし' ? x : modName(x)).join(' + ') + (k.includes('10F相当') ? '(10F相当)' : '');
+        const label = k.split(' / ')[0].split('+').map(x => x.startsWith('全部') ? 'MOD ' + x : modName(x)).join(' + ') + (k.includes('10F相当') ? '(' + k.split(' / ')[1] + ')' : '');
         d.appendChild(el('summary', label + ' — ' + best(rs).length + '人')); d.appendChild(table(best(rs), COLS)); out.appendChild(d);
       });
     }
     $('count').textContent = '登録 ' + records.length + ' 件(この条件 ' + list.length + ' 件)';
   };
   for (const [k, label] of TABS) { const b = el('button', label); b.type = 'button'; b.setAttribute('role', 'tab'); b.dataset.k = k; b.onclick = () => { tab = k; for (const x of $('tabs').children) x.setAttribute('aria-selected', String(x.dataset.k === k)); try { localStorage.setItem('rk-tab', k); } catch {} render(); }; $('tabs').appendChild(b); }
-  for (const [k] of MODS) for (const m of [k, k + '_reversed']) $('fMod').add(new Option(modName(m), m));
+  $('fMod').add(new Option('MODなし', '-')); for (const [k] of MODS) for (const m of [k, k + '_reversed']) $('fMod').add(new Option(modName(m), m));
   try { const t = localStorage.getItem('rk-tab'); if (TABS.some(x => x[0] === t)) tab = t; } catch {}
   for (const x of $('tabs').children) x.setAttribute('aria-selected', String(x.dataset.k === tab));
   for (const id of ['fMode', 'fBot', 'fDuo', 'fMod']) $(id).addEventListener('change', render);

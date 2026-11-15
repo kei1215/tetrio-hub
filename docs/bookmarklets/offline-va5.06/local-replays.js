@@ -82,17 +82,34 @@
     }
     // v5.07 (user: PBデータを全て取る・githubにPBのランキング): QP SOLO records go to the ranking on
     // tetrio-hub (an Issue form with the record filled in; a GitHub Action adds it to the ranking page).
-    if(['zenith','zenithex'].includes(record.mode)&&!record.result?.localMatch)button('ランキングに送る',()=>{
+    if(['zenith','zenithex'].includes(record.mode)&&!record.result?.localMatch){const send=button('ランキングに送る',()=>{
      const res=record.result||{},r=res.results||res,st=r.stats||{},agg=r.aggregatestats||{},z=st.zenith||{};
      let file=null;try{file=QPLocalZen.replay(record)}catch{}
      const local=file?.local||record.replay?.local||{},opts=res.options?.zenith_mods?res.options:file?.replay?.options||{};
      if(!(Number(z.altitude)>0))throw Error('高度が記録されていないので送れません');
      const data={v:1,name:file?.users?.[0]?.username||localStorage.getItem('qp-local-username')||'LOCAL',mode:record.mode,altitude:+Number(z.altitude).toFixed(2),floor:Number(z.floor)||1,revives:Number(z.revives??z.revivesTotal??0)||0,
-      time:Math.round(Number(st.finaltime)||Number(file?.replay?.frames)/60*1000||0),apm:+(Number(agg.apm)||0).toFixed(2),pps:+(Number(agg.pps)||0).toFixed(2),mods:Array.isArray(opts.zenith_mods)?opts.zenith_mods:[],
+      time:Math.round(Number(st.finaltime)||Number(file?.replay?.frames)/60*1000||0),apm:+(Number(agg.apm)||0).toFixed(2),pps:+(Number(agg.pps)||0).toFixed(2),mods:Array.isArray(opts.zenith_mods)?opts.zenith_mods:[],hyper:z.speedrun===true||z.speedrun_seen===true,
       floor10:!!local.incomingAttacks?.floor10,lull:local.incomingAttacks?.lull!==false,test:local.testMode||'solo',bot:!!local.bot,engine:local.engine||null,patch:String(window.__qpPatchVersion||''),date:record.date};
      const url='https://github.com/kei1215/tetrio-hub/issues/new?template=pb.yml&title='+encodeURIComponent('PB: '+data.name+' '+data.altitude+'m')+'&data='+encodeURIComponent(JSON.stringify(data));
-     window.open(url,'_blank','noopener');
-    });
+     // v5.07 (user: ゲーム内からapiで送れる様に・送信するのはオフライン版の記録のみ): GAS 中継に記録と TTR を送る
+     // (中継の URL は ranking/api.json から読むので、URL が変わってもパッチを作り直さなくてよい)。
+     // 送れないとき(中継なし・通信が止められた)は GitHub の登録ページを開き、TTR を保存してドラッグしてもらう
+     const ttr=file?JSON.stringify(portable(file)):null;
+     const viaIssue=why=>{
+      if(ttr){try{const u=URL.createObjectURL(new Blob([ttr],{type:'application/json'})),a=document.createElement('a');a.href=u;a.download='PB-'+Math.round(data.altitude)+'m-'+record.id+'.ttr.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),10000)}catch(e){console.warn('[PB replay]',e)}}
+      if(why)alert(why+'\nGitHub の登録ページを開きます。保存されたリプレイ(.ttr.json)を「リプレイ」欄にドラッグしてから送ってください。');
+      window.open(url,'_blank','noopener');
+     };
+     if(!ttr)return viaIssue('リプレイを読めませんでした。');
+     if(!confirm('ランキングに送りますか？\n名前: '+data.name+'\n高さ: '+data.altitude+'m (F'+data.floor+')'+(data.mods.length?'\nMOD: '+data.mods.join(', '):'')+'\n記録とリプレイが公開されます。'))return;
+     const btn=send;if(btn){btn.disabled=true;btn.textContent='送信中…'}
+     (async()=>{
+      let api='';try{api=(await (await fetch('https://kei1215.github.io/tetrio-hub/ranking/api.json',{cache:'no-store'})).json()).url||''}catch{}
+      if(!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(api))return viaIssue('ゲームからの送信がまだ使えません。');
+      let res;try{res=await (await fetch(api,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({data,ttr}),redirect:'follow'})).json()}catch(e){console.warn('[PB send]',e);return viaIssue('送信できませんでした。')}
+      if(res?.ok)alert(res.text||'送りました');else alert('送れませんでした: '+(res?.text||'不明なエラー'));
+     })().finally(()=>{if(btn){btn.disabled=false;btn.textContent='ランキングに送る'}});
+    })}
     const remove=button('🗑',()=>{if(!confirm('このローカル記録とTTRを削除しますか？'))return;QPLocalZen.deleteRecord(record.id);api.show(host,play,filter)});remove.setAttribute('aria-label','記録とTTRを削除');remove.title='記録とTTRを削除';
     host.appendChild(row);
    }

@@ -174,3 +174,14 @@
 - (未リリース, v5.07 予定) オフラインの設定が残らない: デスクトップ版はオフラインを開くたびに preload-local.js が offline-preferences-v2.json を userConfig に書き戻すが、オフライン中の変更はファイルに保存されていなかった(実機で再現: video_kos/invert を変えて開き直すと戻る)。mt() から QPLocalStorage.saveConfig → qp-local-offline-config-save で保存(build_release fix_config_sync / fix_preload_config)。ブラウザ版は tetr.io と localStorage を共有し本物の userConfig に書いていた → ui-health.js 先頭で 'qp-offline-userConfig' に振り替え(初回だけ userConfig から写す。build_browser_offline CONFIG_SHIM、offline-v4.8255 / va5.06 / va5.05 の ui-health.js に適用済み)。ブラウザ版は実機未確認。
 - (未リリース, v5.07 予定) 外部AIで QP SOLO(外部AI対戦の「ルール」に QP SOLO、MOD は QP 画面の選択。ai-src に rl-launcher.js を追加: LocalStartRL の7番目の引数 engine を game._aiEngine に入れ、学習しない)。10F相当の床攻撃にまれな空白(6% の待ちを r^4 で 30 秒まで伸ばす。QP設定「火力が来ない時間を入れる」OFF で今までどおり)。QP設定「開始前に 3,2,1,GO」(options.countdown、既定 OFF)。build_release fix_config_keep はfix_config_sync 後も素通り(LOCAL ビルドで anchor エラーになった)。
 - 2026-11-16 PB ランキング: docs/ranking/(総合・MODなし・MOD別・組み合わせ別・10F相当・リバイブ回数、1人1記録)。登録は Issue フォーム .github/ISSUE_TEMPLATE/pb.yml → Action pb-ranking.yml + .github/scripts/pb-ingest.js が検証して docs/ranking/data/records.json に追加しIssueを閉じる。パッチの記録一覧に「ランキングに送る」(local-replays.js、記録に bot/engine/floor10/lull を保存)。ブラウザ版の offline-v4.8255 / va5.06 / va5.05 にも反映済み。デスクトップは v5.07 から。
+
+## 2026-11-16 PB ランキング: ゲーム内送信(GAS 中継)・TTR は Discord
+- 「ランキングに送る」は GAS(tools/ranking/gas/Code.gs)に POST する。URL は docs/ranking/api.json から読むので、変わってもパッチを作り直さなくてよい。空のときや失敗したときは Issue 方式に切り替え、.ttr.json を保存する。
+- TTR はリポジトリに置かず、Discord の webhook に投稿する。records.json には discord(メッセージ番号)と replayUrl を持たせる。CDN の URL は約1日で切れるので、pb-refresh.yml が6時間ごとに更新する。
+- デスクトップの CSP の connect-src に script.google.com と script.googleusercontent.com を追加した(build_release.py)。
+- 火力が来ない猶予(attackLull)を、足して最大10秒に変えた(以前は合計最大30秒)。
+- ページ:
+  - 上位3人だけリプレイのリンクを出す。表は順位・名前・高さだけ。
+  - HYPERSPEED は MOD ごとの表にした。
+  - 組み合わせ別は、MOD 1つ(表/裏)と DUO 以外の全部(表/裏)だけにした。
+- 設定がまだ: Secret PB_DISCORD_WEBHOOK、GAS のデプロイ、api.json の url。手順は tools/ranking/README.md。

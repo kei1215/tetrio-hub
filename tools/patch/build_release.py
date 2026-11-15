@@ -468,6 +468,11 @@ def add_editor_window(text):
     # ai-external.js downloads packages from the tetrio-hub Pages folder ext-ai/.
     if "connect-src 'self' tetrio-local://app https://kei1215.github.io" not in text:
         text = text.replace("connect-src 'self' tetrio-local://app", "connect-src 'self' tetrio-local://app https://kei1215.github.io", 1)
+    # v5.07 (user: ゲーム内からapiで送れる様に): 「ランキングに送る」は GAS 中継(script.google.com →
+    # script.googleusercontent.com にリダイレクト)へ POST する。
+    if "https://script.google.com" not in text:
+        text = text.replace("connect-src 'self' tetrio-local://app https://kei1215.github.io",
+                            "connect-src 'self' tetrio-local://app https://kei1215.github.io https://script.google.com https://script.googleusercontent.com", 1)
     return replace_appended(text, EDITOR_WINDOW_MARK, EDITOR_WINDOW_SRC)
 
 

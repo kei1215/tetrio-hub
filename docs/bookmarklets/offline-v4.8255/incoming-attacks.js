@@ -16,8 +16,9 @@
    // targeting, sometimes nobody sends for a while: 6% of waits are stretched toward 30 s by r^4,
    // so the whole wait never passes 30 s and long ones are rare (per attack: over 10 s ~2%,
    // over 20 s ~0.7%, near 30 s ~0.1%).
-   const lull=b=>config.attackLull!==false&&Math.random()<.06?Math.round((30*60-b)*Math.random()**4):0;
-   const wait=()=>{if(config.attackMode!=='floor')return Math.round(seconds*60);const b=Math.min(30*60,Math.max(30,Math.round(seconds*60*(1.2-.6*Math.min(1,(floorOf()-1)/9))*(.5+Math.random()))));return b+lull(b)};
+   // v5.07 (user: 最大10秒に変更): 火力が来ない猶予は足して最大10秒、長いほど起きにくい
+   const lull=()=>config.attackLull!==false&&Math.random()<.06?Math.round(10*60*Math.random()**4):0;
+   const wait=()=>{if(config.attackMode!=='floor')return Math.round(seconds*60);const b=Math.min(30*60,Math.max(30,Math.round(seconds*60*(1.2-.6*Math.min(1,(floorOf()-1)/9))*(.5+Math.random()))));return b+lull()};
    let next=game.getFrame()+wait();
    const tick=()=>{
     if(!game.isPlaying()||game.state.zenith?.incapacitated||game.getFrame()<next)return;

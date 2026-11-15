@@ -185,6 +185,10 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
  // Practice for players (2026-11-14): targeted like floor 10 from the start - the floor attack
  // counts as floor 10 or more and garbage holes are at least as scattered as on floor 10.
  const floor10=field('最初から10F相当（狙われ方・穴のばらけ・ゴミの猶予・攻撃間隔）',document.createElement('input'));floor10.type='checkbox';floor10.checked=saved('qp-local-floor10','false')==='true';floor10.setAttribute('aria-label','最初から10F相当');
+ // v5.07 (user: 完全に火力が来ないのをなしにするかを設定 / 今までの状態): floor attacks with rare lulls (up to 30 s) or the old timing.
+ const attackLull=field('火力が来ない時間を入れる（まれに最大10秒）',document.createElement('input'));attackLull.type='checkbox';attackLull.checked=saved('qp-local-attack-lull','true')==='true';attackLull.setAttribute('aria-label','火力が来ない時間を入れる');attackLull.addEventListener('change',()=>localStorage.setItem('qp-local-attack-lull',String(attackLull.checked)));
+ // v5.07 (user: QP設定に3,2,1,goを入れるかのオンオフ): the board countdown (3, 2, 1, GO!) before a QP start. Default OFF (real QP has none).
+ const countdown=field('開始前に 3,2,1,GO',document.createElement('input'));countdown.type='checkbox';countdown.checked=saved('qp-local-countdown','false')==='true';countdown.setAttribute('aria-label','開始前に 3,2,1,GO');countdown.addEventListener('change',()=>localStorage.setItem('qp-local-countdown',String(countdown.checked)));
  const missionSource=field('復活ミッション',document.createElement('select'));missionSource.setAttribute('aria-label','復活ミッション');for(const [value,label]of [['standard','標準のみ'],['custom','自作のみ'],['both','すべて表示']]){const option=document.createElement('option');option.value=value;option.textContent=label;missionSource.appendChild(option)}missionSource.value=saved('qp-local-mission-source','standard');
  const missionTools=document.createElement('div');missionTools.id='local-mission-tools';missionTools.style.cssText='display:flex;flex-wrap:wrap;gap:.45em;margin:.7em 0';
  const missionImport=document.createElement('input');missionImport.type='file';missionImport.accept='application/json,text/plain,.json,.txt';missionImport.hidden=true;
@@ -337,7 +341,8 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
   if(duo!=='solo'&&comboEnabled.checked){for(const [name,selector]of comboSelectors){if(selector.value!=='off')selected[name]=selector.value}}
   const config=LocalQPOptions.build(selected,modHyper.checked);
   config.testMode=duo;config.attackMode=attackMode.value;
-  config.attackLines=Number(attackLines.value);config.attackSeconds=Number(attackSeconds.value);config.floor10=floor10.checked;
+  config.attackLines=Number(attackLines.value);config.attackSeconds=Number(attackSeconds.value);config.floor10=floor10.checked;config.attackLull=attackLull.checked;
+  if(countdown.checked)config.options={...(config.options||{}),countdown:true,countdown_count:3,countdown_interval:1000};
   config.missions={source:missionSource.value,attackEnabled:config.attackMode!=='none',includeAttackRequired:attackRequired.checked,allowControlPenalties:controlPenalties.checked};
   return config;
  }
