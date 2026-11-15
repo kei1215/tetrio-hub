@@ -245,6 +245,7 @@ def page_replay_video():
       <li>TETRA LEAGUE・ルーム対戦(.ttrm)、40L・BLITZ など(.ttr)。</li>
       <li>QUICK PLAY(ZENITH)。MOD 付き(リバース MOD を含む)も計算できます。<strong>DUO</strong> は、2人それぞれの <code>.ttr</code> を「QP DUO リプレイ保存」の「2人の TTR を合成」でまとめた <code>.ttrm</code> を読み込むと、DUO 専用のボード(左右で形が違う)で2人並べて描きます。裏 DUO は途中から少しずれることがあります。</li>
       <li>QP は QP 用の盤面スキン・高度メーター・予告ゴミのメーターで描き、背景は通常プレイと同じ塔の絵が高度に合わせて動きます(開始時は少し上から降りてきます)。BGM も本体と同じく階層ごとに切り替わります(HYPERSPEED の曲は MOD なしのときだけ)。</li>
+      <li>BGM は「リプレイの曲」(本体と同じ曲。QP は階層ごとの曲)・「なし」・「その他の曲」から選べます。「その他の曲」では TETR.IO の全曲(zenith tower も含む)から1曲を選べます。</li>
     </ul>''')
     body += '\n' + card('TL の演出', '''    <ul class="mb-0">
       <li><strong>開始演出</strong>:GET READY・青/赤のカード・VS・FT。TR・ランク・順位(100位以内のみ。1位は紫、10位以内は金、100位以内は銀)は、TETRA CHANNEL から試合のときの値を取ります(見つからないときは今の値)。その人の TL 平均(APM・PPS・VS)もカードに出します。</li>

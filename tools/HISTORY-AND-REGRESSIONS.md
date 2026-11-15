@@ -128,6 +128,7 @@
 | CONFIG の QP DUO REPLAYS が消える | ほかの項目が CONFIG を作り直すと消えた。1秒ごとに付け直す | CONFIG > QP PATCH TOOLS に QP DUO REPLAYS と REPLAY → MP4 が出続ける |
 | MP4 の DUO で盤面が離れすぎ・高度メーターの位置・MOD アイコンがない | DUO は TETR.IO の位置 ±0.32(17.07 マス間隔、中央、少し下)。メーターは左盤面の右 3.15 マスに台座つき。MOD アイコンを盤面の絵から描く | 左の NEXT の下に右の HOLD が収まる。メーターが2枚の間。DUO アイコンが左右の盤面の下 |
 | テストでページの音を止めると MP4 が無音になる | AudioScheduledSourceNode.start を丸ごと止めていた。止めるのは OfflineAudioContext 以外だけにする | 作った MP4 に音がある |
+| MP4 の BGM が選べない(自動の1曲だけ) | BGM を「リプレイの曲」「なし」「その他の曲」の3択に。その他は TETR.IO 全52曲(music.js SONG_LIST、抜けていた hyper-velocity を追加、zenith tower は QP 以外では1階の曲)。選択はブラウザに記憶 | 3択で MP4 を作り音声を曲と相関:なし=どの曲とも 0.15 以下、リプレイの曲=白いひょうたん 0.5、その他=選んだ曲 0.8 以上(QP でも) |
 | ファイルから開いたリプレイ・ルーム・QP で MP4 ボタンが出ない | リプレイ ID がないと TETR.IO が REPLAY の行ごと隠す。行が隠れているときは BACK の下に自前の「▶ MP4」を出す | ファイルから TTRM/TTR を開いても左上に ▶ MP4 が出て、押すとパネルが開く |
 | TL の AI が T-Spin を全くしない | live-bot-controller が TL/CUSTOM で Spin B2B モードを切っていた | ゴミあり自己対局(GARB=4,120)で T-Spin 割合 55%・倒れない。実 TL のリプレイで T-Spin が出る |
 | All-Spin MOD で消去なし Spin が多い | zeroSpinUseful が allspin も含めていた。Warlock だけにした | All-Spin の QP で消去なし Spin がほぼ 0 |
