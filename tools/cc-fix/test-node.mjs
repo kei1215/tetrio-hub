@@ -38,6 +38,7 @@ p.rounds.forEach((round, ri) => {
     for (const x of sg.events) { let l = s.byFrame.get(x.f); if (!l) s.byFrame.set(x.f, (l = [])); l.push({ frame: x.f, type: x.t === "d" ? "keydown" : "keyup", data: { key: x.k, subframe: x.s || 0 } }); }
     let atk = 0, died = false; const lf = []; s.onLock = (r, f) => { atk += (r.rawGarbage || []).reduce((a, b) => a + b, 0); lf.push(f); if (r.topout) died = true; };
     const p0 = s.engine.stats.pieces, rc0 = s.engine.stats.garbage?.receive ?? 0;
+    if (sg.rescue) s.endFrame = Math.max(s.endFrame, sg.end + 1);
     while (!s.finished && s.frame <= sg.end) s.step();
     // the player's lock frames for the same piece numbers
     const o = new PlayerSim(structuredClone(pl.replay), pl), of = []; o.onLock = (_r, f) => of.push(f); while (!o.finished) o.step();

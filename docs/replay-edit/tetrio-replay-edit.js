@@ -751,7 +751,9 @@
     if (n.__rpePlay) return;
     const esm = n.esm, fm = n.fm, siom = n.siom;
     const P = n.__rpePlay = { undo: [] };
-    const pull0 = esm.Pull, grav0 = fm.GetEffectiveGravity, inject0 = siom.InjectState;
+    const pull0 = esm.Pull, grav0 = fm.GetEffectiveGravity, inject0 = siom.InjectState, fin0 = esm.IsFinished;
+    // トップアウト救済は死んだ所(リプレイの最後)の先まで続くことがある(REN の終わりまで)。その間はリプレイを終わらせない
+    P.undo.push(swap(esm, 'IsFinished', function (...a) { const s = n.__rpeSeg; if (s && s.rescue && S.active !== n && this._frame <= s.end) return false; return fin0.apply(this, a); }));
     P.undo.push(swap(esm, 'Pull', function () {
       const e = S.active !== n && embedOf(n), f = this._frame;
       if (n.__rpeHold && (!e || f <= e.end)) { n.gsm.pause = false; n.__rpeHold = false; }
@@ -1002,7 +1004,7 @@
       if (!s || !s.rescue || !g.__rpeShow) continue;
       const nx = g.__rpeShow.find(x => x.f > g.esm.frame);
       const r = s.rescue;
-      label = `助かる手順: 死ぬ ${r.back} 手前(${r.piece} 手目)から` + (r.minBack && r.minBack < r.back ? `(${r.minBack} 手前でも助かる)` : '') + (r.ren ? `  REN を ${r.ren === 'quad' ? 'QUAD' : 'T-SPIN'} で締める` : '');
+      label = `助かる手順: 死ぬ ${r.back} 手前(${r.piece} 手目)から` + (r.minBack && r.minBack < r.back ? `(${r.minBack} 手前でも助かる)` : '') + (r.ren ? (r.ren === 'dig-quad' ? `  掘り REN(QUAD 入り・${r.dug} 段)を最後まで` : `  REN を ${r.ren === 'quad' ? 'QUAD' : 'T-SPIN'} で締める`) : '');
       if (nx) { n = g; tg = nx; } else { n = g; tg = { cells: [], board: g.gsm.board, type: 'x' }; }
       break;
     }
@@ -1177,7 +1179,7 @@
     } else {
       t = `リプレイ: ${list.length}人\n一時停止すると操作できます` + (emb ? `\n埋め込みの修正あり(${emb.frame}〜${emb.end} フレーム)` : '');
       const re = emb || list.map(embedRaw).find(Boolean), rs = re && segsOf(re).find(x => x.rescue);
-      if (rs) { const r = rs.rescue; t += `\nトップアウト救済: 死ぬ ${r.minBack ?? r.back} 手前まで戻れば助かる。見せるのは ${r.back} 手前(${r.piece} 手目・${rs.frame} フレーム)から` + (r.ren ? `(REN を ${r.ren === 'quad' ? 'QUAD' : 'T-SPIN'} で締める)` : '') + (S.embMode === 'orig' ? '\n(元の版では出しません)' : ''); }
+      if (rs) { const r = rs.rescue; t += `\nトップアウト救済: 死ぬ ${r.minBack ?? r.back} 手前まで戻れば助かる。見せるのは ${r.back} 手前(${r.piece} 手目・${rs.frame} フレーム)から` + (r.ren ? (r.ren === 'dig-quad' ? `(掘り REN を QUAD 入りで最後まで)` : `(REN を ${r.ren === 'quad' ? 'QUAD' : 'T-SPIN'} で締める)`) + (r.renPast ? '。死んだ所の先も REN の終わりまで見せる' : '') : '') + (S.embMode === 'orig' ? '\n(元の版では出しません)' : ''); }
     }
     status.textContent = 'リプレイ盤面修正\n' + t + (S.msg ? '\n' + S.msg : '');
   };

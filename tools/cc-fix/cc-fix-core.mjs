@@ -71,7 +71,8 @@ async function fixOne(info, rep, bot, opt, T) {
     pieceStart = e.stats.pieces;
   }
   // rescue: survive past the frame the player died (a little more, so garbage already on its way lands too)
-  if (range && range.rescue) sim.endFrame = endFrame + (range.margin ?? 90);
+  // and then up to range.more pieces past the death (a REN that ends with a QUAD / T-Spin is shown to its end)
+  if (range && range.rescue) sim.endFrame = endFrame + 60 * 20;
   const out = [], stat = { pieces: 0, planned: 0, matched: 0, miss: 0, noplan: 0, attack: 0, topout: false, locks: [] };
   let lockRes = null;
   // CC's sent garbage (after cancelling), for the opponent's board in the replay edit:
@@ -134,7 +135,7 @@ async function fixOne(info, rep, bot, opt, T) {
     return job.result();
   };
 
-  let plan = null, keys = null, target = null, want = null, sd = false, pieceAt = -1, sched = null, doneN = 0, gSince = -1;
+  let deathAt = -1, plan = null, keys = null, target = null, want = null, sd = false, pieceAt = -1, sched = null, doneN = 0, gSince = -1;
   const lockT = Number(sim.options.locktime) || 30;
   const idleTo = (f) => { while (sim.frame < f && !sim.finished) sim.step(); };
   if (!range) idleTo(firstKey);
@@ -143,12 +144,13 @@ async function fixOne(info, rep, bot, opt, T) {
       if (want && sim.lastLock && ckey(sim.lastLock.cells || []) === ckey(want)) stat.matched++;
       want = null;
       stat.attack += (lockRes.rawGarbage || []).reduce((a, b) => a + b, 0);
-      stat.locks.push({ f: sim.frame, lines: lockRes.lines || 0, spin: lockRes.spin || "none", mino: low(lockRes.mino), combo: lockRes.stats?.combo ?? 0, atk: (lockRes.rawGarbage || []).reduce((a, b) => a + b, 0) });
+      stat.locks.push({ f: sim.frame, lines: lockRes.lines || 0, spin: lockRes.spin || "none", mino: low(lockRes.mino), combo: lockRes.stats?.combo ?? 0, dug: lockRes.garbageCleared || 0, atk: (lockRes.rawGarbage || []).reduce((a, b) => a + b, 0) });
       if (lockRes.topout) { stat.topout = true; }
       lockRes = null;
     }
     if (stat.topout) break;
     if (range && e.stats.pieces - pieceStart >= range.K) break;
+    if (range && range.rescue && sim.frame > endFrame + (range.margin ?? 90) && (deathAt < 0 ? (deathAt = e.stats.pieces) : deathAt) >= 0 && e.stats.pieces - deathAt >= (range.more ?? 10) && !(stat.locks.at(-1)?.lines > 0)) break;
     const n = e.stats.pieces;
     if (n !== pieceAt) {
       // a new piece: ask the AI (the board does not change until this piece locks)
@@ -202,7 +204,7 @@ async function fixOne(info, rep, bot, opt, T) {
     push("keydown", k); push("keyup", k, 0.5); keys.shift(); doneN++;
     sim.step();
   }
-  if (range && range.rescue) { const end = Math.min(sim.frame, endFrame); return { seg: { v: 1, frame: range.F, end, state: null, lazy: true, ige: true, by: opt.engineId || "cc", events: out.filter((x) => x.f <= end) }, stat }; }
+  if (range && range.rescue) return { seg: { v: 1, frame: range.F, end: sim.frame, state: null, lazy: true, ige: true, by: opt.engineId || "cc", events: out }, stat, endFrame };
   if (range) return { seg: { v: 1, frame: range.F, end: sim.frame, state: null, lazy: true, ige: true, by: opt.engineId || "cc", events: out }, stat };
   const end = stat.topout ? sim.frame : endFrame;
   return { embed: { v: 1, frame: 0, end, state: null, keep: true, by: opt.engineId || "cc", events: out, sends }, stat };
@@ -246,17 +248,39 @@ function weakSpots(an, W, max) {
 
 // A REN (combo 2+, 3 clears in a row or more) whose last clear is a QUAD or a T-Spin.
 // Returns the index in locks of that last clear, or -1.
-export function renFinish(locks) {
-  let run = 0;
+export function renFinish(locks, ok = () => true) {
+  let run = 0, dug = 0;
   for (let i = 0; i < locks.length; i++) {
     const l = locks[i];
-    if (l.lines > 0) run++; else { run = 0; continue; }
+    if (l.lines > 0) { run++; dug += l.dug || 0; } else { run = 0; dug = 0; continue; }
     const next = locks[i + 1];
     const last = !next || next.lines === 0;
     const strong = l.lines >= 4 || (l.mino === "t" && l.spin && l.spin !== "none");
-    if (last && run >= 3 && strong) return i;
+    if (last && run >= 3 && strong && ok(i, dug)) return i;
   }
   return -1;
+}
+
+// Runs of clears in a row (a REN when 3+): [{a, b (lock indexes), run, dug (garbage rows cleared), quad, tspin, last ('quad'|'tspin'|null)}]
+export function chainsOf(locks) {
+  const out = []; let c = null;
+  locks.forEach((l, i) => {
+    if (!l.lines) { c = null; return; }
+    const q = l.lines >= 4, ts = l.mino === "t" && l.spin && l.spin !== "none";
+    if (!c) out.push((c = { a: i, b: i, run: 0, dug: 0, quad: false, tspin: false, last: null }));
+    c.b = i; c.run++; c.dug += l.dug || 0; c.quad ||= q; c.tspin ||= ts; c.last = q ? "quad" : ts ? "tspin" : null;
+  });
+  return out.filter((c) => c.run >= 3);
+}
+// The REN the user wants to see (first one): it ends with a QUAD / T-Spin within about 10 pieces or
+// after digging deep (4+ garbage rows), or it digs deep with a QUAD somewhere in it.
+function seenChain(locks, o) {
+  const within = o.renWithin ?? 10, deep = o.renDig ?? 4;
+  for (const c of chainsOf(locks)) {
+    if (c.last && (c.b + 1 <= within || c.dug >= deep)) return { ...c, kind: c.last };
+    if (c.quad && c.dug >= deep) return { ...c, kind: "dig-quad" };
+  }
+  return null;
 }
 
 // Topout rescue: from 1, 2, 3 ... pieces before the death, the AI plays on (same pieces, same incoming
@@ -271,9 +295,18 @@ async function rescueOne(pl, bot, o, T, an, prog) {
     const F = i > 0 ? an.freeAfter[i - 1] : null;
     if (F == null) continue;
     const { seg, stat } = await fixOne(pl, pl.replay, bot, { ...o, range: { F, K: Infinity, rescue: true }, onProgress: prog && ((x) => prog({ ...x, back: k })) }, T);
-    if (stat.topout) continue;
-    const ri = renFinish(stat.locks);
-    const cand = { seg, stat, k, i, F, ren: ri >= 0 ? stat.locks[ri] : null };
+    // survives = no topout until past the death frame (+90F); a topout later (in the extra pieces) only cuts the line
+    const lim = an.endFrame + 90;
+    if (stat.topout && (stat.locks.at(-1)?.f ?? 0) <= lim) continue;
+    const safe = stat.topout ? stat.locks.slice(0, -1) : stat.locks;
+    const ch = seenChain(safe, o);
+    // shown to the end of the REN (a digging REN is never cut); with none, to the death frame (but a
+    // digging REN going on there still runs to its end)
+    let endF = an.endFrame;
+    if (ch) endF = Math.max(endF, safe[ch.b].f + 1);
+    else { const c = chainsOf(safe).find((c) => safe[c.a].f <= an.endFrame && safe[c.b].f > an.endFrame && c.dug > 0); if (c) endF = safe[c.b].f + 1; }
+    seg.end = endF; seg.events = seg.events.filter((x) => x.f <= endF);
+    const cand = { seg, stat, k, i, F, ren: ch ? { lines: ch.quad ? 4 : 0, combo: ch.run - 1, kind: ch.kind, dug: ch.dug } : null, renAt: ch ? ch.b : -1, renPast: !!ch && safe[ch.b].f > an.endFrame };
     if (!first) first = cand;
     if (cand.ren) { best = cand; break; }
     if (k >= first.k + extra) break;
@@ -313,7 +346,7 @@ export async function ccFix(json, username, bot, opt = {}) {
       if (!an.topout) { delete ref.results[EMB]; report.push({ round: ri, rescue: null, died: false }); continue; }
       const r = await rescueOne(pl, bot, o, T, an, prog && ((x) => prog({ ...x, round: ri, rounds: p.rounds.length })));
       if (!r) { delete ref.results[EMB]; report.push({ round: ri, rescue: null, died: true, pieces: an.locks.length }); continue; }
-      const info = { minBack: r.minBack, back: r.k, piece: r.i + 1, death: an.locks.length, deathFrame: an.endFrame, ren: r.ren ? (r.ren.lines >= 4 ? "quad" : "tspin") : null, renCombo: r.ren ? r.ren.combo : 0 };
+      const info = { renPieces: r.ren ? r.renAt + 1 : 0, renPast: !!r.renPast, minBack: r.minBack, back: r.k, piece: r.i + 1, death: an.locks.length, deathFrame: an.endFrame, ren: r.ren ? r.ren.kind : null, renCombo: r.ren ? r.ren.combo : 0, dug: r.ren ? r.ren.dug : 0 };
       const seg = { ...r.seg, rescue: info, cc: r.stat.locks.filter((l) => l.f <= r.seg.end).reduce((a, l) => a + l.atk, 0) };
       ref.results[EMB] = { ...seg, segs: [seg] };
       report.push({ round: ri, died: true, rescue: info });
