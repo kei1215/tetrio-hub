@@ -70,7 +70,9 @@ async function fixOne(info, rep, bot, opt, T) {
     for (const [f, list] of [...sim.byFrame]) if (f >= range.F) { const rest = list.filter((x) => !KEY.has(x.type)); if (rest.length) sim.byFrame.set(f, rest); else sim.byFrame.delete(f); }
     pieceStart = e.stats.pieces;
   }
-  const out = [], stat = { pieces: 0, planned: 0, matched: 0, miss: 0, noplan: 0, attack: 0, topout: false };
+  // rescue: survive past the frame the player died (a little more, so garbage already on its way lands too)
+  if (range && range.rescue) sim.endFrame = endFrame + (range.margin ?? 90);
+  const out = [], stat = { pieces: 0, planned: 0, matched: 0, miss: 0, noplan: 0, attack: 0, topout: false, locks: [] };
   let lockRes = null;
   // CC's sent garbage (after cancelling), for the opponent's board in the replay edit:
   // [frame, amount, ackiid]. ackiid = the last attack id of the opponent this player had received then.
@@ -141,6 +143,7 @@ async function fixOne(info, rep, bot, opt, T) {
       if (want && sim.lastLock && ckey(sim.lastLock.cells || []) === ckey(want)) stat.matched++;
       want = null;
       stat.attack += (lockRes.rawGarbage || []).reduce((a, b) => a + b, 0);
+      stat.locks.push({ f: sim.frame, lines: lockRes.lines || 0, spin: lockRes.spin || "none", mino: low(lockRes.mino), combo: lockRes.stats?.combo ?? 0, atk: (lockRes.rawGarbage || []).reduce((a, b) => a + b, 0) });
       if (lockRes.topout) { stat.topout = true; }
       lockRes = null;
     }
@@ -199,6 +202,7 @@ async function fixOne(info, rep, bot, opt, T) {
     push("keydown", k); push("keyup", k, 0.5); keys.shift(); doneN++;
     sim.step();
   }
+  if (range && range.rescue) { const end = Math.min(sim.frame, endFrame); return { seg: { v: 1, frame: range.F, end, state: null, lazy: true, ige: true, by: opt.engineId || "cc", events: out.filter((x) => x.f <= end) }, stat }; }
   if (range) return { seg: { v: 1, frame: range.F, end: sim.frame, state: null, lazy: true, ige: true, by: opt.engineId || "cc", events: out }, stat };
   const end = stat.topout ? sim.frame : endFrame;
   return { embed: { v: 1, frame: 0, end, state: null, keep: true, by: opt.engineId || "cc", events: out, sends }, stat };
@@ -220,7 +224,7 @@ function analyze(info, rep) {
       if (!held.size) { freeAfter[i] = f; break; }
     }
   }
-  return { locks, freeAfter, endFrame: s.endFrame };
+  return { locks, freeAfter, endFrame: s.endFrame, topout: s.isTopout() };
 }
 
 // Candidate spots: the game cut into stretches of W pieces. A stretch is tried when its attack per
@@ -238,6 +242,44 @@ function weakSpots(an, W, max) {
     if (sum / K < avg * 0.8 || ren || quad) out.push({ i: s, sum, avg, F: an.freeAfter[s - 1], K, ren, quad });
   }
   return out;
+}
+
+// A REN (combo 2+, 3 clears in a row or more) whose last clear is a QUAD or a T-Spin.
+// Returns the index in locks of that last clear, or -1.
+export function renFinish(locks) {
+  let run = 0;
+  for (let i = 0; i < locks.length; i++) {
+    const l = locks[i];
+    if (l.lines > 0) run++; else { run = 0; continue; }
+    const next = locks[i + 1];
+    const last = !next || next.lines === 0;
+    const strong = l.lines >= 4 || (l.mino === "t" && l.spin && l.spin !== "none");
+    if (last && run >= 3 && strong) return i;
+  }
+  return -1;
+}
+
+// Topout rescue: from 1, 2, 3 ... pieces before the death, the AI plays on (same pieces, same incoming
+// garbage at the same frames) until past the frame the player died. The fewest pieces back that
+// survives is "how far back". From there a few more starts are tried for a line whose REN ends with a
+// QUAD or a T-Spin (the user's wish); that line is used when found, otherwise the first survival.
+async function rescueOne(pl, bot, o, T, an, prog) {
+  const N = an.locks.length, maxBack = Math.min(o.maxBack ?? 30, N - 1), extra = o.renTries ?? 12;
+  let first = null, best = null;
+  for (let k = 1; k <= maxBack; k++) {
+    const i = N - k;                       // the AI places pieces i, i+1, ... (0-based)
+    const F = i > 0 ? an.freeAfter[i - 1] : null;
+    if (F == null) continue;
+    const { seg, stat } = await fixOne(pl, pl.replay, bot, { ...o, range: { F, K: Infinity, rescue: true }, onProgress: prog && ((x) => prog({ ...x, back: k })) }, T);
+    if (stat.topout) continue;
+    const ri = renFinish(stat.locks);
+    const cand = { seg, stat, k, i, F, ren: ri >= 0 ? stat.locks[ri] : null };
+    if (!first) first = cand;
+    if (cand.ren) { best = cand; break; }
+    if (k >= first.k + extra) break;
+  }
+  const r = best || first;
+  return r && { ...r, minBack: first.k };
 }
 
 /**
@@ -264,6 +306,17 @@ export async function ccFix(json, username, bot, opt = {}) {
       const { embed, stat } = await fixOne(pl, pl.replay, bot, { ...o, onProgress: prog && ((x) => prog({ ...x, round: ri, rounds: p.rounds.length })) }, T);
       ref.results[EMB] = embed;
       report.push({ round: ri, ...stat, events: embed.events.length });
+      continue;
+    }
+    if (o.mode === "rescue") {
+      const an = analyze(pl, pl.replay);
+      if (!an.topout) { delete ref.results[EMB]; report.push({ round: ri, rescue: null, died: false }); continue; }
+      const r = await rescueOne(pl, bot, o, T, an, prog && ((x) => prog({ ...x, round: ri, rounds: p.rounds.length })));
+      if (!r) { delete ref.results[EMB]; report.push({ round: ri, rescue: null, died: true, pieces: an.locks.length }); continue; }
+      const info = { minBack: r.minBack, back: r.k, piece: r.i + 1, death: an.locks.length, deathFrame: an.endFrame, ren: r.ren ? (r.ren.lines >= 4 ? "quad" : "tspin") : null, renCombo: r.ren ? r.ren.combo : 0 };
+      const seg = { ...r.seg, rescue: info, cc: r.stat.locks.filter((l) => l.f <= r.seg.end).reduce((a, l) => a + l.atk, 0) };
+      ref.results[EMB] = { ...seg, segs: [seg] };
+      report.push({ round: ri, died: true, rescue: info });
       continue;
     }
     // weak spots only: the player's own play stays; each spot is a fix the replay edit inserts there

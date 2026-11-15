@@ -19,7 +19,7 @@ const bot = await def.create({ "cold_clear_1.wasm": fs.readFileSync(CC1 + "cold_
 const src = fs.readFileSync(inPath, "utf8");
 console.log("players", playersOf(src).map((p) => p.username + ":" + p.rounds.length).join(" "));
 const t0 = Date.now();
-const { json, report } = await ccFix(src, user, bot, { thinkMs: Number(think), engineId: "cc1" });
+const { json, report } = await ccFix(src, user, bot, { thinkMs: Number(think), engineId: "cc1", mode: process.env.MODE || "weak" });
 console.log("time", ((Date.now() - t0) / 1000).toFixed(1) + "s");
 for (const r of report) console.log(JSON.stringify(r));
 fs.writeFileSync(outPath, JSON.stringify(json));
@@ -36,12 +36,12 @@ p.rounds.forEach((round, ri) => {
     while (s.frame < sg.frame) s.step();
     if (!sg.keep) for (const [f, l] of [...s.byFrame]) if (f >= sg.frame) { const r = sg.ige ? l.filter((x) => x.type !== "keydown" && x.type !== "keyup") : []; if (r.length) s.byFrame.set(f, r); else s.byFrame.delete(f); }
     for (const x of sg.events) { let l = s.byFrame.get(x.f); if (!l) s.byFrame.set(x.f, (l = [])); l.push({ frame: x.f, type: x.t === "d" ? "keydown" : "keyup", data: { key: x.k, subframe: x.s || 0 } }); }
-    let atk = 0; const lf = []; s.onLock = (r, f) => { atk += (r.rawGarbage || []).reduce((a, b) => a + b, 0); lf.push(f); };
+    let atk = 0, died = false; const lf = []; s.onLock = (r, f) => { atk += (r.rawGarbage || []).reduce((a, b) => a + b, 0); lf.push(f); if (r.topout) died = true; };
     const p0 = s.engine.stats.pieces, rc0 = s.engine.stats.garbage?.receive ?? 0;
     while (!s.finished && s.frame <= sg.end) s.step();
     // the player's lock frames for the same piece numbers
     const o = new PlayerSim(structuredClone(pl.replay), pl), of = []; o.onLock = (_r, f) => of.push(f); while (!o.finished) o.step();
     const shift = lf.map((f, i) => f - (of[p0 + i] ?? f)); if (process.env.SHIFTS) console.log(shift.join(" ")); const maxShift = Math.max(0, ...shift.map(Math.abs));
-    console.log("round", ri, "fix @", sg.frame, "-", sg.end, "attack", atk, "(fix said", sg.cc ?? "-", "player", sg.orig ?? "-", ") garbage in", (s.engine.stats.garbage?.receive ?? 0) - rc0, "lock shift max", maxShift, "frames");
+    console.log("round", ri, "fix @", sg.frame, "-", sg.end, "attack", atk, "(fix said", sg.cc ?? "-", "player", sg.orig ?? "-", ") garbage in", (s.engine.stats.garbage?.receive ?? 0) - rc0, "lock shift max", maxShift, "frames", sg.rescue ? (died ? "TOPOUT" : "survived") : "");
   }
 });

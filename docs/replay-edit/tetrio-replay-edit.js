@@ -262,6 +262,7 @@
       fastRun(n, i => !over && out.length < 80 && !n.esm.IsFinished() && !(seg0 && n.__rpeSeg !== seg0) && ((i & 31) || performance.now() - t0 < 400));
     } finally {
       n.__rpeSeg = seg0; n.__rpeDoneSet = done0; n.__rpeHoldT = 0;
+      if (n.__rpeRescueHold) { n.__rpeRescueHold = false; n.gsm.pause = false; }
       simulating = false; simLock = null; undoOver();
       injectAt(n, state, frame);
     }
@@ -755,6 +756,7 @@
       const e = S.active !== n && embedOf(n), f = this._frame;
       if (n.__rpeHold && (!e || f <= e.end)) { n.gsm.pause = false; n.__rpeHold = false; }
       if (!e || f < e.frame) return pull0.call(this);
+      if (n.__rpeRescueHold) return;   // 助かった盤面のまま止める(元のプレイはこの先でトップアウトする)
       // 手で直した修正(keep なし)は差し込み: 修正を見せたあと止めた場面に戻り、元のプレイを続ける。
       // その間、相手の時間は止める(partnerHook)
       if (!e.keep) {
@@ -781,6 +783,11 @@
           if (now - n.__rpeHoldT < S.segHold * 1000) return;
           n.gsm.pause = false; n.__rpeHoldT = 0;
           if (S.segPlay === 'play') { n.__rpeSegPlay = s; n.__rpeWantPause = true; n.gsm.pause = true; return; }
+        }
+        if (f > s.end && s.rescue) {   // トップアウト救済: 元に戻すと死ぬので、助かった盤面のまま止める
+          (n.__rpeDoneSet || (n.__rpeDoneSet = new Set())).add(s);
+          n.__rpeSeg = null; n.__rpeGrav = false; n.__rpeRescueHold = true; n.gsm.pause = true;
+          return;
         }
         if (f > s.end) {           // 修正が終わった: 止めた場面に戻して、次の修正か試合の終わりまで元のプレイ
           (n.__rpeDoneSet || (n.__rpeDoneSet = new Set())).add(s);
@@ -826,7 +833,7 @@
         if (e && !e.keep) {        // シーク: そこより前から始まる修正は済んだことにする(元のプレイ)
           const X = st && Number.isFinite(st.frame) ? st.frame : 0;
           n.__rpeSeg = null; n.__rpeDoneSet = new Set(segsOf(e).filter(x => x.frame < X));
-          n.__rpeSegPlay = null; n.__rpeWantPause = false; n.__rpeHoldT = 0; n.gsm.pause = false;
+          n.__rpeSegPlay = null; n.__rpeWantPause = false; n.__rpeHoldT = 0; n.gsm.pause = false; n.__rpeRescueHold = false; n.__rpeShowFor = null;
           const sp = n.__rpeSpd; if (sp) { if (n.lm.H.playbackSpeed === sp[1]) n.lm.H.playbackSpeed = sp[0]; n.__rpeSpd = null; }
         }
         else if (e && st && st.frame > e.frame) fastForward(n, e, st.frame);
@@ -988,7 +995,17 @@
   const sameCells = (a, b) => { const k = c => c.map(([x, y]) => x + ',' + y).sort().join(' '); return !!a && !!b && k(a) === k(b); };
   let ov = null;
   const drawTarget = now => {
-    const n = S.active, tg = n && S.pracOn && targets[undo.length - 1];
+    let n = S.active, tg = n && S.pracOn && targets[undo.length - 1], label = null;
+    // トップアウト救済を見せている間: 次に置く所を光らせ、何手前から助かる手順かを盤面の上に出す
+    if (!tg && !n) for (const g of shown()) {
+      const s = g.__rpeSeg;
+      if (!s || !s.rescue || !g.__rpeShow) continue;
+      const nx = g.__rpeShow.find(x => x.f > g.esm.frame);
+      const r = s.rescue;
+      label = `助かる手順: 死ぬ ${r.back} 手前(${r.piece} 手目)から` + (r.minBack && r.minBack < r.back ? `(${r.minBack} 手前でも助かる)` : '') + (r.ren ? `  REN を ${r.ren === 'quad' ? 'QUAD' : 'T-SPIN'} で締める` : '');
+      if (nx) { n = g; tg = nx; } else { n = g; tg = { cells: [], board: g.gsm.board, type: 'x' }; }
+      break;
+    }
     if (!tg) { if (ov) ov.style.display = 'none'; return; }
     if (!ov) {
       ov = document.createElement('canvas');
@@ -1010,7 +1027,12 @@
       const pix = document.getElementById('pixi'), rect = pix ? pix.getBoundingClientRect() : { left: 0, top: 0 };
       const top = (Number.isFinite(n.T) && Number.isFinite(n.H) ? n.T - n.H : 20);
       const pt = (x, y) => { const p = so.toGlobal({ x: L * x, y: L * (y - top) }); return [(rect.left + p.x) * dpr, (rect.top + p.y) * dpr]; };
-      const cells = targetCells(tg, n.gsm.board);
+      if (label) {
+        const [lx, ly] = pt(0, top - 1.2);
+        ctx.font = `bold ${Math.round(L * dpr * 0.6)}px system-ui,sans-serif`; ctx.textBaseline = 'bottom';
+        ctx.lineWidth = Math.max(3, 3 * dpr); ctx.strokeStyle = '#000'; ctx.strokeText(label, lx, ly); ctx.fillStyle = '#7dff9a'; ctx.fillText(label, lx, ly);
+      }
+      const cells = tg.cells.length ? targetCells(tg, n.gsm.board) : [];
       const pulse = 0.75 + 0.25 * Math.sin(now / 160);
       ctx.lineWidth = Math.max(3, 3 * dpr);
       for (const [x, y] of cells) {
@@ -1152,7 +1174,11 @@
       if (S.pracOn) t += targets.length ? `\nマネ練習: ${Math.min(undo.length, targets.length)} / ${targets.length} 手目` + (undo.length > targets.length ? '(手本の最後まで置きました)' : '') : '\nマネ練習: この先の手本がありません';
     } else if (!list.length) {
       t = games.length ? 'リプレイを開くと使えます' : 'リプレイを開くと使えます\n(このブックマークを押したあとに開いたリプレイが対象。開いていたら開き直してください)';
-    } else t = `リプレイ: ${list.length}人\n一時停止すると操作できます` + (emb ? `\n埋め込みの修正あり(${emb.frame}〜${emb.end} フレーム)` : '');
+    } else {
+      t = `リプレイ: ${list.length}人\n一時停止すると操作できます` + (emb ? `\n埋め込みの修正あり(${emb.frame}〜${emb.end} フレーム)` : '');
+      const re = emb || list.map(embedRaw).find(Boolean), rs = re && segsOf(re).find(x => x.rescue);
+      if (rs) { const r = rs.rescue; t += `\nトップアウト救済: 死ぬ ${r.minBack ?? r.back} 手前まで戻れば助かる。見せるのは ${r.back} 手前(${r.piece} 手目・${rs.frame} フレーム)から` + (r.ren ? `(REN を ${r.ren === 'quad' ? 'QUAD' : 'T-SPIN'} で締める)` : '') + (S.embMode === 'orig' ? '\n(元の版では出しません)' : ''); }
+    }
     status.textContent = 'リプレイ盤面修正\n' + t + (S.msg ? '\n' + S.msg : '');
   };
 
@@ -1229,6 +1255,35 @@
       }
       // 別の2人のリプレイになったら、自動の入れ替えを元に戻す
       if (S.swapAuto && list.length === 2 && pairKey(list) !== S.swapKey) { S.swap = false; S.swapAuto = false; S.swapKey = null; }
+      // 修正がリプレイの最後まであると、TETR.IO は最後のフレームの先を進めない(Pull が来ない)。
+      // そのときはここで修正の終わりの処理をする(少し止まってから、救済は助かった盤面のまま、それ以外は元の盤面へ)
+      if (!S.active) for (const g of list) {
+        const s = g.__rpeSeg;
+        if (!s || g.__rpeWantPause || !g.esm.IsFinished() || g.esm.frame <= s.end) continue;
+        const sp = g.__rpeSpd; if (sp) { if (g.lm.H.playbackSpeed === sp[1]) g.lm.H.playbackSpeed = sp[0]; g.__rpeSpd = null; }
+        if (!g.__rpeHoldT) { g.__rpeHoldT = now; g.gsm.pause = true; }
+        if (now - g.__rpeHoldT < S.segHold * 1000) continue;
+        g.__rpeHoldT = 0;
+        (g.__rpeDoneSet || (g.__rpeDoneSet = new Set())).add(s);
+        g.__rpeSeg = null; g.__rpeGrav = false;
+        if (s.rescue) g.__rpeRescueHold = true;
+        else { g.gsm.pause = false; const st0 = stateOfSeg(s); if (st0) injectAt(g, st0, s.frame); }
+      }
+      // 相手がリプレイの最後まで進んで Pull が来ないときも、持ち主の修正が終わったら止めた場面から動かす
+      for (const g of list) {
+        const Z = g.__rpeFrozen, o = Z && ownerOf(g);
+        if (!Z || !g.esm.IsFinished() || (o && o.__rpeSeg === Z.s)) continue;
+        g.__rpeFrozen = null; g.gsm.pause = false;
+        try { injectAt(g, Z.state, Z.f); } catch (e) { }
+      }
+      // トップアウト救済の修正が始まったら、その置き方を裏で一度進めて集める(盤面に次の置き場所を出す)
+      if (!S.active) for (const g of list) {
+        const s = g.__rpeSeg;
+        if (!s || !s.rescue || g.__rpeShowFor === s || g.__rpeWantPause) continue;
+        g.__rpeShowFor = s; g.__rpeShow = null;
+        const st = stateOfSeg(s);
+        if (st) { try { g.__rpeShow = simulate(g, st, s.frame); } catch (e) { console.warn(TAG, 'rescue show', e); } }
+      }
       // 修正の所で止めて操作: 一時停止ボタンを押してから(リプレイの画面も止まった表示になる)、修正の前の場面で操作を始める
       if (!S.active) for (const g of list) {
         if (!g.__rpeSegPlay || !g.__rpeWantPause) continue;
