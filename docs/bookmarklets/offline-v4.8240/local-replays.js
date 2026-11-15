@@ -86,10 +86,12 @@
      const res=record.result||{},r=res.results||res,st=r.stats||{},agg=r.aggregatestats||{},z=st.zenith||{};
      let file=null;try{file=QPLocalZen.replay(record)}catch{}
      const local=file?.local||record.replay?.local||{},opts=res.options?.zenith_mods?res.options:file?.replay?.options||{};
-     if(local.bot||local.engine)throw Error('BOT・外部AIの記録はランキングに送れません');
+     // 5.07 より前の記録は BOT の印がないので、AI の名前(自作AIのプロフィール名・"AI" を含む名前)でも断る
+     const pname=String(file?.users?.[0]?.username||''),aiNames=new Set((window.LocalBotLearning?.profiles?.()||[]).map(p=>String(p.name)));
+     if(local.bot||local.engine||aiNames.has(pname)||(local.bot===undefined&&/\bAI\b/i.test(pname)))throw Error('BOT・外部AIの記録はランキングに送れません');
      if(!(Number(z.altitude)>0))throw Error('高度が記録されていないので送れません');
      const data={v:1,name:file?.users?.[0]?.username||localStorage.getItem('qp-local-username')||'LOCAL',mode:record.mode,altitude:+Number(z.altitude).toFixed(2),floor:Number(z.floor)||1,revives:Number(z.revives??z.revivesTotal??0)||0,
-      time:Math.round(Number(st.finaltime)||Number(file?.replay?.frames)/60*1000||0),apm:+(Number(agg.apm)||0).toFixed(2),pps:+(Number(agg.pps)||0).toFixed(2),mods:Array.isArray(opts.zenith_mods)?opts.zenith_mods:[],hyper:z.speedrun===true||z.speedrun_seen===true,
+      time:Math.round(Number(st.finaltime)||Number(file?.replay?.frames)/60*1000||0),apm:+(Number(agg.apm)||0).toFixed(2),pps:+(Number(agg.pps)||0).toFixed(2),mods:Array.isArray(opts.zenith_mods)?opts.zenith_mods:[],hyper:(z.speedrun===true||z.speedrun_seen===true)&&Number(z.floor)>=10,
       floor10:!!local.incomingAttacks?.floor10,lull:local.incomingAttacks?.lull!==false,test:local.testMode||'solo',bot:!!local.bot,engine:local.engine||null,patch:String(window.__qpPatchVersion||''),date:record.date};
      const url='https://github.com/kei1215/tetrio-hub/issues/new?template=pb.yml&title='+encodeURIComponent('PB: '+data.name+' '+data.altitude+'m')+'&data='+encodeURIComponent(JSON.stringify(data));
      // v5.07 (user: ゲーム内からapiで送れる様に・送信するのはオフライン版の記録のみ): GAS 中継に記録と TTR を送る

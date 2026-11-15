@@ -29,7 +29,7 @@ function clean(d, meta) {
   return {
     id: meta.id, user: meta.user, src: meta.src, name, mode, altitude: Math.round(altitude * 100) / 100, floor, revives,
     time: Math.round(time), apm: Math.round(apm * 100) / 100, pps: Math.round(pps * 100) / 100, mods,
-    floor10: d.floor10 === true, lull: d.lull !== false, hyper: d.hyper === true,
+    floor10: d.floor10 === true, lull: d.lull !== false, hyper: d.hyper === true && floor === 10,
     test: ['solo', 'duo-dead', 'duo-reverse-dead'].includes(d.test) ? d.test : 'solo',
     bot: d.bot === true, engine: typeof d.engine === 'string' ? d.engine.slice(0, 40) : null,
     patch: String(d.patch || '').slice(0, 16), date: String(d.date || '').slice(0, 30), added: new Date().toISOString(),
@@ -114,7 +114,7 @@ module.exports.collect = async () => {
   const api = JSON.parse(fs.readFileSync('docs/ranking/api.json', 'utf8')).url;
   if (!API_OK(api)) return { added: 0, log: ['api.json に url がありません'] };
   const list = await (await fetch(api + '?list=1', { redirect: 'follow' })).json();
-  const have = new Set(load().records.map(r => r.id)), log = [];
+  const db0 = load(), have = new Set([...db0.records.map(r => r.id), ...(db0.rejected || [])]), log = [];
   let added = 0;
   for (const it of (list.items || []).slice(0, 50)) {
     const id = num(it.id, 1e12, 1e14);

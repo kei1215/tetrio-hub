@@ -66,7 +66,7 @@
   const MODS = [['expert','EXPERT'],['nohold','NO HOLD'],['messy','MESSY'],['gravity','GRAVITY'],['volatile','VOLATILE'],['doublehole','DOUBLE HOLE'],['invisible','INVISIBLE'],['allspin','ALL-SPIN'],['duo','DUO']];
   const modName = m => { const base = m.replace(/_reversed$/, ''), n = (MODS.find(x => x[0] === base) || [base, base.toUpperCase()])[1]; return m.endsWith('_reversed') ? '裏' + n : n; };
   const TABS = [['all','総合'],['nomod','MODなし'],['mod','MOD別'],['combo','組み合わせ別'],['floor10','10F相当'],['floor10lull','10F相当(猶予あり)'],['floor10nolull','10F相当(猶予なし)'],['hyper','HYPERSPEED'],['revive','リバイブ回数']];
-  let records = [], tab = 'all';
+  let records = [], rejected = [], tab = 'all';
   const $ = id => document.getElementById(id);
   const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
   const fmtTime = ms => { if (!ms) return '-'; const s = ms / 1000, m = Math.floor(s / 60); return m + ':' + (s - m * 60).toFixed(1).padStart(4, '0'); };
@@ -77,12 +77,14 @@
     for (const r of list) { const k = r.user + '\u0000' + (r.bot ? r.engine || 'bot' : ''), cur = by.get(k); if (!cur || key(r) > key(cur) || key(r) === key(cur) && r.id < cur.id) by.set(k, r); }
     return [...by.values()].sort((a, b) => key(b) - key(a) || a.id - b.id);
   };
+  // TTR はクリックで保存(user: ttrを押したらダウンロード)。読めないとき(Discord は CORS なし)はそのまま開く(Discord は保存として返す)
+  const dl = (url, name) => fetch(url).then(r => { if (!r.ok) throw 0; return r.blob(); }).then(b => { const u = URL.createObjectURL(b), a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 10000); }).catch(() => { location.href = url; });
   const table = (list, cols) => {
     if (!list.length) return el('p', 'まだ記録がありません。');
     const t = el('table', null, 'rk-table'), head = t.createTHead().insertRow();
     for (const [label, , cls] of cols) { const th = el('th', label); if (cls) th.className = cls; head.appendChild(th); }
     const body = t.createTBody();
-    list.forEach((r, i) => { const row = body.insertRow(); for (const [, get, cls] of cols) { const td = row.insertCell(); const v = get(r, i); if (cls === 'replay') { if (v && (/^https:\/\/(cdn|media)\.discordapp\.(com|net)\/attachments\//.test(v) || /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec\?ttr=\d{13}$/.test(v))) { const a = el('a', '↓ TTR'); a.href = v; a.rel = 'noopener'; a.target = '_blank'; td.appendChild(a); } } else td.textContent = v; if (cls && cls !== 'replay') td.className = cls; } });
+    list.forEach((r, i) => { const row = body.insertRow(); for (const [, get, cls] of cols) { const td = row.insertCell(); const v = get(r, i); if (cls === 'replay') { if (v && (/^https:\/\/(cdn|media)\.discordapp\.(com|net)\/attachments\//.test(v) || /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec\?ttr=\d{13}$/.test(v))) { const a = el('a', '↓ TTR'); a.href = v; a.onclick = e => { e.preventDefault(); dl(v, 'PB-' + r.name.replace(/[^\w.-]+/g, '_') + '-' + Math.round(r.altitude) + 'm.ttr'); }; td.appendChild(a); } } else td.textContent = v; if (cls && cls !== 'replay') td.className = cls; } });
     return t;
   };
   // 表は順位・名前・高さだけ(user: top3のリプレイと高さのみ表示)。上位3人は Discord に保存したリプレイ(.ttr)へのリンク
@@ -133,13 +135,13 @@
     const name = String(d.name || '').replace(/[\u0000-\u001f<>@`]/g, '').trim().slice(0, 32) || 'LOCAL';
     const url = it.discord && /^https:\/\/(cdn|media)\.discordapp\.(com|net)\/attachments\//.test(it.discord.url || '') ? it.discord.url : api + '?ttr=' + id;
     return { id, user: 'name:' + name.toLowerCase(), name, mode: d.mode, altitude: Math.round(alt * 100) / 100, floor, revives: Number(d.revives) || 0, mods,
-      floor10: d.floor10 === true, lull: d.lull !== false, hyper: d.hyper === true, test: ['solo', 'duo-dead', 'duo-reverse-dead'].includes(d.test) ? d.test : 'solo', bot: false, replayUrl: url, pending: true };
+      floor10: d.floor10 === true, lull: d.lull !== false, hyper: d.hyper === true && floor === 10, test: ['solo', 'duo-dead', 'duo-reverse-dead'].includes(d.test) ? d.test : 'solo', bot: false, replayUrl: url, pending: true };
   };
   const pending = () => fetch('api.json', { cache: 'no-store' }).then(r => r.json()).then(a => {
     if (!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(a.url || '')) return;
-    return fetch(a.url + '?list=1').then(r => r.json()).then(l => { const have = new Set(records.map(r => r.id)); for (const it of l.items || []) { const r = fromGas(it, a.url); if (r && !have.has(r.id)) { records.push(r); have.add(r.id); } } render(); });
+    return fetch(a.url + '?list=1').then(r => r.json()).then(l => { const have = new Set([...records.map(r => r.id), ...rejected]); for (const it of l.items || []) { const r = fromGas(it, a.url); if (r && !have.has(r.id)) { records.push(r); have.add(r.id); } } render(); });
   }).catch(() => {});
-  fetch('data/records.json', { cache: 'no-store' }).then(r => r.json()).then(d => { records = (d.records || []).filter(r => r && typeof r.altitude === 'number'); render(); pending(); })
+  fetch('data/records.json', { cache: 'no-store' }).then(r => r.json()).then(d => { rejected = Array.isArray(d.rejected) ? d.rejected : []; records = (d.records || []).filter(r => r && typeof r.altitude === 'number' && !rejected.includes(r.id)); render(); pending(); })
     .catch(() => { $('out').textContent = 'ランキングを読み込めませんでした。'; });
 })();
 </script>
