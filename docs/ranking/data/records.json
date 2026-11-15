@@ -1,1 +1,32 @@
-{"schema":1,"records":[]}
+{
+ "schema": 1,
+ "records": [
+  {
+   "id": 1794758400484,
+   "user": "name:y_kei1215",
+   "src": "game",
+   "name": "y_kei1215",
+   "mode": "zenith",
+   "altitude": 11.73,
+   "floor": 1,
+   "revives": 0,
+   "time": 11770,
+   "apm": 71.39,
+   "pps": 2.8,
+   "mods": [
+    "doublehole"
+   ],
+   "floor10": false,
+   "lull": true,
+   "hyper": false,
+   "test": "solo",
+   "bot": false,
+   "engine": null,
+   "patch": "",
+   "date": "1794758363443",
+   "added": "2026-11-15T16:00:43.991Z",
+   "discord": "1571555569209188415",
+   "replayUrl": "https://cdn.discordapp.com/attachments/1571542570704834730/1571555569339469935/PB-1794758400484.ttr?ex=6afb28ad&is=6af9d72d&hm=92fa86fdca904e6b18617afbd2b1c0ab7520a427589eca8acef94dbe32e0bbe3&"
+  }
+ ]
+}
