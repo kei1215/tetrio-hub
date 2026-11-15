@@ -186,3 +186,4 @@
   - 組み合わせ別は、MOD 1つ(表/裏)と DUO 以外の全部(表/裏)だけにした。
 - 設定がまだ: Secret PB_DISCORD_WEBHOOK、GAS のデプロイ、api.json の url。手順は tools/ranking/README.md。
 - (同日) GAS は秘密を持たない受付窓口に変更: TTR をドライブ、記録をスクリプト プロパティに3日間置き、pb-collect.yml が10分ごとに取り込んで Discord に投稿する。BOT・外部AIの記録は送信ボタンを出さず、GAS とイングェストでも断る(user: botの記録は残さない)。ページの BOT チェック欄も削除。Secret PB_DISCORD_WEBHOOK は設定済み。
+- 2026-11-16: v5.07 PUBLISHED (release patch-v5.07, target 0098de5). Browser: offline-va5.07 (va5.05/5.06 mirror it), offline-v4.8255 render-diagnostics from the vO zip, old v4.82xx re-mirrored. add-web-external.sh was not run (5.06 had no preinstalled external AIs either).

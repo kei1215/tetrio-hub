@@ -1,3 +1,16 @@
+/* Browser QP OFFLINE (v5.07, user: configのハンドリング以外の設定がオフラインで維持されない): the
+   page shares tetr.io's localStorage, so the open tetr.io tab could overwrite the offline settings and
+   the offline page wrote tetr.io's own userConfig. Offline reads and writes "qp-offline-userConfig"
+   instead (copied once from userConfig on the first start). Must run before client.js. */
+(()=>{if(location.protocol!=='blob:'||Storage.prototype.__qpOfflineCfg)return;try{
+ const K='userConfig',Q='qp-offline-userConfig',P=Storage.prototype,get=P.getItem,set=P.setItem,del=P.removeItem;
+ if(get.call(localStorage,Q)===null){const v=get.call(localStorage,K);if(v!==null)set.call(localStorage,Q,v)}
+ const map=(s,k)=>s===localStorage&&k===K?Q:k;
+ P.getItem=function(k){return get.call(this,map(this,k))};
+ P.setItem=function(k,v){return set.call(this,map(this,k),v)};
+ P.removeItem=function(k){return del.call(this,map(this,k))};
+ Object.defineProperty(P,'__qpOfflineCfg',{value:true});
+}catch(e){console.warn('[QP offline config]',e)}})();
 (() => {
  let current='UI読み込み';
  const errors=[];
