@@ -239,7 +239,10 @@ function analyze(info, rep) {
       if (!held.size) { freeAfter[i] = f; break; }
     }
   }
-  return { locks, freeAfter, endFrame: s.endFrame, topout: s.isTopout() };
+  // v5.01 (user: 地面についた状態で始めないで): a fix starts the frame the next piece appears (keys still
+  // held are let go there), not the first frame with no key held (a held soft drop had landed it by then)
+  const spawnAt = locks.map((l) => l.f + 1);
+  return { locks, freeAfter, spawnAt, endFrame: s.endFrame, topout: s.isTopout() };
 }
 
 // Candidate spots: the game cut into stretches of W pieces. A stretch is tried when its attack per
@@ -254,7 +257,7 @@ function weakSpots(an, W, max) {
     const K = Math.min(W, n - s); if (K < 3 || an.freeAfter[s - 1] == null) continue;
     const L = an.locks.slice(s, s + K), sum = L.reduce((x, l) => x + l.atk, 0);
     const ren = L.some((l) => l.combo >= 2), quad = L.some((l) => l.lines >= 4);
-    if (sum / K < avg * 0.8 || ren || quad) out.push({ i: s, sum, avg, F: an.freeAfter[s - 1], K, ren, quad });
+    if (sum / K < avg * 0.8 || ren || quad) out.push({ i: s, sum, avg, F: an.spawnAt[s - 1], K, ren, quad, release: true });
   }
   return out;
 }
@@ -304,7 +307,7 @@ async function rescueOne(pl, bot, o, T, an, prog) {
   const N = an.locks.length, maxBack = Math.min(o.maxBack ?? 30, N - 1), extra = o.renTries ?? 12;
   let first = null, best = null; const all = [];
   const tryFrom = async (k, i, F, order) => {
-    const { seg, stat } = await fixOne(pl, pl.replay, bot, { ...o, range: { F, K: Infinity, rescue: true, order }, onProgress: prog && ((x) => prog({ ...x, back: k })) }, T);
+    const { seg, stat } = await fixOne(pl, pl.replay, bot, { ...o, range: { F, K: Infinity, rescue: true, order, release: true }, onProgress: prog && ((x) => prog({ ...x, back: k })) }, T);
     // survives = no topout until past the death frame (+90F); a topout later (in the extra pieces) only cuts the line
     const lim = an.endFrame + 90;
     if (stat.topout && (stat.locks.at(-1)?.f ?? 0) <= lim) return null;
@@ -330,7 +333,7 @@ async function rescueOne(pl, bot, o, T, an, prog) {
   };
   for (let k = 1; k <= maxBack; k++) {
     const i = N - k;                       // the AI places pieces i, i+1, ... (0-based)
-    const F = i > 0 ? an.freeAfter[i - 1] : null;
+    const F = i > 0 ? an.spawnAt[i - 1] : null;
     if (F == null) continue;
     const cand = await tryFrom(k, i, F, null);
     if (!cand) continue;
@@ -344,7 +347,7 @@ async function rescueOne(pl, bot, o, T, an, prog) {
   // (1) the same piece order as the player: the AI places the player's minos in the player's order
   const same = [];
   for (let k = first.k; k <= Math.min(maxBack, first.k + extra); k++) {
-    const i = N - k, F = i > 0 ? an.freeAfter[i - 1] : null;
+    const i = N - k, F = i > 0 ? an.spawnAt[i - 1] : null;
     if (F == null) continue;
     const c = await tryFrom(k, i, F, an.locks.slice(i).map((l) => l.mino));
     if (c && c.order === "same") same.push(c);
@@ -382,9 +385,9 @@ export async function ccImprove(rep, username, frame, bot, opt = {}) {
   if (i < 0) return null;
   // the AI takes the piece in play now from the next frame (keys still held are let go; the path search
   // starts where the piece is). Only when HOLD was already used on it, it starts at the piece after.
-  const prev = i > 0 ? an.locks[i - 1].f : 0;
-  const touched = rep.events.some((x) => x.type === "keydown" && x.data?.key === "hold" && x.frame > prev && x.frame <= frame);
-  const s = touched ? i + 1 : i, F = touched ? an.locks[i].f + 1 : frame + 1;
+  // v5.01 (user: 地面についた状態で始めないで): the piece in play may already be on the ground, so the AI
+  // starts with the next piece, the frame it appears
+  const s = i + 1, F = an.spawnAt[i];
   if (s >= an.locks.length) return null;
   const K = Math.min(o.K ?? 10, an.locks.length - s);
   const { seg, stat } = await fixOne(pl, pl.replay, bot, { ...o, range: { F, K, release: true } }, T);

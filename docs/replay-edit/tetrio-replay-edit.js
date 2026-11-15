@@ -135,6 +135,7 @@
     embMode: keep.embMode === 'orig' ? 'orig' : 'edit',   // 埋め込みの再生: 修正後 / 元の版(マネ練習はどちらでも別のボタン)   // 地形のマネ練習(リプレイで実際に置いた所を目標に出す)
     // 修正の所に来たら: 'watch' 流し見 / 'play' 止めて操作(その修正の置き方がマネ練習の手本)
     segPlay: keep.segPlay === 'play' ? 'play' : 'watch',
+    impAi: keep.impAi === 'cc1' ? 'cc1' : 'cc2',   // v5.01 (user: AIの改善がCCとCC2選べない): 改善案を作る AI
     segDemo: keep.segDemo ?? true,          // 止めて操作のとき、先に修正の再生(見本)を見せる
     segSlow: [1, .5, .25].includes(keep.segSlow) ? keep.segSlow : .5,   // 修正を見せる間の再生速度(回転が見えるように)
     segHold: [0, 1, 2, 3].includes(keep.segHold) ? keep.segHold : 2,     // 修正を見せたあと止まる秒数(そのあと元の盤面に戻る)
@@ -171,6 +172,7 @@
   let gravBack = null;           // マネ練習で手本に合わせて変えた重力の、元の設定
   let targets = [];              // マネ練習の手本(止めた場面から、リプレイで実際に置いた順)
   let wrongAt = 0;               // 手本と違う所に置いた時刻
+  let doneAt = 0;                // マネ練習の手本を最後まで置いた時刻(1秒後に元へ戻す)
   let snap = null;               // 止めたときの状態(TETR.IO の EjectState)
   let snapFrame = 0, base = null;
   let queue = [];                // ゲームに入れるキー操作
@@ -233,6 +235,7 @@
   const injectAt = (n, state, frame) => {
     internal++;
     try { n.siom.InjectState(clone(state)); n.esm.Seek(frame); } finally { internal--; }
+    n.__rpeLastF = frame;   // このスクリプトが戻した先(Pull の「巻き戻った」判定に数えない)
   };
   // 早送りで揺れた盤面の位置を戻す(TETR.IO の AdvanceFrames と同じ)
   const calmHolder = n => { try { const hs = n.hm.H.holderstate; for (const k of ['x', 'y', 'r', 's', 'w', 'dx', 'dy', 'dr', 'ds', 'dw']) hs[k] = 0; } catch (e) { } };
@@ -284,7 +287,7 @@
     const st = n.gsm.stats;
     base = { attack: st.garbage.attack || 0, lines: st.lines || 0, pieces: st.piecesplaced || 0 };
     { const e = embedOf(n); editBase = !e ? null : e.keep ? (snapFrame >= e.frame ? e : null) : (n.__rpeSeg && snapFrame >= n.__rpeSeg.frame ? n.__rpeSeg : null); }
-    targets = []; lastLock = null; wrongAt = 0;
+    targets = []; lastLock = null; wrongAt = 0; doneAt = 0;
     const segP = n.__rpeSegPlay && n.__rpeSeg === n.__rpeSegPlay;   // 修正の所で止めて操作: その修正を手本にする
     S.pracOn = S.practice || !!segP;
     // マネ練習は埋め込んだ修正(後から足した所)の中だけ。修正より前の手は目標なし(null)、修正の後は出さない
@@ -396,12 +399,19 @@
     if (sp) {   // 練習を終えた: その修正は済んだことにして、修正の前の元の盤面から元のプレイを続ける
       n.__rpeSegPlay = null; n.__rpeWantPause = false; n.__rpeHoldT = 0;
       if (restore && n.__rpeSeg === sp) {
-        (n.__rpeDoneSet || (n.__rpeDoneSet = new Set())).add(sp);
-        n.__rpeSeg = null; n.__rpeGrav = false;
-        const st0 = stateOfSeg(sp); if (st0) { try { injectAt(n, st0, sp.frame); } catch (e) { } }
+        const done = n.__rpeDoneSet || (n.__rpeDoneSet = new Set());
+        done.add(sp);
+        // v5.01 (user: renquad伸ばした場合もコンボの最初からやらせる): トップアウト救済の練習のあとに「もっと伸ばせた」が
+        // あれば、それも見せてから、その始まり(REN の前)から操作させる(ループが切り替える)
+        const alt = sp.rescue && segsOf(embedOf(n) || {}).find(x => x.alt && x !== sp && !done.has(x));
+        if (alt) { done.delete(sp); n.__rpeAltWant = alt; n.gsm.pause = true; }
+        else {
+          n.__rpeSeg = null; n.__rpeGrav = false;
+          const st0 = stateOfSeg(sp); if (st0) { try { injectAt(n, st0, sp.frame); } catch (e) { } }
+        }
       }
     }
-    queue = []; held.clear(); wrongAt = 0; lastLock = null;
+    queue = []; held.clear(); wrongAt = 0; doneAt = 0; lastLock = null;
     if (gravBack !== null) { S.noGravity = gravBack; gravBack = null; }
     console.log(TAG, restore ? 'restored' : 'left (seek)');
   };
@@ -775,6 +785,18 @@
     P.undo.push(swap(esm, 'IsFinished', function (...a) { const s = n.__rpeSeg; if (s && s.rescue && S.active !== n && this._frame <= s.end) return false; return fin0.apply(this, a); }));
     P.undo.push(swap(esm, 'Pull', function () {
       const e = S.active !== n && embedOf(n), f = this._frame;
+      // v5.01 (user: 連続再生してるとたまに操作のまねが発動しない): 次のラウンド(別の埋め込み)に移った、
+      // または外から巻き戻されたときは、前のラウンドの修正の途中の状態を消す(残っていると次の修正が始まらない)
+      if (e && !e.keep && !internal && !simulating && (n.__rpeEmb !== e || f < (n.__rpeLastF ?? -1))) {
+        const fresh = n.__rpeEmb !== e;
+        n.__rpeEmb = e;
+        if (fresh || !n.__rpeSeg) {
+          n.__rpeSeg = null; n.__rpeDoneSet = new Set(segsOf(e).filter(x => x.frame < f));
+          n.__rpeSegPlay = null; n.__rpeWantPause = false; n.__rpeHoldT = 0; n.__rpeRescueHold = false; n.__rpeShowFor = null; n.__rpeAltWant = null; n.__rpeAltStart = null; n.__rpeGrav = false;
+          if (fresh) n.gsm.pause = false;
+        }
+      }
+      n.__rpeLastF = f;
       if (n.__rpeHold && (!e || f <= e.end)) { n.gsm.pause = false; n.__rpeHold = false; }
       if (n.__rpeOrigOnly) return pull0.call(this);   // もう1つの救済の始まりの状態を作っている最中(元のプレイだけ)
       // 「もっと伸ばせた」の救済(alt)はそのフレームでは始めない(1つ目の救済の後に見せる)。始まりの状態だけ取っておく(1つ目より前のこともある)
@@ -1149,11 +1171,12 @@
     if (!X || !X.ccImprove) { S.msg = 'vA の CC 盤面修正がないと使えません'; return; }
     improving = true;
     try {
-      S.msg = 'AI(Cold Clear 2)を読み込み中…'; draw();
-      const bot = await X.loadBot('cc2', m => { S.msg = m; draw(); });
+      const ai = S.impAi;
+      S.msg = `AI(${ai === 'cc1' ? 'Cold Clear 1' : 'Cold Clear 2'})を読み込み中…`; draw();
+      const bot = await X.loadBot(ai, m => { S.msg = m; draw(); });
       S.msg = '改善案を作っています…'; draw();
       const rep = n.esm.replay;
-      const r = await X.ccImprove({ events: rep.events, frames: rep.frames, options: rep.options, results: {} }, name(n), frame, bot, { thinkMs: 150, engineId: 'cc2', idle: () => new Promise(ok => setTimeout(ok, 0)) });
+      const r = await X.ccImprove({ events: rep.events, frames: rep.frames, options: rep.options, results: {} }, name(n), frame, bot, { thinkMs: 150, engineId: ai, idle: () => new Promise(ok => setTimeout(ok, 0)) });
       if (!r) { S.msg = 'ここからは作れません(試合の最後です)'; return; }
       const old = (S.lastEdit && S.lastEdit.game === n && S.lastEdit.edit) || embedRaw(n);
       const segs = (old && !old.keep ? segsOf(old).map(x => { const c = { ...x }; delete c.segs; return c; }) : []).filter(x => x.frame !== r.seg.frame).concat([r.seg]).sort((a, b) => a.frame - b.frame);
@@ -1167,6 +1190,7 @@
     } catch (e) { console.warn(TAG, 'improve', e); S.msg = 'できませんでした: ' + (e.message || e); }
     finally { improving = false; draw(); }
   });
+  const bImpAi = btn('', () => { S.impAi = S.impAi === 'cc1' ? 'cc2' : 'cc1'; draw(); });
   const bUnembed = btn('埋め込みを外す', () => { removeEmbed(); draw(); });
   const bClose = btn('パネルを閉じる', () => setClosed(true));
   // 項目が多いので、見出しごとにたたむ(開いている見出しはこの端末に覚える)
@@ -1182,7 +1206,7 @@
     d.addEventListener('toggle', () => { secOpen[key] = d.open; try { localStorage.setItem('rpe-sections-v1', JSON.stringify(secOpen)); } catch (e) { } });
     return d;
   };
-  const secEmb = sec('emb', '修正・埋め込み', [bEmbMode, bSegPlay, bSegDemo, bSegSlow, bSegHold, bImprove, bEmbed, bUnembed], true);
+  const secEmb = sec('emb', '修正・埋め込み', [bEmbMode, bSegPlay, bSegDemo, bSegSlow, bSegHold, bImpAi, bImprove, bEmbed, bUnembed], true);
   panel.append(status, bReset,
     sec('play', '操作・練習', [bAuto, bSide, bSwap, bGrav, bPractice], false),
     secEmb,
@@ -1248,6 +1272,8 @@
     const segUi = emb && !emb.keep && S.embMode !== 'orig';
     bImprove.style.display = list.length && (W.__qpCcFix || W.__qpCcFixSrc) ? '' : 'none';
     bImprove.style.opacity = improving ? '.6' : '1';
+    bImpAi.style.display = bImprove.style.display;
+    bImpAi.textContent = '改善案の AI: ' + (S.impAi === 'cc1' ? 'Cold Clear 1' : 'Cold Clear 2');
     for (const b of [bSegPlay, bSegSlow, bSegHold]) b.style.display = segUi ? '' : 'none';
     bSegDemo.style.display = segUi && S.segPlay === 'play' ? '' : 'none';
     bSegPlay.textContent = '修正の所に来たら: ' + (S.segPlay === 'play' ? '止めて操作(修正が手本)' : '流し見');
@@ -1384,6 +1410,8 @@
         if (!st) { g.__rpeSeg = null; g.__rpeRescueHold = true; continue; }
         // 状態の入れ直しは次のフレームの Pull の中で(他の修正の始まりと同じく、そのフレームのキーから流す)
         g.__rpeSeg = alt; g.__rpeGrav = false; g.__rpeHoldT = 0; g.gsm.pause = false; g.__rpeAltStart = st;
+        // 止めて操作・見本なし: 「もっと伸ばせた」もすぐ、その始まりから操作させる
+        if (S.segPlay === 'play' && !S.segDemo) { if (!stateOfSeg(alt)) segState.set(alt, st); g.__rpeAltStart = null; g.__rpeSegPlay = alt; g.__rpeWantPause = true; g.gsm.pause = true; continue; }
         const H = g.lm.H; if (S.segSlow < 1 && H.playbackSpeed > 0 && !g.__rpeSpd) { g.__rpeSpd = [H.playbackSpeed, H.playbackSpeed * S.segSlow]; H.playbackSpeed = g.__rpeSpd[1]; }
       }
       // トップアウト救済の修正が始まったら、その置き方を裏で一度進めて集める(盤面に次の置き場所を出す)
@@ -1440,6 +1468,17 @@
             lastLock = null;
           }
         }
+        // v5.01 (user: 真似練習を終えたらパフェの演出を出しても1秒後元に戻す): 手本を最後まで置いたら、
+        // 演出(パーフェクトクリアなど)が出る間 1 秒そのまま進めてから、再生ボタンで元のプレイへ戻る
+        if (S.pracOn && targets.length && undo.length > targets.length && !wrongAt && !deadAt) {
+          if (!doneAt) { doneAt = now; S.msg = 'マネ練習: 手本の最後まで置きました。1秒後に元のプレイへ戻ります'; }
+          else if (now - doneAt > 1000) {
+            doneAt = 0;
+            const b = document.getElementById('replaytools_button_playpause');
+            if (b) b.click();
+            if (S.active === n) { leave(true); try { n.lm.H.playbackSpeed = 1; } catch (e) { } }
+          }
+        }
         if (wrongAt && now - wrongAt > 600) {
           jump(undo[undo.length - 1]);
           S.msg = 'ちがう場所でした。光っている所に置いてください';
@@ -1480,7 +1519,7 @@
     for (const g of games) unplay(g);
     W.__rpeTeardown = null;
     unswapAll();
-    return { auto: S.auto, side: S.side, noGravity: S.noGravity, swap: S.swap, sideName: S.sideName, swapAuto: S.swapAuto, swapKey: S.swapKey, counter: S.counter, practice: S.practice, embMode: S.embMode, segPlay: S.segPlay, segDemo: S.segDemo, segSlow: S.segSlow, segHold: S.segHold, panelClosed: upd ? S.panelClosed : false };
+    return { auto: S.auto, side: S.side, noGravity: S.noGravity, swap: S.swap, sideName: S.sideName, swapAuto: S.swapAuto, swapKey: S.swapKey, counter: S.counter, practice: S.practice, embMode: S.embMode, segPlay: S.segPlay, segDemo: S.segDemo, segSlow: S.segSlow, segHold: S.segHold, impAi: S.impAi, panelClosed: upd ? S.panelClosed : false };
   };
 
   // ---- 自動更新(操作中は待つ) ----

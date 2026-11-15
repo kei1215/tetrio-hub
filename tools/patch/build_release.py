@@ -577,6 +577,9 @@ def version_parts(v):
     return int(major), int(minor.ljust(2, '0')) if int(major) >= 5 else int(minor)
 
 
+# tag: 5.01 (not 5.1) from v5; update is the 2-digit minor (1 = .01, 10 = .1)
+TAG_OLD = "return f'v{self.kind}-{self.version}.{self.update}'"
+TAG_NEW = "return f'v{self.kind}-{self.version}.{self.update}' if self.version < 5 else f'v{self.kind}-{self.version}.' + (f'{self.update:02d}' if self.update % 10 else str(self.update // 10))"
 MIGRATE_OLD = "return previous == self.version or (self.version == 2 and previous == 1)"
 MIGRATE_NEW = "return previous == self.version or (self.version == 2 and previous == 1) or (self.version == 5 and previous == 4)"
 
@@ -658,6 +661,8 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                 text = data.decode('utf-8')
                 if MIGRATE_NEW not in text:
                     text = replace_once(text, MIGRATE_OLD, MIGRATE_NEW, name)
+                if TAG_NEW not in text:
+                    text = replace_once(text, TAG_OLD, TAG_NEW, name)
                 data = text.encode('utf-8')
             elif name == 'QP-CHANGELOG.txt' and incremental:
                 data = (f'v{full_version(new)}\n{notes}\n' + data.decode('utf-8')).encode('utf-8')
@@ -704,9 +709,13 @@ def build_launcher(old_file, new_file, flavor, old, new, old_sha, payload):
         raise SystemExit('payload sha not found in header of ' + old_file.name)
     new_sha = sha256(payload)
     ov, nv = full_version(old), full_version(new)
-    header = header.replace(old_sha, new_sha).replace(ov, nv).replace(ov.replace('.', ''), nv.replace('.', ''))
+    # whole version only (5.0 must not match inside 5.01); the compact 48290 form only for v4 names
+    vre = re.compile(r'(?<![\d.])' + re.escape(ov) + r'(?![\d])')
+    header = vre.sub(nv, header.replace(old_sha, new_sha))
+    if ov.startswith('4.'):
+        header = header.replace(ov.replace('.', ''), nv.replace('.', ''))
     # The new payload SHA-256 may contain the old number by chance; check the rest only.
-    if ov != nv and ov in header.replace(new_sha, ''):  # old == new: local rebuild of the same version
+    if ov != nv and vre.search(header.replace(new_sha, '')):  # old == new: local rebuild of the same version
         raise SystemExit('old version left in header of ' + old_file.name)
     b64 = base64.b64encode(payload).decode('ascii')
     prefix = '' if flavor == 'cmd' else '# '

@@ -89,8 +89,8 @@
       }
       const spin = now.spins > rec.last.spins;
       rec.events.push({ frame: f, type: rec.type, spin, mini, lines });
-      // 開幕の地形(1巡 = 7 手・2巡 = 14 手を置いたところ)を取っておく(テンプレの判定用)
-      if (now.pieces === 7 || now.pieces === 14) (rec.open || (rec.open = {}))[now.pieces] = shapeOf(st.board);
+      // 開幕の地形(1〜16 手目それぞれを置いたところ)を取っておく(テンプレの判定用。ミノの順は決まっていないので毎手見る)
+      if (now.pieces >= 1 && now.pieces <= 16) (rec.open || (rec.open = {}))[now.pieces] = shapeOf(st.board);
     } else if (dp > 1) {
       // 一度に何手も進んだ(リプレイで先へシークしたときなど): 回数だけまとめて足す(ミノの種類はわからない)
       const agg = { frame: f, agg: true, spins: Math.max(0, now.spins - rec.last.spins), mini: 0, quad: 0, byLines: [0, 0, 0, 0, 0] };
@@ -151,33 +151,34 @@
     return rows;
   };
   const mirror = rows => rows.map(r => r.split('').reverse().join(''));
-  const diff = (a, b) => { let d = 0; const n = Math.max(a.length, b.length); for (let y = 0; y < n; y++) { const r = a[y] || '..........', s = b[y] || '..........'; for (let x = 0; x < 10; x++) if (r[x] !== s[x]) d++; } return d; };
-  const TPL_KEY = 'qp-opener-templates-v1';
-  const templates = () => { try { const v = JSON.parse(localStorage.getItem(TPL_KEY) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } };
-  const saveTemplates = list => { try { localStorage.setItem(TPL_KEY, JSON.stringify(list)); } catch (e) { } };
-  // 盤面の開幕の形 { 7: rows, 14: rows } に合うテンプレの名前(2巡目を優先、左右反転も同じ。2 マスまでの違いは同じとみなす)
+  // v5.01 (user: テンプレは有名な所に反応 / ミノの順が決まっていることの方が少ない / 置きミスでも何を組もうとしたか /
+  // AI版のみ / プレーヤー側で追加はしない): 内蔵の開幕(形は four.lol の図。左右反転も同じ)と、1〜16 手目の各盤面を比べる。
+  // 組み途中(形の一部)でも、置きミスが少しあっても、いちばん近いものを出す
+  const OPENERS = [["アルバトロス", ".#.###...#/##.#######/#...######/...##....#"], ["紅茶砲", "######.###/#####...##/###....##./##.....#.."], ["ガムシロ積み", "###.######/##.#######/##....####/#......##./........#."], ["にはち砲", "##...####./#.#######./#....##.../......#..."], ["いんたい砲", "###.######/##...#####/##..#####./#....###../.....#...."], ["MKO積み", "###.######/##...#####/##...##..#/#.....#..#"], ["Mr. T-Spin STD", "##.#.#####/#.#..##..#/#....#..../#....#..../#........."], ["DT砲 / 新DT砲", "##.#######/##.#######/....#####./...####.../....#....."], ["SSTシップ", ".#######.#/##.#######/....###..#/...##....#"], ["SDパフェ", "####...###/##.#######/#......###/##.......#/.#........"], ["TKI(開幕TSD)", "##.#######/#...######/#..##.####/.......#.."], ["TTパフェ", "###.######/######.###/##..#..###/.......###/.........#"], ["Viper", "###..#...#/######.###/#####...##/#......##."], ["パフェテンプレ(PCO)", "###....###/###...####/###....###/###.....##"]].map(([name, rows]) => ({ name, rows: rows.split('/') }));
+  const cellsOf = rows => { const c = new Set(); rows.forEach((r, y) => { for (let x = 0; x < 10; x++) if (r[x] === '#') c.add(y * 10 + x); }); return c; };
+  OPENERS.forEach(o => { o.cells = cellsOf(o.rows); o.mcells = cellsOf(mirror(o.rows)); });
+  const isVA = () => !!(W.__qpCcFixSrc || W.__qpCcFix || W.LocalAI);
+  const openerCache = new WeakMap();
   const openerOf = open => {
-    if (!open) return null;
+    if (!open || !isVA()) return null;
+    const key = Object.keys(open).join(','), c = openerCache.get(open);
+    if (c && c.key === key) return c.v;
     let best = null;
-    for (const tp of templates()) for (const k of [14, 7]) {
-      const a = open[k], b = tp['b' + k];
-      if (!a || !b || !a.length) continue;
-      const d = Math.min(diff(a, b), diff(a, mirror(b)));
-      if (d <= 2 && (!best || k > best.k || (k === best.k && d < best.d))) best = { name: tp.name, k, d };
+    for (const k in open) {
+      const b = cellsOf(open[k] || []);
+      if (b.size < 8) continue;
+      for (const o of OPENERS) for (const t of [o.cells, o.mcells]) {
+        let hit = 0; for (const x of b) if (t.has(x)) hit++;
+        const extra = b.size - hit;
+        if (hit < Math.max(8, t.size * 0.5) || extra > Math.max(2, Math.round(hit * 0.15))) continue;
+        const score = hit - 3 * extra + 5 * hit / t.size;
+        if (!best || score > best.score) best = { name: o.name, score, extra, done: hit >= t.size };
+      }
     }
+    openerCache.set(open, { key, v: best });
     return best;
   };
   const openOf = n => { const rep = replayOf(n), tl = rep && !headless(n) && timelines.get(rep); return (tl && tl.open) || (n.__sc && n.__sc.open) || null; };
-  // fumen(1ページ目の盤面だけ)を形にする
-  const fumenShape = url => {
-    const T = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-    const m = /v115@([^&#\s]+)/.exec(String(url)); if (!m) return null;
-    const v = m[1].replace(/\?/g, '').split('').map(c => T.indexOf(c));
-    let p = 0; const poll = k => { let r = 0; for (let i = 0; i < k; i++) r += v[p + i] * 64 ** i; p += k; return r; };
-    const cells = []; while (cells.length < 240) { const q = poll(2), d = Math.floor(q / 240) - 8, c = q % 240 + 1; for (let i = 0; i < c; i++) cells.push(d); }
-    const board = []; for (let y = 0; y < 23; y++) board.push(cells.slice(y * 10, y * 10 + 10).map(x => x === 8 ? 'gb' : x > 0 ? 'x' : null));
-    return shapeOf(board);
-  };
 
   const tally = events => {
     const c = { spin: 0, spinMini: 0, byLines: [0, 0, 0, 0, 0], byPiece: {}, t: 0, tspin: 0, tmini: 0, quad: 0 };
@@ -219,35 +220,11 @@
   const btn = (fn) => { const b = document.createElement('button'); b.style.cssText = 'font:inherit;color:#fff;background:#0085a1;border:0;border-radius:4px;padding:3px 6px;cursor:pointer;text-align:left'; b.onclick = e => { e.stopPropagation(); fn(); b.blur(); draw(true); }; return b; };
   const bLines = btn(() => { S.byLines = !S.byLines; });
   const bPiece = btn(() => { S.byPiece = !S.byPiece; });
-  // 開幕テンプレの登録: 左の盤面の開幕(1巡・2巡)を名前を付けて覚える / fumen(1ページ目の盤面)から
-  const bTpl = btn(() => {
-    const n = shown().find(g => { const o = openOf(g); return o && (o[7] || o[14]); });
-    if (!n) { W.alert('開幕(7 手)を置いた盤面がありません'); return; }
-    const nm = W.prompt(`${name(n)} の開幕をテンプレとして登録します。名前(例: TKI、DT砲、PCO)`, '');
-    if (!nm) return;
-    const op = openOf(n), list = templates().filter(x => x.name !== nm);
-    list.push({ name: nm, b7: op[7] || null, b14: op[14] || null }); saveTemplates(list);
-  });
-  bTpl.textContent = '開幕をテンプレに登録';
-  const bTplFumen = btn(() => {
-    const url = W.prompt('テンプレの fumen(1ページ目に開幕の形)の URL', ''); if (!url) return;
-    const sh = fumenShape(url); if (!sh || !sh.length) { W.alert('fumen を読めませんでした'); return; }
-    const nm = W.prompt('名前(例: TKI、DT砲、PCO)', ''); if (!nm) return;
-    const k = sh.join('').split('#').length - 1 > 28 ? 'b14' : 'b7';
-    const list = templates().filter(x => x.name !== nm); list.push({ name: nm, [k]: sh }); saveTemplates(list);
-  });
-  bTplFumen.textContent = 'fumen からテンプレ登録';
-  const bTplList = btn(() => {
-    const list = templates(); if (!list.length) { W.alert('登録したテンプレはありません'); return; }
-    const del = W.prompt('登録したテンプレ:\n' + list.map(x => x.name).join('\n') + '\n\n消す名前を入れると消します', '');
-    if (del) saveTemplates(list.filter(x => x.name !== del));
-  });
-  bTplList.textContent = 'テンプレ一覧';
   const bClose = btn(() => setClosed(true));
   bClose.textContent = 'パネルを閉じる';
   const bar = document.createElement('div');
   bar.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap';
-  bar.append(bLines, bPiece, bTpl, bTplFumen, bTplList, bClose);
+  bar.append(bLines, bPiece, bClose);
   const title = document.createElement('div');
   title.textContent = 'スピンカウンター';
   title.style.cssText = 'font-weight:700;color:#7fdcf0';
@@ -295,7 +272,7 @@
         rows.push(`<div>T-SPIN <b style="font-size:15px">${c.tspin}</b> / ${c.t}${c.t ? ` <span style="opacity:.75">(${Math.round(c.tspin / c.t * 100)}%)</span>` : ''}${c.tmini ? ` <span style="opacity:.75">MINI ${c.tmini}</span>` : ''}</div>`);
         rows.push(`<div>QUAD <b style="font-size:15px">${c.quad}</b></div>`);
         const op = openOf(n), hit = openerOf(op);
-        if (op && (op[7] || op[14])) rows.push(`<div>開幕 <b style="color:#ffd27f">${hit ? esc(hit.name) + (hit.k === 7 ? '(1巡目)' : '') : '登録なし'}</b></div>`);
+        if (hit) rows.push(`<div>開幕 <b style="color:#ffd27f">${esc(hit.name)}</b>${hit.extra ? ' <span style="opacity:.75">(置きミスあり)</span>' : hit.done ? '' : ' <span style="opacity:.75">(組み途中)</span>'}</div>`);
         return `<div>${rows.join('')}</div>`;
       }).join('');
     }
