@@ -241,7 +241,7 @@
     const out = [];
     let over = false;
     const undoOver = swap(n.gom, 'GameOver', function () { over = true; });
-    simLock = (g, piece) => { if (g !== n) return; const cells = lockCells(n.fm, piece); if (cells) out.push({ type: String(piece.type || 'x'), cells, board: n.gsm.board.map(row => row.slice()) }); };
+    simLock = (g, piece) => { if (g !== n) return; const cells = lockCells(n.fm, piece); if (cells) out.push({ f: n.esm.frame, type: String(piece.type || 'x'), cells, board: n.gsm.board.map(row => row.slice()) }); };
     const t0 = performance.now();
     try {
       fastRun(n, i => !over && out.length < 80 && !n.esm.IsFinished() && ((i & 31) || performance.now() - t0 < 400));
@@ -265,7 +265,12 @@
     base = { attack: st.garbage.attack || 0, lines: st.lines || 0, pieces: st.piecesplaced || 0 };
     { const e = embedOf(n); editBase = e && snapFrame >= e.frame ? e : null; }
     targets = []; lastLock = null; wrongAt = 0;
-    if (S.practice) { try { targets = simulate(n, snap, snapFrame); } catch (e) { console.warn(TAG, 'practice', e); targets = []; } }
+    // マネ練習は埋め込んだ修正(後から足した所)の中だけ。修正より前の手は目標なし(null)、修正の後は出さない
+    const pe = S.practice && embedOf(n);
+    if (pe && snapFrame <= pe.end) {
+      try { targets = simulate(n, snap, snapFrame).filter(x => x.f <= pe.end).map(x => x.f >= pe.frame ? x : null); } catch (e) { console.warn(TAG, 'practice', e); targets = []; }
+      if (!targets.some(Boolean)) targets = [];
+    } else targets = [];
     S.active = n;
     queue = []; held.clear(); acc = 0; last = performance.now(); deadAt = 0;
     const esm = n.esm, elm = n.elm, H = n.lm.H, siom = n.siom;
@@ -966,7 +971,7 @@
       S.lines = (st.lines || 0) - base.lines;
       S.pieces = (st.piecesplaced || 0) - base.pieces;
       t = `操作中: ${name(S.active)}\n火力 ${S.attack}(相手には送りません)\nライン ${S.lines} / ミノ ${S.pieces}\nCtrl+Z 1手戻す / Ctrl+Y 進める / R 最初から\n再生ボタンで元の場面に戻ります`;
-      if (S.practice) t += targets.length ? `\nマネ練習: ${Math.min(undo.length, targets.length)} / ${targets.length} 手目` + (undo.length > targets.length ? '(手本の最後まで置きました)' : '') : '\nマネ練習: この先の手本がありません';
+      if (S.practice) t += !embedOf(S.active) ? '\nマネ練習: 修正を埋め込んだリプレイの、修正した所だけで使えます' : targets.length ? `\nマネ練習: ${Math.min(undo.length, targets.length)} / ${targets.length} 手目` + (undo.length > targets.length ? '(手本の最後まで置きました)' : '') : '\nマネ練習: この先の手本がありません';
     } else if (!list.length) {
       t = games.length ? 'リプレイを開くと使えます' : 'リプレイを開くと使えます\n(このブックマークを押したあとに開いたリプレイが対象。開いていたら開き直してください)';
     } else t = `リプレイ: ${list.length}人\n一時停止すると操作できます` + (emb ? `\n埋め込みの修正あり(${emb.frame}〜${emb.end} フレーム)` : '');
