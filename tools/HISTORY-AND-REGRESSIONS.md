@@ -169,4 +169,5 @@
 - v4.8241 で PATCH UPDATE(docs/patch/latest.json)。リリースを公開してから site を push する。リリースは既存のリモート commit を target にする。
 - AI:v4.8245 で movegen + DAS 実行、v4.8248 で Spin B2B planner、v4.8249 でテンプレート学習(5han の TL 106 ラウンド → 2372 テンプレート)、v4.8250 で TETR.IO の火力計算と B2B 解放・被弾の判断。v4.8254 で全部公開。当時の APP:Node 0.72、ゲーム内 0.55〜0.62(旧 AI 0.45)。ユーザー本人 1.31。
 - MP4 ツール:2026-11-12 に方針が何度か変わった(自前描画 → TETR.IO 本体の録画 → blob ページ → 最終的に tetr.io 上でヘッドレス:自前エンジン + 自前描画、進み具合だけ表示)。capture/* は放棄。video_background のスライダーが userConfig を書き換えた件はユーザーに伝える必要あり。
-- (未リリース, v5.06 予定) スピンカウンター: four.lol(開幕21・途中226)と shiwehi.com(開幕229・途中309、ページ内の文字の盤面＋画像読み取り)のテンプレを追加。途中テンプレ判定(17手目〜・vA のみ、表面6段、T と下地は見ない)を新設。何にでも合う小さい図は除外(ランダム盤面2000で誤検出0)。開幕データの行は下から。取り込み道具 tools/templates/、一覧 tools/OPENER-TEMPLATES.md。
+- v5.06(2026-11-15・公開): スピンカウンター: four.lol(開幕21・途中226)と shiwehi.com(開幕229・途中309、ページ内の文字の盤面＋画像読み取り)のテンプレを追加。途中テンプレ判定(17手目〜・vA のみ、表面6段、T と下地は見ない)を新設。何にでも合う小さい図は除外(ランダム盤面2000で誤検出0)。開幕データの行は下から。取り込み道具 tools/templates/、一覧 tools/OPENER-TEMPLATES.md。
+- v5.06 公開(release patch-v5.06、ソース 142957f): 上のカウンター・replay-edit(spin fumen の回転前ページ)・失敗レポート付きランチャーを含む。ブラウザ版 vO は offline-v4.8255 の replay-edit-offline.js / render-diagnostics.js を差し替え、AI 版は offline-va5.06。Mac で R/O/A と UNINSTALL の dry-run OK、Windows 未確認。fumen の同じ盤面ページが 2 回続く件は未修正。
