@@ -156,6 +156,7 @@
   let internal = 0;              // このスクリプトが状態を入れ直している最中(シークとして扱わない)
   let simLock = null;            // マネ練習の手本を作っている最中に、置いたミノを受け取る
   let lastLock = null;           // 操作中に最後に置いたミノ
+  let gravBack = null;           // マネ練習で手本に合わせて変えた重力の、元の設定
   let targets = [];              // マネ練習の手本(止めた場面から、リプレイで実際に置いた順)
   let wrongAt = 0;               // 手本と違う所に置いた時刻
   let snap = null;               // 止めたときの状態(TETR.IO の EjectState)
@@ -275,6 +276,11 @@
       try { targets = simulate(n, snap, snapFrame).filter(x => x.f <= pe.end).map(x => x.f >= pe.frame ? x : null); } catch (e) { console.warn(TAG, 'practice', e); targets = []; }
       if (!targets.some(Boolean)) targets = [];
     } else targets = [];
+    // 手本が重力なしで作られた修正なら、練習も同じ重力にする(離れるときに元に戻す)
+    if (targets.length && pe) {
+      let g = false; for (const x of pe.events) if (x.t === 'g' && x.f <= snapFrame) g = !!x.v;
+      if (g !== S.noGravity) { gravBack = S.noGravity; S.noGravity = g; }
+    }
     S.active = n;
     queue = []; held.clear(); acc = 0; last = performance.now(); deadAt = 0;
     const esm = n.esm, elm = n.elm, H = n.lm.H, siom = n.siom;
@@ -366,6 +372,7 @@
       try { injectAt(n, snap, snapFrame); } catch (e) { console.warn(TAG, 'restore failed', e); }
     }
     queue = []; held.clear(); wrongAt = 0; lastLock = null;
+    if (gravBack !== null) { S.noGravity = gravBack; gravBack = null; }
     console.log(TAG, restore ? 'restored' : 'left (seek)');
   };
 
@@ -758,6 +765,9 @@
       }
       if (f > e.end && !n.__rpeHold) { n.__rpeHold = true; n.gsm.pause = true; }
     }));
+    // 差し込みの修正を見せている間は、下のゲージ(リプレイの時間)を止める
+    const emitO = n.elm.emit;
+    P.undo.push(swap(n.elm, 'emit', function (type, ...a) { if (type === 'frame' && n.__rpeSeg && S.active !== n) return undefined; return emitO.call(this, type, ...a); }));
     P.undo.push(swap(fm, 'GetEffectiveGravity', function (...a) {
       const e = S.active !== n && embedOf(n);
       if (e && n.__rpeGrav && (e.keep ? n.esm.frame >= e.frame : !!n.__rpeSeg)) return 0;
@@ -844,7 +854,9 @@
       } catch (x) { console.warn(TAG, 'partner seek', x); }
       return res;
     });
-    g.__rpePartner = () => { u1(); u2(); if (g.__rpeFrozen) { g.__rpeFrozen = null; try { g.gsm.pause = false; } catch (x) { } } delete g.__rpePartner; };
+    const emitP = g.elm.emit;
+    const u3 = swap(g.elm, 'emit', function (type, ...a) { if (type === 'frame' && g.__rpeFrozen) return undefined; return emitP.call(this, type, ...a); });
+    g.__rpePartner = () => { u1(); u2(); u3(); if (g.__rpeFrozen) { g.__rpeFrozen = null; try { g.gsm.pause = false; } catch (x) { } } delete g.__rpePartner; };
   };
   const unplay = n => {
     if (n && n.__rpePartner) { try { n.__rpePartner(); } catch (e) { } }
