@@ -79,7 +79,7 @@ function open() {
 <div class="s"></div>
 <div class="n">弱い所だけ:プレイヤーの置き方はそのままで、10手ずつ見て、火力が平均より出ていない所や REN・QUAD の所を AI が同じミノで置き直し、火力が 2 以上増えた所だけを修正にします。再生ではその所に来ると修正を見せ(相手は止まる)、終わると元のプレイに戻ります。
 全部:最初から最後まで AI が置き直します(相手は動き、AI の火力が届きます)。
-トップアウト救済:そのプレイヤーが死んだラウンドで、1手前・2手前…と戻って AI が同じミノ・同じおじゃまで置き、死んだフレームを越えて生き残れる一番少ない手数を探します。そこから少し前まで、REN を QUAD か T-SPIN で締める助かり方(10 手以内、またはおじゃまを 4 段以上掘るもの)や、深く掘る REN の途中で QUAD を打つ助かり方も探し、見つかれば死んだ所の先も REN が切れるまで見せます。再生では戻る所と次に置く所を盤面に出し、助かった盤面で止まります。ミノを置く速さは元のプレイヤーと同じです。
+トップアウト救済:そのプレイヤーが死んだラウンドで、1手前・2手前…と戻って AI が同じミノ・同じおじゃまで置き、死んだフレームを越えて生き残れる一番少ない手数を探します。そこから少し前まで、REN を QUAD か T-SPIN で締める助かり方(10 手以内、またはおじゃまを 4 段以上掘るもの)や、深く掘る REN の途中で QUAD を打つ助かり方も探し、見つかれば死んだ所の先も REN が切れるまで見せます。もっと REN を伸ばせた・深く掘れた・火力が出た助かり方があれば、そのあとに続けて見せます(あなたのプレイとの比較つき)。再生では戻る所と次に置く所を盤面に出し、助かった盤面で止まります。ミノを置く速さは元のプレイヤーと同じです。
 開くには CONFIG の REPLAY BOARD EDIT を ON にして、パネルの「埋め込みの再生」で 修正後 / 元の版 を切り替えます(マネ練習はどちらでも使えます)。</div>`;
   document.body.appendChild(root);
   const $ = (q) => root.querySelector(q), status = (t) => { $(".s").textContent = t; };
@@ -117,7 +117,7 @@ function open() {
       a.href = URL.createObjectURL(new Blob([JSON.stringify(json)], { type: "application/json" }));
       a.download = out; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-      const sum = report.map((r) => r.rescue !== undefined ? (r.died === false ? `R${r.round + 1}: 死んでいない` : !r.rescue ? `R${r.round + 1}: 戻っても助かる置き方が見つからない` : `R${r.round + 1}: ${r.rescue.minBack} 手前まで戻れば助かる。見せるのは ${r.rescue.back} 手前から` + (r.rescue.ren ? (r.rescue.ren === "dig-quad" ? `(掘り REN・QUAD 入り ${r.rescue.dug} 段を最後まで)` : `(REN を ${r.rescue.ren === "quad" ? "QUAD" : "T-SPIN"} で締める)`) : "(REN の QUAD / T-SPIN は見つからず)"))
+      const sum = report.map((r) => r.rescue !== undefined ? (r.died === false ? `R${r.round + 1}: 死んでいない` : !r.rescue ? `R${r.round + 1}: 戻っても助かる置き方が見つからない` : `R${r.round + 1}: ${r.rescue.minBack} 手前まで戻れば助かる。見せるのは ${r.rescue.back} 手前から` + (r.rescue.ren ? (r.rescue.ren === "dig-quad" ? `(掘り REN・QUAD 入り ${r.rescue.dug} 段を最後まで)` : `(REN を ${r.rescue.ren === "quad" ? "QUAD" : "T-SPIN"} で締める)`) : "(REN の QUAD / T-SPIN は見つからず)") + (r.rescue.betters || []).map((b) => `\n  もっと伸ばせた ${b.order === "same" ? "(1) 同じ順番のまま" : "(2) 順番を変えれば・HOLD"}: ${b.back} 手前から REN ${r.rescue.m.ren}→${b.m.ren}・掘り ${r.rescue.m.dug}→${b.m.dug}・火力 ${r.rescue.m.atk}→${b.m.atk}${b.m.quad ? "・QUAD あり" : ""}`).join("") + `\n  あなた: REN ${r.rescue.mine.ren}・掘り ${r.rescue.mine.dug}・火力 ${r.rescue.mine.atk}`)
         : r.fixed ? `R${r.round + 1}: 修正 ${r.fixed.length} か所` + r.fixed.map((x) => `\n  ${x.piece} 手目から 火力 ${x.orig} → ${x.cc}${x.ren ? " (REN)" : ""}${x.quad ? " (QUAD)" : ""}`).join("")
         : `R${r.round + 1}: ${r.pieces} 手 / 置けた ${r.matched} / 火力 ${r.attack}${r.topout ? " / 窒息" : ""}`).join("\n");
       status(`保存しました: ${out}(${((performance.now() - t0) / 1000).toFixed(0)} 秒)\n${sum}`);

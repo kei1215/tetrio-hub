@@ -126,8 +126,12 @@ async function fixOne(info, rep, bot, opt, T) {
     const incoming = (e.zenith?.impendingdamage || e.garbageQueue?.queue || []).filter((d) => d && d.active !== false && (d.amt || d.amount) > 0).map((d) => Math.round(d.amt || d.amount));
     return { board, current: low(e.falling.symbol), hold: e.held ? low(e.held) : null, queue: e.queue.slice(0, 13).map(low), b2b: Math.max(0, e.stats.b2b || 0), combo: Math.max(0, e.stats.combo || 0), incoming };
   };
+  // range.order: the player's placed minos from the start; the AI must place that mino each time (same order)
+  let wanted = null;
   const ask = async () => {
-    const job = bot.begin(input()), t0 = Date.now();
+    const inp = input();
+    if (wanted) { inp.current = wanted; inp.hold = wanted; }   // either choice gives the same mino; HOLD is decided by us
+    const job = bot.begin(inp), t0 = Date.now();
     while (!job.step(opt.sliceMs) && Date.now() - t0 < opt.thinkMs) await opt.idle();
     if (!job.done) job.stop?.();
     // a Worker host (vA LocalExternalAI.load) answers stop() asynchronously
@@ -155,10 +159,13 @@ async function fixOne(info, rep, bot, opt, T) {
     if (n !== pieceAt) {
       // a new piece: ask the AI (the board does not change until this piece locks)
       pieceAt = n; keys = null; target = null; sd = false;
+      wanted = range && range.order ? range.order[n - pieceStart] || null : null;
+      const cur = low(e.falling.symbol);
+      if (wanted && wanted !== cur && !(e.held && low(e.held) === wanted)) wanted = null;   // can not follow (keeps playing freely)
       plan = await ask(); stat.pieces++;
       if (plan && plan.cells) {
         stat.planned++;
-        if (plan.usedHold) { push("keydown", "hold"); push("keyup", "hold", 0.5); sim.step(); }
+        if (wanted ? wanted !== cur : plan.usedHold) { push("keydown", "hold"); push("keyup", "hold", 0.5); sim.step(); }
       } else { stat.noplan++; plan = null; }
       if (opt.onProgress) opt.onProgress({ frame: sim.frame, end: endFrame, pieces: stat.pieces });
       continue;
@@ -214,7 +221,7 @@ async function fixOne(info, rep, bot, opt, T) {
 // with no key held (a fix starts there, so nothing held carries into it).
 function analyze(info, rep) {
   const s = new PlayerSim(structuredClone(rep), info), locks = [];
-  s.onLock = (r, f) => locks.push({ f, atk: (r.rawGarbage || []).reduce((a, b) => a + b, 0), lines: r.lines || 0, spin: r.spin || "none", combo: r.stats?.combo || 0 });
+  s.onLock = (r, f) => locks.push({ f, atk: (r.rawGarbage || []).reduce((a, b) => a + b, 0), lines: r.lines || 0, spin: r.spin || "none", mino: low(r.mino), combo: r.stats?.combo || 0, dug: r.garbageCleared || 0 });
   while (!s.finished) s.step();
   const keys = rep.events.filter((x) => KEY.has(x.type)).sort((a, b) => a.frame - b.frame || (a.data?.subframe || 0) - (b.data?.subframe || 0));
   const held = new Set(); let k = 0;
@@ -289,30 +296,68 @@ function seenChain(locks, o) {
 // QUAD or a T-Spin (the user's wish); that line is used when found, otherwise the first survival.
 async function rescueOne(pl, bot, o, T, an, prog) {
   const N = an.locks.length, maxBack = Math.min(o.maxBack ?? 30, N - 1), extra = o.renTries ?? 12;
-  let first = null, best = null;
-  for (let k = 1; k <= maxBack; k++) {
-    const i = N - k;                       // the AI places pieces i, i+1, ... (0-based)
-    const F = i > 0 ? an.freeAfter[i - 1] : null;
-    if (F == null) continue;
-    const { seg, stat } = await fixOne(pl, pl.replay, bot, { ...o, range: { F, K: Infinity, rescue: true }, onProgress: prog && ((x) => prog({ ...x, back: k })) }, T);
+  let first = null, best = null; const all = [];
+  const tryFrom = async (k, i, F, order) => {
+    const { seg, stat } = await fixOne(pl, pl.replay, bot, { ...o, range: { F, K: Infinity, rescue: true, order }, onProgress: prog && ((x) => prog({ ...x, back: k })) }, T);
     // survives = no topout until past the death frame (+90F); a topout later (in the extra pieces) only cuts the line
     const lim = an.endFrame + 90;
-    if (stat.topout && (stat.locks.at(-1)?.f ?? 0) <= lim) continue;
+    if (stat.topout && (stat.locks.at(-1)?.f ?? 0) <= lim) return null;
     const safe = stat.topout ? stat.locks.slice(0, -1) : stat.locks;
     const ch = seenChain(safe, o);
     // shown to the end of the REN (a digging REN is never cut); with none, to the death frame (but a
     // digging REN going on there still runs to its end)
     let endF = an.endFrame;
-    if (ch) endF = Math.max(endF, safe[ch.b].f + 1);
+    if (ch) {
+      // a REN seen right after (within 2 pieces) is played on too (the user: Quad のあとにも REN が見えたら続けて)
+      let b = ch.b;
+      for (const c of chainsOf(safe)) if (c.a > b && c.a - b <= 3) b = c.b;
+      endF = Math.max(endF, safe[b].f + 1);
+    }
     else { const c = chainsOf(safe).find((c) => safe[c.a].f <= an.endFrame && safe[c.b].f > an.endFrame && c.dug > 0); if (c) endF = safe[c.b].f + 1; }
     seg.end = endF; seg.events = seg.events.filter((x) => x.f <= endF);
     const cand = { seg, stat, k, i, F, ren: ch ? { lines: ch.quad ? 4 : 0, combo: ch.run - 1, kind: ch.kind, dug: ch.dug } : null, renAt: ch ? ch.b : -1, renPast: !!ch && safe[ch.b].f > an.endFrame };
+    cand.m = metrics(safe.filter((l) => l.f <= endF));
+    // (1) same piece order as the player (the AI placed the same minos in the same order) / (2) a different order (HOLD)
+    const mine = an.locks.slice(i).map((l) => l.mino), ai = safe.map((l) => l.mino), n = Math.min(mine.length, ai.length);
+    cand.order = ai.slice(0, n).every((x, j) => x === mine[j]) ? "same" : "hold";
+    return cand;
+  };
+  for (let k = 1; k <= maxBack; k++) {
+    const i = N - k;                       // the AI places pieces i, i+1, ... (0-based)
+    const F = i > 0 ? an.freeAfter[i - 1] : null;
+    if (F == null) continue;
+    const cand = await tryFrom(k, i, F, null);
+    if (!cand) continue;
+    all.push(cand);
     if (!first) first = cand;
-    if (cand.ren) { best = cand; break; }
+    if (cand.ren && !best) best = cand;
     if (k >= first.k + extra) break;
   }
   const r = best || first;
-  return r && { ...r, minBack: first.k };
+  if (!r) return null;
+  // (1) the same piece order as the player: the AI places the player's minos in the player's order
+  const same = [];
+  for (let k = first.k; k <= Math.min(maxBack, first.k + extra); k++) {
+    const i = N - k, F = i > 0 ? an.freeAfter[i - 1] : null;
+    if (F == null) continue;
+    const c = await tryFrom(k, i, F, an.locks.slice(i).map((l) => l.mino));
+    if (c && c.order === "same") same.push(c);
+  }
+  // "もうちょっと伸ばせた": another survival from about the same place with a clearly longer REN, deeper dig
+  // or more attack (also shows when the player's piece order cut a REN short)
+  // QUAD first (the user: REN の数より Quad で締めるのを優先), then REN, dig, attack
+  const rank = (c) => (c.m.quad ? 1000 : 0) + c.m.score;
+  const isBetter = (c) => c !== r && ((c.m.quad && !r.m.quad) || c.m.ren > r.m.ren || c.m.dug >= r.m.dug + 3 || c.m.atk >= r.m.atk + 4) && !(r.m.quad && !c.m.quad);
+  const pickBest = (list) => list.filter(isBetter).sort((a, b) => rank(b) - rank(a))[0] || null;
+  // both kinds are shown when found: (1) same order, (2) another order (HOLD)
+  const betters = [pickBest(same), pickBest(all.filter((c) => c.order !== "same"))].filter(Boolean);
+  return { ...r, minBack: first.k, betters };
+}
+// REN (longest run of clears in a row - 1), garbage rows dug, attack
+function metrics(locks) {
+  let run = 0, ren = 0, dug = 0, atk = 0, quad = 0;
+  for (const l of locks) { if (l.lines > 0) { run++; ren = Math.max(ren, run - 1); } else run = 0; dug += l.dug || 0; atk += l.atk || 0; if (l.lines >= 4) quad++; }
+  return { ren, dug, atk, quad, score: ren * 3 + dug + atk };
 }
 
 /**
@@ -347,8 +392,18 @@ export async function ccFix(json, username, bot, opt = {}) {
       const r = await rescueOne(pl, bot, o, T, an, prog && ((x) => prog({ ...x, round: ri, rounds: p.rounds.length })));
       if (!r) { delete ref.results[EMB]; report.push({ round: ri, rescue: null, died: true, pieces: an.locks.length }); continue; }
       const info = { renPieces: r.ren ? r.renAt + 1 : 0, renPast: !!r.renPast, minBack: r.minBack, back: r.k, piece: r.i + 1, death: an.locks.length, deathFrame: an.endFrame, ren: r.ren ? r.ren.kind : null, renCombo: r.ren ? r.ren.combo : 0, dug: r.ren ? r.ren.dug : 0 };
-      const seg = { ...r.seg, rescue: info, cc: r.stat.locks.filter((l) => l.f <= r.seg.end).reduce((a, l) => a + l.atk, 0) };
-      ref.results[EMB] = { ...seg, segs: [seg] };
+      // the player's own play over the same pieces (from the shown start to the death)
+      info.mine = metrics(an.locks.slice(r.i)); info.m = r.m;
+      const seg = { ...r.seg, rescue: info, cc: r.m.atk };
+      const segs = [seg];
+      for (const b of r.betters) {
+        const binfo = { ...info, base: r.m, order: b.order, alt: true, back: b.k, piece: b.i + 1, m: b.m, mine: metrics(an.locks.slice(b.i)), ren: b.ren ? b.ren.kind : null, renCombo: b.ren ? b.ren.combo : 0, dug: b.ren ? b.ren.dug : 0, renPast: !!b.renPast };
+        // played after the first one (the replay edit goes back to its start); not started by reaching its frame
+        segs.push({ ...b.seg, alt: true, rescue: binfo, cc: b.m.atk });
+        (info.betters || (info.betters = [])).push({ back: b.k, m: b.m, order: b.order });
+        info.better = info.betters[0];
+      }
+      ref.results[EMB] = { ...seg, segs };
       report.push({ round: ri, died: true, rescue: info });
       continue;
     }
