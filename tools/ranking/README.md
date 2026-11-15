@@ -47,3 +47,8 @@ npm i -g @google/clasp
    出た ID から `https://script.google.com/macros/s/<ID>/exec` を作り、`docs/ranking/api.json` に入れる。
    - コードを更新したときは、URL を変えずに `clasp update-deployment <ID>` する。
    - `.clasp.json` はコミットしない(.gitignore)。
+
+## 今のデプロイ(2026-11-16)
+- プロジェクト: https://script.google.com/d/1TqshV6B9Rm5mqJqhIbPHW4CMC7pGNhuC2VCjNEZxpoxlnKS1xgNwIa33/edit
+- デプロイ ID: `AKfycbzq9C_PX0tyCQE0fyvAg9e7tU5qwSjcIhWJCaBW1zVq70isVW78xct3IGFIdWJg1LpDIQ`(api.json の URL)
+- 更新するとき: `cd tools/ranking/gas && clasp push -f && clasp update-deployment AKfycbzq9C_PX0tyCQE0fyvAg9e7tU5qwSjcIhWJCaBW1zVq70isVW78xct3IGFIdWJg1LpDIQ`
