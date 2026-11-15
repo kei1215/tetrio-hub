@@ -84,11 +84,12 @@
     const t = el('table', null, 'rk-table'), head = t.createTHead().insertRow();
     for (const [label, , cls] of cols) { const th = el('th', label); if (cls) th.className = cls; head.appendChild(th); }
     const body = t.createTBody();
-    list.forEach((r, i) => { const row = body.insertRow(); for (const [, get, cls] of cols) { const td = row.insertCell(); const v = get(r, i); if (cls === 'replay') { if (v && (/^https:\/\/(cdn|media)\.discordapp\.(com|net)\/attachments\//.test(v) || /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec\?ttr=\d{13}$/.test(v))) { const a = el('a', '↓ TTR'); a.href = v; a.onclick = e => { e.preventDefault(); dl(v, 'PB-' + r.name.replace(/[^\w.-]+/g, '_') + '-' + Math.round(r.altitude) + 'm.ttr'); }; td.appendChild(a); } } else td.textContent = v; if (cls && cls !== 'replay') td.className = cls; } });
+    list.forEach((r, i) => { const row = body.insertRow(); for (const [, get, cls] of cols) { const td = row.insertCell(); const v = get(r, i); if (cls === 'replay') { if (v && (/^https:\/\/(cdn|media)\.discordapp\.(com|net)\/attachments\//.test(v) || /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec\?ttr=\d{1,13}(&m=\d{5,25})?$/.test(v))) { const a = el('a', '↓ TTR'); a.href = v; a.onclick = e => { e.preventDefault(); dl(v, 'PB-' + r.name.replace(/[^\w.-]+/g, '_') + '-' + Math.round(r.altitude) + 'm.ttr'); }; td.appendChild(a); } } else td.textContent = v; if (cls && cls !== 'replay') td.className = cls; } });
     return t;
   };
   // 表は順位・名前・高さだけ(user: top3のリプレイと高さのみ表示)。上位3人は Discord に保存したリプレイ(.ttr)へのリンク
-  const replayCell = (r, i) => i < 3 && r.replayUrl ? r.replayUrl : '';
+  let API = '';
+  const replayCell = (r, i) => i < 3 && API && (r.discord || r.pending) ? API + '?ttr=' + r.id + (r.discord ? '&m=' + r.discord : '') : '';
   const COLS = [['#', (r, i) => i + 1, 'num'], ['名前', r => r.name + (r.bot ? ' (BOT' + (r.engine ? ' ' + r.engine : '') + ')' : '')], ['高さ', r => r.altitude.toFixed(1) + ' m', 'num'], ['リプレイ', replayCell, 'replay']];
   const render = () => {
     const out = $('out'); out.replaceChildren(); $('modPick').hidden = tab !== 'mod' && tab !== 'hyper';
@@ -133,12 +134,12 @@
     const mods = [...new Set((Array.isArray(d.mods) ? d.mods : []).map(String))].sort();
     if (mods.some(m => !MODK.includes(m.replace(/_reversed$/, '')))) return null;
     const name = String(d.name || '').replace(/[\u0000-\u001f<>@`]/g, '').trim().slice(0, 32) || 'LOCAL';
-    const url = it.discord && /^https:\/\/(cdn|media)\.discordapp\.(com|net)\/attachments\//.test(it.discord.url || '') ? it.discord.url : api + '?ttr=' + id;
     return { id, user: 'name:' + name.toLowerCase(), name, mode: d.mode, altitude: Math.round(alt * 100) / 100, floor, revives: Number(d.revives) || 0, mods,
-      floor10: d.floor10 === true, lull: d.lull !== false, hyper: d.hyper === true && floor === 10, test: ['solo', 'duo-dead', 'duo-reverse-dead'].includes(d.test) ? d.test : 'solo', bot: false, replayUrl: url, pending: true };
+      floor10: d.floor10 === true, lull: d.lull !== false, hyper: d.hyper === true && floor === 10, test: ['solo', 'duo-dead', 'duo-reverse-dead'].includes(d.test) ? d.test : 'solo', bot: false, discord: it.discord && /^\d{5,25}$/.test(String(it.discord.message || '')) ? String(it.discord.message) : null, pending: true };
   };
   const pending = () => fetch('api.json', { cache: 'no-store' }).then(r => r.json()).then(a => {
     if (!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(a.url || '')) return;
+    API = a.url; render();
     return fetch(a.url + '?list=1').then(r => r.json()).then(l => { const have = new Set([...records.map(r => r.id), ...rejected]); for (const it of l.items || []) { const r = fromGas(it, a.url); if (r && !have.has(r.id)) { records.push(r); have.add(r.id); } } render(); });
   }).catch(() => {});
   fetch('data/records.json', { cache: 'no-store' }).then(r => r.json()).then(d => { rejected = Array.isArray(d.rejected) ? d.rejected : []; records = (d.records || []).filter(r => r && typeof r.altitude === 'number' && !rejected.includes(r.id)); render(); pending(); })

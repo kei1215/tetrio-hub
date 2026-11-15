@@ -13,6 +13,17 @@ const HEAD = ['id', '受付日時', '名前', 'モード', '高さ(m)', 'フロ�
 
 function out(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 function num(v, lo, hi) { const n = Number(v); return isFinite(n) && n >= lo && n <= hi ? n : null; }
+function freshUrl(msg) {
+  const cache = CacheService.getScriptCache(), key = 'm:' + msg, hit = cache.get(key);
+  if (hit) return hit;
+  const hook = PropertiesService.getScriptProperties().getProperty('DISCORD_WEBHOOK');
+  if (!hook) return null;
+  const r = UrlFetchApp.fetch(hook + '/messages/' + msg, { muteHttpExceptions: true });
+  if (r.getResponseCode() >= 300) return null;
+  const m = JSON.parse(r.getContentText()), url = m.attachments && m.attachments[0] && m.attachments[0].url;
+  if (url) cache.put(key, url, 21600);
+  return url || null;
+}
 function folder() { const it = DriveApp.getFoldersByName(FOLDER); return it.hasNext() ? it.next() : DriveApp.createFolder(FOLDER); }
 function sheet() {
   const props = PropertiesService.getScriptProperties();
@@ -52,10 +63,17 @@ function doGet(e) {
     });
     return out({ ok: true, items: items.slice(-1000) });
   }
+  // TTR: ドライブの控え → なければ Discord のメッセージから(URL は6時間キャッシュ。user: 必要なファイルのみ取ってきて6時間維持)
   if (p.ttr && /^\d{13}$/.test(p.ttr)) {
     const it = folder().getFilesByName(p.ttr + '.ttr');
-    if (!it.hasNext()) return out({ ok: false, text: 'not found' });
-    return ContentService.createTextOutput(it.next().getBlob().getDataAsString()).setMimeType(ContentService.MimeType.JSON);
+    if (it.hasNext()) return ContentService.createTextOutput(it.next().getBlob().getDataAsString()).setMimeType(ContentService.MimeType.JSON);
+    let msg = /^\d{5,25}$/.test(p.m || '') ? p.m : null;
+    if (!msg) sheet().getDataRange().getValues().slice(1).forEach(function (r) { if (String(r[0]) === p.ttr && r[14]) msg = String(r[14]); });
+    const url = msg && freshUrl(msg);
+    if (!url) return out({ ok: false, text: 'not found' });
+    const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    if (res.getResponseCode() >= 300) { CacheService.getScriptCache().remove('m:' + msg); return out({ ok: false, text: 'discord ' + res.getResponseCode() }); }
+    return ContentService.createTextOutput(res.getContentText()).setMimeType(ContentService.MimeType.JSON);
   }
   return out({ ok: true, service: 'qp-pb' });
 }

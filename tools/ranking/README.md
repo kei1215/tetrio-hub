@@ -1,6 +1,7 @@
 # QP PB ランキングの送信のしくみ
 
 ## 流れ
+(2026-11-16 v4) TTR は押されたときだけ取りに行く: ページの「↓ TTR」(上位3人)は GAS の `?ttr=ID&m=<Discordメッセージ>` を開き、GAS が webhook でメッセージを読んで今の CDN URL から中身を返す(URL は CacheService に6時間)。pb-refresh(6時間ごとの URL 更新)は廃止。
 (2026-11-16 v3) 受付はスプレッドシート「QP PB ranking」に1行ずつ残す(消さない)。ID はスクリプト プロパティ SHEET_ID。TTR は Discord(DISCORD_WEBHOOK があるとき GAS が投稿)か、ドライブ qp-pb-queue。
 (2026-11-16 v2) GAS にスクリプト プロパティ `DISCORD_WEBHOOK` を入れると、GAS が受け付けた時点で Discord に投稿する(ドライブには置かない)。ランキングページは開くたびに GAS の `?list=1` を読み、まだ records.json にない記録もすぐ表に出す(リプレイは Discord の URL、なければ GAS の `?ttr=ID`)。Actions は後から records.json に移すだけ。
 
