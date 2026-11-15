@@ -1,6 +1,6 @@
 // CC 盤面修正 panel (runs in the tetr.io page; opened from the vA patch's CONFIG > QP PATCH TOOLS).
 // Built into docs/cc-fix/tetrio-cc-fix.js by tools/cc-fix/build.sh.
-import { ccFix, playersOf } from "./cc-fix-core.mjs";
+import { ccFix, ccImprove, playersOf } from "./cc-fix-core.mjs";
 
 const CAT = "https://kei1215.github.io/tetrio-hub/ext-ai/";
 // Choices: Cold Clear 2 S2 (default) / Cold Clear 1. The package file names match ext-ai/catalog.json.
@@ -126,4 +126,4 @@ function open() {
   };
 }
 
-window.__qpCcFix = { open, ccFix, playersOf, loadBot };
+window.__qpCcFix = { open, ccFix, ccImprove, playersOf, loadBot };

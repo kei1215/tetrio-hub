@@ -63,17 +63,23 @@ async function fixOne(info, rep, bot, opt, T) {
   const r2 = structuredClone(rep);
   if (!range) r2.events = r2.events.filter((e) => !KEY.has(e.type));
   const sim = new PlayerSim(r2, info), e = sim.engine;
-  let pieceStart = 0;
+  let pieceStart = 0; const out0 = [];
   if (range) {
     while (sim.frame < range.F && !sim.finished) sim.step();
     // from F the player's keys are gone; incoming garbage (ige) still arrives as in the original
     for (const [f, list] of [...sim.byFrame]) if (f >= range.F) { const rest = list.filter((x) => !KEY.has(x.type)); if (rest.length) sim.byFrame.set(f, rest); else sim.byFrame.delete(f); }
     pieceStart = e.stats.pieces;
+    // keys the player still held at F are let go there (their keyups were after F and are dropped)
+    if (range.release) {
+      const held = new Set();
+      for (const x of rep.events.filter((x) => KEY.has(x.type) && x.frame < range.F).sort((a, b) => a.frame - b.frame || (a.data?.subframe || 0) - (b.data?.subframe || 0))) { if (x.type === "keydown") held.add(x.data.key); else held.delete(x.data.key); }
+      for (const k of held) { const ev = { frame: sim.frame, type: "keyup", data: { key: k, subframe: 0 } }; let l = sim.byFrame.get(sim.frame); if (!l) sim.byFrame.set(sim.frame, (l = [])); l.push(ev); out0.push({ f: sim.frame, t: "u", k }); }
+    }
   }
   // rescue: survive past the frame the player died (a little more, so garbage already on its way lands too)
   // and then up to range.more pieces past the death (a REN that ends with a QUAD / T-Spin is shown to its end)
   if (range && range.rescue) sim.endFrame = endFrame + 60 * 20;
-  const out = [], stat = { pieces: 0, planned: 0, matched: 0, miss: 0, noplan: 0, attack: 0, topout: false, locks: [] };
+  const out = out0, stat = { pieces: 0, planned: 0, matched: 0, miss: 0, noplan: 0, attack: 0, topout: false, locks: [] };
   let lockRes = null;
   // CC's sent garbage (after cancelling), for the opponent's board in the replay edit:
   // [frame, amount, ackiid]. ackiid = the last attack id of the opponent this player had received then.
@@ -358,6 +364,32 @@ function metrics(locks) {
   let run = 0, ren = 0, dug = 0, atk = 0, quad = 0;
   for (const l of locks) { if (l.lines > 0) { run++; ren = Math.max(ren, run - 1); } else run = 0; dug += l.dug || 0; atk += l.atk || 0; if (l.lines >= 4) quad++; }
   return { ren, dug, atk, quad, score: ren * 3 + dug + atk };
+}
+
+/**
+ * ccImprove(rep, username, frame, bot, opt) -> {seg, cc, orig, piece} | null
+ * 「ここから改善案」(replay edit, during playback): one player's replay object (TETR.IO's esm.replay) and a frame.
+ * From the first frame at or after it with no key held (after a lock), the AI places opt.K (10) pieces with
+ * the same pieces and incoming garbage; the result is a fix (lazy seg) the replay edit inserts there.
+ */
+export async function ccImprove(rep, username, frame, bot, opt = {}) {
+  const o = { thinkMs: 150, sliceMs: 20, idle: async () => {}, ...opt };
+  const p = parseReplayFile({ users: [{ username }], replay: structuredClone(rep) });
+  const pl = p.rounds[0][0], T = tables(pl.replay.options?.kickset), an = analyze(pl, pl.replay);
+  // from just after the next lock (keys still held there are let go)
+  // (the replay is at that frame, so the fix starts at the next piece: just after the next lock)
+  const i = an.locks.findIndex((l) => l.f >= frame);
+  if (i < 0) return null;
+  // the AI takes the piece in play now from the next frame (keys still held are let go; the path search
+  // starts where the piece is). Only when HOLD was already used on it, it starts at the piece after.
+  const prev = i > 0 ? an.locks[i - 1].f : 0;
+  const touched = rep.events.some((x) => x.type === "keydown" && x.data?.key === "hold" && x.frame > prev && x.frame <= frame);
+  const s = touched ? i + 1 : i, F = touched ? an.locks[i].f + 1 : frame + 1;
+  if (s >= an.locks.length) return null;
+  const K = Math.min(o.K ?? 10, an.locks.length - s);
+  const { seg, stat } = await fixOne(pl, pl.replay, bot, { ...o, range: { F, K, release: true } }, T);
+  const orig = an.locks.slice(s, s + K).reduce((a, l) => a + l.atk, 0);
+  return { seg: { ...seg, orig, cc: stat.attack, improve: true }, cc: stat.attack, orig, piece: s + 1, pieces: K, topout: stat.topout };
 }
 
 /**
