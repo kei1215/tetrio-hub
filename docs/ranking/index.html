@@ -48,13 +48,12 @@
     <p class="text-uppercase text-primary fw-bold mb-2">QP OFFLINE</p>
     <h1 class="display-5 fw-bold">QP PB ランキング</h1>
     <p class="lead">QP OFFLINE(パッチ・ブックマークレット)で出した記録のランキングです。1人1記録(各ランキングでいちばん高いもの)を高さ順に並べます。上位3人はリプレイを見られます。</p>
-    <p>登録のしかた: オフライン(アプリ版・ブラウザ版)の記録一覧で、記録の「ランキングに送る」を押します。確認のあと、記録とリプレイがそのまま送られ、数分で載ります(アカウントは要りません)。送れないときは GitHub の登録ページが開くので、保存されたリプレイ(.ttr.json)を「リプレイ」欄にドラッグして送ってください。記録は自己申告です。</p>
+    <p>登録のしかた: オフライン(アプリ版・ブラウザ版)の記録一覧で、記録の「ランキングに送る」を押します。確認のあと、記録とリプレイがそのまま送られ、10〜30分ほどで載ります(アカウントは要りません)。送れないときは GitHub の登録ページが開くので、保存されたリプレイ(.ttr.json)を「リプレイ」欄にドラッグして送ってください。記録は自己申告です。</p>
   </section>
   <section class="card shadow-sm mb-4"><div class="card-body p-4">
     <div class="rk-tabs" role="tablist" id="tabs"></div>
     <div class="rk-filters">
       <label>モード <select id="fMode"><option value="zenith">通常</option><option value="zenithex">EXPERT</option><option value="all">両方</option></select></label>
-      <label><input type="checkbox" id="fBot"> BOT・外部AIの記録も入れる</label>
       <label><input type="checkbox" id="fDuo"> DUO 練習も入れる</label>
       <label id="modPick" hidden>MOD <select id="fMod"></select></label>
     </div>
@@ -71,7 +70,7 @@
   const $ = id => document.getElementById(id);
   const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
   const fmtTime = ms => { if (!ms) return '-'; const s = ms / 1000, m = Math.floor(s / 60); return m + ':' + (s - m * 60).toFixed(1).padStart(4, '0'); };
-  const base = () => records.filter(r => ($('fMode').value === 'all' || r.mode === $('fMode').value) && ($('fBot').checked || !r.bot) && ($('fDuo').checked || r.test === 'solo'));
+  const base = () => records.filter(r => ($('fMode').value === 'all' || r.mode === $('fMode').value) && !r.bot && ($('fDuo').checked || r.test === 'solo'));
   // 1人1記録: いちばん高いもの(同じ高さなら早く出した方)
   const best = (list, key = r => r.altitude) => {
     const by = new Map();
@@ -121,7 +120,7 @@
   $('fMod').add(new Option('MODなし', '-')); for (const [k] of MODS) for (const m of [k, k + '_reversed']) $('fMod').add(new Option(modName(m), m));
   try { const t = localStorage.getItem('rk-tab'); if (TABS.some(x => x[0] === t)) tab = t; } catch {}
   for (const x of $('tabs').children) x.setAttribute('aria-selected', String(x.dataset.k === tab));
-  for (const id of ['fMode', 'fBot', 'fDuo', 'fMod']) $(id).addEventListener('change', render);
+  for (const id of ['fMode', 'fDuo', 'fMod']) $(id).addEventListener('change', render);
   fetch('data/records.json', { cache: 'no-store' }).then(r => r.json()).then(d => { records = (d.records || []).filter(r => r && typeof r.altitude === 'number'); render(); })
     .catch(() => { $('out').textContent = 'ランキングを読み込めませんでした。'; });
 })();

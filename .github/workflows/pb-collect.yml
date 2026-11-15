@@ -1,0 +1,36 @@
+name: PB ranking collect
+# ゲーム内の「ランキングに送る」で GAS の受付窓口に届いた記録を、10分ごとに取り込む
+# (TTR は Discord に投稿し、records.json に足す)
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: pb-ranking
+  cancel-in-progress: false
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Collect
+        id: c
+        uses: actions/github-script@v7
+        env:
+          PB_DISCORD_WEBHOOK: ${{ secrets.PB_DISCORD_WEBHOOK }}
+        with:
+          script: |
+            const r = await require('./.github/scripts/pb-ingest.js').collect();
+            for (const l of r.log) core.info(l);
+            core.setOutput('n', String(r.added));
+      - name: Commit
+        if: steps.c.outputs.n != '0'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add docs/ranking/data/records.json
+          git commit -m "PB ranking: add records from the game" || exit 0
+          git pull --rebase origin main
+          git push origin HEAD:main

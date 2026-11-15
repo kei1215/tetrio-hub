@@ -82,10 +82,11 @@
     }
     // v5.07 (user: PBデータを全て取る・githubにPBのランキング): QP SOLO records go to the ranking on
     // tetrio-hub (an Issue form with the record filled in; a GitHub Action adds it to the ranking page).
-    if(['zenith','zenithex'].includes(record.mode)&&!record.result?.localMatch){const send=button('ランキングに送る',()=>{
+    if(['zenith','zenithex'].includes(record.mode)&&!record.result?.localMatch&&!(record.replay?.local?.bot||record.replay?.local?.engine)){const send=button('ランキングに送る',()=>{
      const res=record.result||{},r=res.results||res,st=r.stats||{},agg=r.aggregatestats||{},z=st.zenith||{};
      let file=null;try{file=QPLocalZen.replay(record)}catch{}
      const local=file?.local||record.replay?.local||{},opts=res.options?.zenith_mods?res.options:file?.replay?.options||{};
+     if(local.bot||local.engine)throw Error('BOT・外部AIの記録はランキングに送れません');
      if(!(Number(z.altitude)>0))throw Error('高度が記録されていないので送れません');
      const data={v:1,name:file?.users?.[0]?.username||localStorage.getItem('qp-local-username')||'LOCAL',mode:record.mode,altitude:+Number(z.altitude).toFixed(2),floor:Number(z.floor)||1,revives:Number(z.revives??z.revivesTotal??0)||0,
       time:Math.round(Number(st.finaltime)||Number(file?.replay?.frames)/60*1000||0),apm:+(Number(agg.apm)||0).toFixed(2),pps:+(Number(agg.pps)||0).toFixed(2),mods:Array.isArray(opts.zenith_mods)?opts.zenith_mods:[],hyper:z.speedrun===true||z.speedrun_seen===true,

@@ -21,6 +21,8 @@ function clean(d, meta) {
   const time = num(d.time ?? 0, 0, 86400000), apm = num(d.apm ?? 0, 0, 10000), pps = num(d.pps ?? 0, 0, 100);
   if (!mode || altitude === null || floor === null || revives === null || time === null || apm === null || pps === null) return '記録データの値が範囲外です。';
   const mods = [...new Set((Array.isArray(d.mods) ? d.mods : []).map(String))];
+  // user: botの記録は残さない
+  if (d.bot === true || (typeof d.engine === 'string' && d.engine)) return 'BOT・外部AIの記録は登録できません。';
   if (mods.some(x => !MODS.includes(x.replace(/_reversed$/, '')))) return '知らない MOD が入っています。';
   mods.sort();
   const name = String(d.name || '').replace(/[\u0000-\u001f<>@`]/g, '').trim().slice(0, 32) || meta.user;
@@ -105,3 +107,31 @@ module.exports.dispatch = async p => {
   return add(rec, null, p.discord || null);
 };
 module.exports.rankOf = rankOf;
+
+// GAS の受付窓口から: 一覧(?list=1)を見て、まだ取り込んでいない id の TTR(?ttr=ID)を取り、Discord に投稿して足す
+const API_OK = u => /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(u);
+module.exports.collect = async () => {
+  const api = JSON.parse(fs.readFileSync('docs/ranking/api.json', 'utf8')).url;
+  if (!API_OK(api)) return { added: 0, log: ['api.json に url がありません'] };
+  const list = await (await fetch(api + '?list=1', { redirect: 'follow' })).json();
+  const have = new Set(load().records.map(r => r.id)), log = [];
+  let added = 0;
+  for (const it of (list.items || []).slice(0, 50)) {
+    const id = num(it.id, 1e12, 1e14);
+    if (id === null || have.has(id)) continue;
+    const name = String(it.record?.name || '').replace(/[\u0000-\u001f<>@`]/g, '').trim().slice(0, 32) || 'LOCAL';
+    const rec = clean(it.record, { id, user: 'name:' + name.toLowerCase(), src: 'game' });
+    if (typeof rec === 'string') { log.push(id + ': ' + rec); continue; }
+    let buf = null;
+    try {
+      const res = await fetch(api + '?ttr=' + id, { redirect: 'follow' });
+      const b = Buffer.from(await res.arrayBuffer());
+      if (b.length <= DISCORD_MAX) { const j = JSON.parse(b.toString('utf8')); if (j && typeof j.replay === 'object') buf = Buffer.from(JSON.stringify(j)); }
+    } catch (e) { log.push(id + ': TTR ' + e.message); }
+    if (!buf) { log.push(id + ': TTR なし'); continue; }
+    const m = await add(rec, buf, null);
+    log.push(id + ': ' + m.text.split('\n')[0]);
+    if (m.ok) { added++; have.add(id); }
+  }
+  return { added, log };
+};

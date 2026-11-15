@@ -185,3 +185,4 @@
   - HYPERSPEED は MOD ごとの表にした。
   - 組み合わせ別は、MOD 1つ(表/裏)と DUO 以外の全部(表/裏)だけにした。
 - 設定がまだ: Secret PB_DISCORD_WEBHOOK、GAS のデプロイ、api.json の url。手順は tools/ranking/README.md。
+- (同日) GAS は秘密を持たない受付窓口に変更: TTR をドライブ、記録をスクリプト プロパティに3日間置き、pb-collect.yml が10分ごとに取り込んで Discord に投稿する。BOT・外部AIの記録は送信ボタンを出さず、GAS とイングェストでも断る(user: botの記録は残さない)。ページの BOT チェック欄も削除。Secret PB_DISCORD_WEBHOOK は設定済み。
