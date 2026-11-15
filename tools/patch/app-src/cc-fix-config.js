@@ -8,6 +8,8 @@ function qpCcFixConfig(document, window) {
  const TOOL='https://kei1215.github.io/tetrio-hub/cc-fix/tetrio-cc-fix.js';
  const loadTool=()=>new Promise((ok,ng)=>{
   if(window.__qpCcFix)return ok();
+  // v4.8287: the patch carries the tool (window.__qpCcFixSrc); the Pages copy is only a fallback
+  if(window.__qpCcFixSrc){try{const t=document.createElement('script');t.textContent=window.__qpCcFixSrc;document.head.appendChild(t);t.remove()}catch(e){}if(window.__qpCcFix)return ok()}
   const s=document.createElement('script');s.src=TOOL+'?v='+Date.now();
   s.onload=()=>window.__qpCcFix?ok():ng(Error('CC 盤面修正が起動しません'));s.onerror=()=>ng(Error('CC 盤面修正を読み込めません'));
   document.head.appendChild(s);

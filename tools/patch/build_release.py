@@ -521,15 +521,27 @@ def add_mp4_button(text):
 CC_FIX_MARK = 'qp-cc-fix-config-v1'
 
 
+CC_FIX_BUNDLE = Path(__file__).resolve().parents[2] / 'docs' / 'cc-fix' / 'tetrio-cc-fix.js'
+
+
 def add_cc_fix(text):
     """vA only, online client runtime: CONFIG > QP PATCH TOOLS > CC 盤面修正 (app-src/cc-fix-config.js,
     which loads docs/cc-fix/tetrio-cc-fix.js from Pages). Refreshes the function on later builds."""
     src = (APP_SRC / 'cc-fix-config.js').read_text(encoding='utf-8')
+    # v4.8287: the tool itself is embedded (works without the Pages copy)
+    line = 'const QP_CC_FIX_SRC=' + json.dumps(CC_FIX_BUNDLE.read_text(encoding='utf-8'), ensure_ascii=False) + ';'
+    pat = re.compile(r'^const QP_CC_FIX_SRC=.*;$', re.M)
+    if pat.search(text):
+        text = pat.sub(lambda _m: line, text)
+    else:
+        text = line + '\n' + text
+    if CC_FIX_MARK in text and "window.__qpCcFixSrc='+JSON" not in text:
+        text = replace_once(text, "\\n;('+qpCcFixConfig.toString()+')(document,window);", "\\n;window.__qpCcFixSrc='+JSON.stringify(QP_CC_FIX_SRC)+';('+qpCcFixConfig.toString()+')(document,window);", 'cc fix src')
     if CC_FIX_MARK in text:
         start = text.index('function qpCcFixConfig(document, window) {')
         end = text.index('\n}\n', start) + 3
         return text[:start] + src.rstrip('\n') + '\n' + text[end:]
-    text = replace_once(text, TAIL_END, "\\n;('+qpCcFixConfig.toString()+')(document,window);" + TAIL_END, 'transform tail (cc fix)')
+    text = replace_once(text, TAIL_END, "\\n;window.__qpCcFixSrc='+JSON.stringify(QP_CC_FIX_SRC)+';('+qpCcFixConfig.toString()+')(document,window);" + TAIL_END, 'transform tail (cc fix)')
     return src + text
 
 

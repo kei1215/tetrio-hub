@@ -130,7 +130,7 @@
     fumenGray: (() => { try { return JSON.parse(localStorage.getItem('rpe-fumen-v1') || '{}').gray || 'none'; } catch (e) { return 'none'; } })(),
     panelClosed: updated ? !!keep.panelClosed : false,
     practice: keep.practice ?? false,
-    embMode: keep.embMode ?? 'edit',   // 地形のマネ練習(リプレイで実際に置いた所を目標に出す)
+    embMode: keep.embMode === 'orig' ? 'orig' : 'edit',   // 埋め込みの再生: 修正後 / 元の版(マネ練習はどちらでも別のボタン)   // 地形のマネ練習(リプレイで実際に置いた所を目標に出す)
     active: null,                // 操作中のゲーム
     lastEdit: null,              // 最後に操作した内容(.ttrm に埋め込むため)
     msg: '',
@@ -272,7 +272,9 @@
     targets = []; lastLock = null; wrongAt = 0;
     // マネ練習は埋め込んだ修正(後から足した所)の中だけ。修正より前の手は目標なし(null)、修正の後は出さない
     const pe0 = S.practice && embedOf(n), pe = pe0 && (pe0.keep ? pe0 : n.__rpeSeg);
-    if (pe && snapFrame <= pe.end) {
+    if (S.practice && !pe0) {   // 元の版 / 埋め込みなし: リプレイで実際に置いた所が手本
+      try { targets = simulate(n, snap, snapFrame); } catch (e) { console.warn(TAG, 'practice', e); targets = []; }
+    } else if (pe && snapFrame <= pe.end) {
       try { targets = simulate(n, snap, snapFrame).filter(x => x.f <= pe.end).map(x => x.f >= pe.frame ? x : null); } catch (e) { console.warn(TAG, 'practice', e); targets = []; }
       if (!targets.some(Boolean)) targets = [];
     } else targets = [];
@@ -1014,11 +1016,9 @@
     draw();
   });
   const bEmbed = btn('修正を .ttrm に埋め込んで保存', () => { saveEmbed(); draw(); });
-  const MODES = { edit: '修正後', practice: '地形練習', orig: '元の版' };
+  const MODES = { edit: '修正後', orig: '元の版' };
   const bEmbMode = btn('', () => {
-    const order = ['edit', 'practice', 'orig'];
-    S.embMode = order[(order.indexOf(S.embMode) + 1) % 3];
-    S.practice = S.embMode === 'practice';
+    S.embMode = S.embMode === 'orig' ? 'edit' : 'orig';
     if (S.active) leave(true);
     S.msg = '埋め込みの再生: ' + MODES[S.embMode] + '(再生中ならシークし直すと反映)';
     draw();
@@ -1090,7 +1090,7 @@
       S.lines = (st.lines || 0) - base.lines;
       S.pieces = (st.piecesplaced || 0) - base.pieces;
       t = `操作中: ${name(S.active)}\n火力 ${S.attack}(相手には送りません)\nライン ${S.lines} / ミノ ${S.pieces}\nCtrl+Z 1手戻す / Ctrl+Y 進める / R 最初から\n再生ボタンで元の場面に戻ります`;
-      if (S.practice) t += !embedOf(S.active) ? '\nマネ練習: 修正を埋め込んだリプレイの、修正した所だけで使えます' : targets.length ? `\nマネ練習: ${Math.min(undo.length, targets.length)} / ${targets.length} 手目` + (undo.length > targets.length ? '(手本の最後まで置きました)' : '') : '\nマネ練習: この先の手本がありません';
+      if (S.practice) t += targets.length ? `\nマネ練習: ${Math.min(undo.length, targets.length)} / ${targets.length} 手目` + (undo.length > targets.length ? '(手本の最後まで置きました)' : '') : '\nマネ練習: この先の手本がありません';
     } else if (!list.length) {
       t = games.length ? 'リプレイを開くと使えます' : 'リプレイを開くと使えます\n(このブックマークを押したあとに開いたリプレイが対象。開いていたら開き直してください)';
     } else t = `リプレイ: ${list.length}人\n一時停止すると操作できます` + (emb ? `\n埋め込みの修正あり(${emb.frame}〜${emb.end} フレーム)` : '');

@@ -77,7 +77,7 @@ function open() {
 <div class="row"><button data-a="go" disabled>作る</button><button data-a="close">閉じる</button></div>
 <div class="s"></div>
 <div class="n">相手の記録と受けたおじゃまは元のまま、選んだプレイヤーの置き方だけ AI のものになります。ミノを置く速さは元のプレイヤーと同じです。
-開くには CONFIG の REPLAY BOARD EDIT を ON にして、パネルの「埋め込みの再生」で 修正後 / 地形練習 / 元の版 を切り替えます。</div>`;
+開くには CONFIG の REPLAY BOARD EDIT を ON にして、パネルの「埋め込みの再生」で 修正後 / 元の版 を切り替えます(マネ練習はどちらでも使えます)。</div>`;
   document.body.appendChild(root);
   const $ = (q) => root.querySelector(q), status = (t) => { $(".s").textContent = t; };
   // stop TETR.IO's hotkeys while typing here
