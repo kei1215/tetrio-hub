@@ -8,11 +8,16 @@
    if(!['periodic','floor'].includes(config.attackMode))return;
    const lines=Number(config.attackLines),seconds=Number(config.attackSeconds);
    if(!Number.isInteger(lines)||lines<1||!Number.isFinite(seconds)||seconds<.5||seconds>60)throw Error('攻撃は1段以上、間隔は0.5〜60秒で指定してください');
-   game._localAttackConfig={mode:config.attackMode,lines,seconds};
+   game._localAttackConfig={mode:config.attackMode,lines,seconds,floor10:!!config.floor10,lull:config.attackLull!==false};
    // Floor attack: the speed changes by itself too (2026-11-14) - higher floors come faster
    // (x1.2 at 1F .. x0.6 at 10F+), each wait drawn at random (x0.5-1.5) like real targeting.
    const floorOf=()=>config.floor10?Math.max(10,game.state.stats.zenith?.floor||1):(game.state.stats.zenith?.floor||1);
-   const wait=()=>config.attackMode==='floor'?Math.max(30,Math.round(seconds*60*(1.2-.6*Math.min(1,(floorOf()-1)/9))*(.5+Math.random()))):Math.round(seconds*60);
+   // v5.07 (user: 10F相当で本来火力が来ない時がある・最大30秒来ない・30秒はなかなか起きない様に): like real QP
+   // targeting, sometimes nobody sends for a while: 6% of waits are stretched toward 30 s by r^4,
+   // so the whole wait never passes 30 s and long ones are rare (per attack: over 10 s ~2%,
+   // over 20 s ~0.7%, near 30 s ~0.1%).
+   const lull=b=>config.attackLull!==false&&Math.random()<.06?Math.round((30*60-b)*Math.random()**4):0;
+   const wait=()=>{if(config.attackMode!=='floor')return Math.round(seconds*60);const b=Math.min(30*60,Math.max(30,Math.round(seconds*60*(1.2-.6*Math.min(1,(floorOf()-1)/9))*(.5+Math.random()))));return b+lull(b)};
    let next=game.getFrame()+wait();
    const tick=()=>{
     if(!game.isPlaying()||game.state.zenith?.incapacitated||game.getFrame()<next)return;

@@ -344,10 +344,34 @@ CFG_LOAD_NEW = 'qpCfgMerge(ot,JSON.parse(e)),ot.handling.ihs||'
 
 
 def fix_config_keep(text):
-    if CFG_SAVE_NEW in text:
+    if CFG_SAVE_NEW in text or CFG_LOAD_NEW in text:   # also after fix_config_sync changed the save's end
         return text
     text = replace_once(text, CFG_SAVE_OLD, CFG_SAVE_NEW, 'O/offline/client.js config save merge')
     return replace_once(text, CFG_LOAD_OLD, CFG_LOAD_NEW, 'O/offline/client.js config load merge')
+
+
+# v5.07 (user: configのハンドリング以外の設定がオフラインで維持されない): the desktop app writes
+# offline-preferences-v2.json into userConfig each time the offline page opens (preload-local.js),
+# but settings changed offline were only saved to localStorage, so they came back on the next open.
+# mt() now also hands the saved config to the main process (QPLocalStorage.saveConfig, desktop only;
+# the browser build has no adapter and keeps localStorage). Idempotent.
+CFG_SYNC_OLD = 'localStorage.setItem("userConfig",JSON.stringify(qpCfgMerge(p,JSON.parse(JSON.stringify(ot)))))}'
+CFG_SYNC_NEW = ('localStorage.setItem("userConfig",JSON.stringify(qpCfgMerge(p,JSON.parse(JSON.stringify(ot)))));'
+                'try{window.QPLocalStorage?.saveConfig?.(localStorage.getItem("userConfig"))}catch(e){console.warn("[QP config]",e)}}')
+PRELOAD_CFG_OLD = " const adapter={\n"
+PRELOAD_CFG_NEW = " const adapter={\n  saveConfig(value){if(typeof value==='string')call('qp-local-offline-config-save',value)},\n"
+
+
+def fix_config_sync(text):
+    if CFG_SYNC_NEW in text:
+        return text
+    return replace_once(text, CFG_SYNC_OLD, CFG_SYNC_NEW, 'O/offline/client.js config sync to the app')
+
+
+def fix_preload_config(text):
+    if 'saveConfig(value)' in text:
+        return text
+    return replace_once(text, PRELOAD_CFG_OLD, PRELOAD_CFG_NEW, 'O/preload-local.js saveConfig')
 
 
 def fix_tl_bgm(text):
@@ -630,7 +654,9 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                 text = data.decode('utf-8')
                 if not incremental:
                     text = fix_offline_client(text)
-                data = fix_replay_c_key(fix_config_keep(fix_rsg(fix_tl_bgm(fix_scoreslide(fix_wheel_volume(fix_warn_toggles(fix_tl_siren(fix_custom_opts(fix_warlock_mini(text))))))))), 'O/offline/client.js').encode('utf-8')
+                data = fix_config_sync(fix_replay_c_key(fix_config_keep(fix_rsg(fix_tl_bgm(fix_scoreslide(fix_wheel_volume(fix_warn_toggles(fix_tl_siren(fix_custom_opts(fix_warlock_mini(text))))))))), 'O/offline/client.js')).encode('utf-8')
+            elif offline and name == 'O/preload-local.js':
+                data = fix_preload_config(data.decode('utf-8')).encode('utf-8')
             elif offline and name == 'O/local-main.js':
                 data = add_editor_window(data.decode('utf-8')).encode('utf-8')
             elif has_offline and offline and name == 'O/offline/index.html':

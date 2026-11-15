@@ -1,0 +1,17 @@
+name: QP PB 登録
+description: QP OFFLINE(パッチ・ブックマークレット)の記録をランキングに登録します
+title: "PB: "
+labels: ["pb"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        オフラインの記録一覧の「ランキングに送る」から開くと、下の欄が入った状態になります。そのまま「Submit new issue」を押してください。
+        登録は自動で行われ、この Issue は閉じられます。記録は自己申告です。
+  - type: textarea
+    id: data
+    attributes:
+      label: 記録データ(変更しないでください)
+      render: json
+    validations:
+      required: true

@@ -210,7 +210,7 @@ onmessage = async (e) => { const m = e.data;
   const root = document.createElement('div'); root.id = 'qp-ext-ai';
   root.innerHTML = `<button type="button">外部AI対戦</button><div class="p">
 <label>左 <select data-k="left"></select></label><label>右 <select data-k="right"></select></label>
-<label>ルール <select data-k="mode"><option value="league">TL</option><option value="custom">CUSTOM</option></select></label>
+<label>ルール <select data-k="mode"><option value="league">TL</option><option value="custom">CUSTOM</option><option value="qp">QP SOLO(右の外部AIが遊ぶ)</option></select></label>
 <label>FT <input data-k="ft" type="number" min="1" max="99" step="1" value="7"></label>
 <label>外部AIの強さ 0〜100（空欄で100） <input data-k="str" type="number" min="0" max="100" step="1"></label>
 <div class="row"><button data-a="start" type="button">開始</button><button data-a="stop" type="button">終了</button></div>
@@ -290,6 +290,17 @@ onmessage = async (e) => { const m = e.data;
     const labels = engines.map(e => (e ? defs[e].label || e : null));
     try { localStorage.setItem('qp-local-ai-ext-ft', String($('input[data-k="ft"]').value)); } catch {}
     const ft = Number($('input[data-k="ft"]').value); if (Number.isInteger(ft) && ft >= 1 && ft <= 99) window.LocalAIRoom.ft?.(ft);
+    if ($('select[data-k="mode"]').value === 'qp') {
+     // v5.07 (user: 外部AIもQPできる様に): QP SOLO with the outside AI chosen on the right (or left).
+     // The MODS are the cards chosen on the QP screen; a vA profile only drives the keys.
+     const id = engines[1] || engines[0];
+     if (!id) throw Error('QP は右か左で外部AIを選んでください');
+     if (typeof window.LocalStartRL !== 'function') throw Error('QP の開始器を読み込めません');
+     const mods = [...document.querySelectorAll('#zenithmenu .zenith_card[data-card].active')].map(c => c.dataset.card + (c.classList.contains('qp-local-reverse') ? '_reversed' : ''));
+     await window.LocalStartRL('qp', profiles[0].id, 1, mods, 1, 'bot', id);
+     status('QP 開始: ' + (defs[id]?.label || id) + (mods.length ? '(MOD ' + mods.join(', ') + ')' : ''));
+     return;
+    }
     window.LocalAIRoom.start({ left: side(L, engines[0], 0), right: side(R, engines[1], 1), mode: $('select[data-k="mode"]').value, labels, engines });
     status('開始: ' + [L, R].map(v => sideOptions().find(o => o[0] === v)?.[1] || v).join(' vs '));
    } catch (e) { status('開始できません: ' + e.message); }
@@ -300,7 +311,7 @@ onmessage = async (e) => { const m = e.data;
   const { games, config } = ev.detail || {};
   (games || []).forEach((g, i) => { g._aiEngine = config?.engines?.[i] || null; g._aiExternalStats = null; });
  });
- window.LocalExternalAI = { register, load, planner, active, level, inputOf, addFiles, restore, engines: () => Object.keys(defs) };
+ window.LocalExternalAI = { register, load, planner, active, level, inputOf, addFiles, restore, engines: () => Object.keys(defs), label: id => defs[id]?.label || id };
  const mount = () => { if (document.body) panel(); else setTimeout(mount, 200); };
  if (typeof document !== 'undefined') { mount(); restore(); }
 })();

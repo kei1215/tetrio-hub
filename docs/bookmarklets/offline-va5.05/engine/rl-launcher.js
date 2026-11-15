@@ -10,7 +10,7 @@
     }
     throw Error('ローカルの開始処理を準備できませんでした。SOLO画面へ戻ってからもう一度実行してください');
   }
-  window.LocalStartRL = async (mode, profileId, speed = 1, mods = [], firstTo = 1, controller = 'bot') => {
+  window.LocalStartRL = async (mode, profileId, speed = 1, mods = [], firstTo = 1, controller = 'bot', engine = null) => {
     const profile = window.LocalBotLearning?.getProfile?.(profileId);
     if (!profile) throw Error('保存AIを選択してください');
     const launch = await waitForLauncher();
@@ -27,7 +27,10 @@
     // Keep speed/pps separate; never overwrite the user's currently set rate.
     // An explicit game-speed change is handled by LocalNative.setGameSpeed().
     game._localAIProfileId = profileId;
-    if(controller==='bot'){game._localAIPlayerName=profile.name;game.options.username=profile.name;}
+    // v5.07 (user: 外部AIもQPできる様に): an outside AI (ai-external.js) decides every placement;
+    // the vA profile only drives the keys. Set before the driver attaches; no learning in that run.
+    if (engine) { game._aiEngine = engine; game._aiExternalStats = null; }
+    if(controller==='bot'){const name=engine?(window.LocalExternalAI?.label?.(engine)||engine):profile.name;game._localAIPlayerName=name;game.options.username=name;}
     game._localLearningMode = profile.model.mode;
     window.LocalAIRoom?.add(game);
     // A profile is stored as JSON, so create an isolated mutable learner for
@@ -49,7 +52,7 @@
       if(typeof window.LocalLiveBot?.attach!=='function')throw Error('BOT操作器を読み込めませんでした。Tabの描画診断で素材エラーを確認してください');
       const driver=window.LocalLiveBot.attach(game, profile, learner);
       if(!driver)throw Error('BOT操作器を開始できませんでした');
-      if(profile.training) window.LocalBotLearning?.attachSelfplay?.(game, learner, saved);
+      if(profile.training&&!engine) window.LocalBotLearning?.attachSelfplay?.(game, learner, saved);
       // The native pre-countdown can finish before the first piece event on
       // some builds.  Begin explicitly; the driver also keeps its own
       // lightweight retry poll until the board becomes playable.

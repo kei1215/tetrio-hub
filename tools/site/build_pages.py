@@ -15,7 +15,7 @@ PATCH = '4.8265'
 OFFLINE = '4.8255'
 REL = f'https://github.com/kei1215/tetrio-hub/releases/download/patch-v{PATCH}/'
 
-NAV = [('', 'Home'), ('spin/', '盤面回転'), ('replay-edit/', '盤面修正'), ('replay-video/', 'MP4変換'), ('bookmarklets/', 'QP OFFLINE・パッチ')]
+NAV = [('', 'Home'), ('spin/', '盤面回転'), ('replay-edit/', '盤面修正'), ('replay-video/', 'MP4変換'), ('bookmarklets/', 'QP OFFLINE・パッチ'), ('ranking/', 'ランキング')]
 
 
 def shell(depth, title, body, scripts=''):

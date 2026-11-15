@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ja">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+        <title>QP PB ランキング</title>
+        <script src="../assets/tools.js"></script>
+        <link href="https://fonts.googleapis.com/css?family=Lora:400,700,400italic,700italic" rel="stylesheet" type="text/css" />
+        <link href="https://fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,700italic,800italic,400,300,600,700,800" rel="stylesheet" type="text/css" />
+        <link rel="stylesheet" href="../assets/clean-blog.css" />
+        <link rel="stylesheet" href="../assets/tools.css" />
+        <style>
+          .rk-tabs{display:flex;flex-wrap:wrap;gap:.4em;margin:1em 0}
+          .rk-tabs button{border:1px solid currentColor;background:none;color:inherit;padding:.35em .9em;border-radius:999px;cursor:pointer}
+          .rk-tabs button[aria-selected="true"]{background:#0085a1;border-color:#0085a1;color:#fff}
+          .rk-filters{display:flex;flex-wrap:wrap;gap:1em;align-items:center;margin-bottom:1em}
+          .rk-table{width:100%;border-collapse:collapse;font-size:.95em}
+          .rk-table th,.rk-table td{padding:.4em .5em;border-bottom:1px solid rgba(128,128,128,.3);text-align:left;white-space:nowrap}
+          .rk-table td.num,.rk-table th.num{text-align:right;font-variant-numeric:tabular-nums}
+          .rk-wrap{overflow-x:auto}
+          .rk-mods{white-space:normal;font-size:.85em;opacity:.85}
+          .rk-combo{margin:1.2em 0 .4em}
+          details.rk-group{margin:.4em 0}
+          details.rk-group summary{cursor:pointer;font-weight:600}
+        </style>
+    </head>
+    <body>
+        <nav class="navbar navbar-expand-lg navbar-light" id="mainNav">
+            <div class="container px-4 px-lg-5">
+                <a class="navbar-brand" href="../">TETR.IO tools</a>
+                <button class="navbar-toggler" type="button" aria-controls="navbarResponsive" aria-expanded="false" aria-label="メニュー">Menu ☰</button>
+                <div class="collapse navbar-collapse" id="navbarResponsive">
+                    <ul class="navbar-nav ms-auto py-4 py-lg-0">
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../">Home</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../spin/">盤面回転</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../replay-edit/">盤面修正</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../replay-video/">MP4変換</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../bookmarklets/">QP OFFLINE・パッチ</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../ranking/">ランキング</a></li>
+                        <li class="nav-item"><button class="nav-link px-lg-3 py-3 py-lg-4" id="themeToggle" type="button">☾ ダーク</button></li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+        <header class="tools-band"></header>
+<main class="container px-4 px-lg-5 tools-main">
+  <section class="my-5">
+    <p class="text-uppercase text-primary fw-bold mb-2">QP OFFLINE</p>
+    <h1 class="display-5 fw-bold">QP PB ランキング</h1>
+    <p class="lead">QP OFFLINE(パッチ・ブックマークレット)で出した記録のランキングです。1人1記録(各ランキングでいちばん高いもの)を高度順に並べます。</p>
+    <p>登録のしかた: オフラインの記録一覧で、記録の「ランキングに送る」を押すと登録ページが開きます。そのまま送ると自動で載ります(GitHub のアカウントが必要です)。記録は自己申告です。</p>
+  </section>
+  <section class="card shadow-sm mb-4"><div class="card-body p-4">
+    <div class="rk-tabs" role="tablist" id="tabs"></div>
+    <div class="rk-filters">
+      <label>モード <select id="fMode"><option value="zenith">通常</option><option value="zenithex">EXPERT</option><option value="all">両方</option></select></label>
+      <label><input type="checkbox" id="fBot"> BOT・外部AIの記録も入れる</label>
+      <label><input type="checkbox" id="fDuo"> DUO 練習も入れる</label>
+      <label id="modPick" hidden>MOD <select id="fMod"></select></label>
+    </div>
+    <div id="out" class="rk-wrap"><p>読み込み中…</p></div>
+    <p class="small text-muted mt-3 mb-0" id="count"></p>
+  </div></section>
+</main>
+<script>
+(() => {
+  const MODS = [['expert','EXPERT'],['nohold','NO HOLD'],['messy','MESSY'],['gravity','GRAVITY'],['volatile','VOLATILE'],['doublehole','DOUBLE HOLE'],['invisible','INVISIBLE'],['allspin','ALL-SPIN'],['duo','DUO']];
+  const modName = m => { const base = m.replace(/_reversed$/, ''), n = (MODS.find(x => x[0] === base) || [base, base.toUpperCase()])[1]; return m.endsWith('_reversed') ? '裏' + n : n; };
+  const TABS = [['all','総合'],['nomod','MODなし'],['mod','MOD別'],['combo','組み合わせ別'],['floor10','10F相当'],['revive','リバイブ回数']];
+  let records = [], tab = 'all';
+  const $ = id => document.getElementById(id);
+  const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
+  const fmtTime = ms => { if (!ms) return '-'; const s = ms / 1000, m = Math.floor(s / 60); return m + ':' + (s - m * 60).toFixed(1).padStart(4, '0'); };
+  const base = () => records.filter(r => ($('fMode').value === 'all' || r.mode === $('fMode').value) && ($('fBot').checked || !r.bot) && ($('fDuo').checked || r.test === 'solo'));
+  // 1人1記録: いちばん高いもの(同じ高さなら早く出した方)
+  const best = (list, key = r => r.altitude) => {
+    const by = new Map();
+    for (const r of list) { const k = r.user + '\u0000' + (r.bot ? r.engine || 'bot' : ''), cur = by.get(k); if (!cur || key(r) > key(cur) || key(r) === key(cur) && r.id < cur.id) by.set(k, r); }
+    return [...by.values()].sort((a, b) => key(b) - key(a) || a.id - b.id);
+  };
+  const table = (list, cols) => {
+    if (!list.length) return el('p', 'まだ記録がありません。');
+    const t = el('table', null, 'rk-table'), head = t.createTHead().insertRow();
+    for (const [label, , cls] of cols) { const th = el('th', label); if (cls) th.className = cls; head.appendChild(th); }
+    const body = t.createTBody();
+    list.forEach((r, i) => { const row = body.insertRow(); for (const [, get, cls] of cols) { const td = row.insertCell(); const v = get(r, i); td.textContent = v; if (cls) td.className = cls; } });
+    return t;
+  };
+  const COLS = [['#', (r, i) => i + 1, 'num'], ['名前', r => r.name + (r.bot ? ' (BOT' + (r.engine ? ' ' + r.engine : '') + ')' : '')], ['高度', r => r.altitude.toFixed(1) + ' m', 'num'], ['F', r => r.floor, 'num'],
+    ['リバイブ', r => r.revives, 'num'], ['時間', r => fmtTime(r.time), 'num'], ['APM', r => r.apm || '-', 'num'], ['PPS', r => r.pps || '-', 'num'], ['MOD', r => r.mods.map(modName).join(' ') || '-', 'rk-mods'], ['日付', r => (r.date || r.added || '').slice(0, 10)]];
+  const render = () => {
+    const out = $('out'); out.replaceChildren(); $('modPick').hidden = tab !== 'mod';
+    const list = base();
+    if (tab === 'all') out.appendChild(table(best(list), COLS));
+    else if (tab === 'nomod') out.appendChild(table(best(list.filter(r => !r.mods.length && !r.floor10)), COLS));
+    else if (tab === 'mod') { const m = $('fMod').value; out.appendChild(table(best(list.filter(r => r.mods.includes(m))), COLS)); }
+    else if (tab === 'floor10') out.appendChild(table(best(list.filter(r => r.floor10)), COLS));
+    else if (tab === 'revive') out.appendChild(table(best(list, r => r.revives * 1e6 + r.altitude), [COLS[0], COLS[1], ['リバイブ', r => r.revives, 'num'], COLS[2], COLS[3], COLS[8], COLS[9]]));
+    else if (tab === 'combo') {
+      // 組み合わせ別: 記録のある MOD の組み合わせ(10F相当は別の組み合わせ)ごとに表を出す
+      const groups = new Map();
+      for (const r of list) { const k = (r.mods.join('+') || 'MODなし') + (r.floor10 ? ' / 10F相当' : ''); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
+      if (!groups.size) out.appendChild(el('p', 'まだ記録がありません。'));
+      [...groups.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0])).forEach(([k, rs], i) => {
+        const d = el('details', null, 'rk-group'); d.open = i < 3;
+        const label = k.split(' / ')[0].split('+').map(x => x === 'MODなし' ? x : modName(x)).join(' + ') + (k.includes('10F相当') ? '(10F相当)' : '');
+        d.appendChild(el('summary', label + ' — ' + best(rs).length + '人')); d.appendChild(table(best(rs), COLS)); out.appendChild(d);
+      });
+    }
+    $('count').textContent = '登録 ' + records.length + ' 件(この条件 ' + list.length + ' 件)';
+  };
+  for (const [k, label] of TABS) { const b = el('button', label); b.type = 'button'; b.setAttribute('role', 'tab'); b.dataset.k = k; b.onclick = () => { tab = k; for (const x of $('tabs').children) x.setAttribute('aria-selected', String(x.dataset.k === k)); try { localStorage.setItem('rk-tab', k); } catch {} render(); }; $('tabs').appendChild(b); }
+  for (const [k] of MODS) for (const m of [k, k + '_reversed']) $('fMod').add(new Option(modName(m), m));
+  try { const t = localStorage.getItem('rk-tab'); if (TABS.some(x => x[0] === t)) tab = t; } catch {}
+  for (const x of $('tabs').children) x.setAttribute('aria-selected', String(x.dataset.k === tab));
+  for (const id of ['fMode', 'fBot', 'fDuo', 'fMod']) $(id).addEventListener('change', render);
+  fetch('data/records.json', { cache: 'no-store' }).then(r => r.json()).then(d => { records = (d.records || []).filter(r => r && typeof r.altitude === 'number'); render(); })
+    .catch(() => { $('out').textContent = 'ランキングを読み込めませんでした。'; });
+})();
+</script>
+</body>
+</html>

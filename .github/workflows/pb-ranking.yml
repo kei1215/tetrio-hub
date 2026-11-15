@@ -1,0 +1,36 @@
+name: PB ranking
+# QP OFFLINE の記録(Issue「QP PB 登録」)を docs/ranking/data/records.json に足す。
+on:
+  issues:
+    types: [opened, labeled]
+permissions:
+  contents: write
+  issues: write
+concurrency:
+  group: pb-ranking
+  cancel-in-progress: false
+jobs:
+  ingest:
+    if: contains(github.event.issue.labels.*.name, 'pb')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add the record
+        id: add
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run = require('./.github/scripts/pb-ingest.js');
+            const msg = run(context.payload.issue);
+            core.setOutput('ok', msg.ok ? '1' : '0');
+            await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.payload.issue.number, body: msg.text });
+            await github.rest.issues.update({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.payload.issue.number, state: 'closed', state_reason: msg.ok ? 'completed' : 'not_planned' });
+      - name: Commit
+        if: steps.add.outputs.ok == '1'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add docs/ranking/data/records.json
+          git commit -m "PB ranking: add record" || exit 0
+          git pull --rebase origin main
+          git push origin HEAD:main

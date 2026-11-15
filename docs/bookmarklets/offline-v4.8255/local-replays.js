@@ -43,7 +43,7 @@
   save(game,reason){
    const replay=game.replay.Export();if(!(replay.frames>0))return;
    const gamemode=mode(game),mods=game.options.zenith_mods||[];
-   const local={testMode:game._localTestMode||'solo',duoSide:game._localReplaySide||(game.options.zenith_duo?'player':null),speedChanges:game._localSpeedChanges||[],incomingAttacks:game._localAttackConfig||null,missions:game._localMissionConfig||null,requiresPatch:mods.filter(x=>x.endsWith('_reversed')).length>1||!!game._localCustomMissionUsed};
+   const local={testMode:game._localTestMode||'solo',duoSide:game._localReplaySide||(game.options.zenith_duo?'player':null),speedChanges:game._localSpeedChanges||[],incomingAttacks:game._localAttackConfig||null,missions:game._localMissionConfig||null,requiresPatch:mods.filter(x=>x.endsWith('_reversed')).length>1||!!game._localCustomMissionUsed,bot:!!game._localAIPlayerName,engine:game._aiEngine||null};
    const file=portable({version:1,gamemode,ts:new Date().toISOString(),local,users:[{username:game.options.username||localStorage.getItem('qp-local-username')||'LOCAL'}],replay});
    // QP DUO: save both sides as one TTRM, once per run (falls back to the player-only TTR).
    let saved=file;
@@ -80,6 +80,19 @@
      button('REPLAY',()=>play(QPLocalZen.replay(record)));
      const multi=!!record.replay?.local?.duoMerged||!!record.result?.localMatch;button(multi?'↓ TTRM':'↓ TTR',()=>{const data=portable(QPLocalZen.replay(record)),ext=Array.isArray(data.replay?.rounds)?'ttrm':'ttr',url=URL.createObjectURL(new Blob([JSON.stringify(data)],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download=window.__qpReplayDownloadName?window.__qpReplayDownloadName(data,ext):'local-'+record.mode+'-'+record.id+'.'+ext;link.click();setTimeout(()=>URL.revokeObjectURL(url),10000)});
     }
+    // v5.07 (user: PBデータを全て取る・githubにPBのランキング): QP SOLO records go to the ranking on
+    // tetrio-hub (an Issue form with the record filled in; a GitHub Action adds it to the ranking page).
+    if(['zenith','zenithex'].includes(record.mode)&&!record.result?.localMatch)button('ランキングに送る',()=>{
+     const res=record.result||{},r=res.results||res,st=r.stats||{},agg=r.aggregatestats||{},z=st.zenith||{};
+     let file=null;try{file=QPLocalZen.replay(record)}catch{}
+     const local=file?.local||record.replay?.local||{},opts=res.options?.zenith_mods?res.options:file?.replay?.options||{};
+     if(!(Number(z.altitude)>0))throw Error('高度が記録されていないので送れません');
+     const data={v:1,name:file?.users?.[0]?.username||localStorage.getItem('qp-local-username')||'LOCAL',mode:record.mode,altitude:+Number(z.altitude).toFixed(2),floor:Number(z.floor)||1,revives:Number(z.revives??z.revivesTotal??0)||0,
+      time:Math.round(Number(st.finaltime)||Number(file?.replay?.frames)/60*1000||0),apm:+(Number(agg.apm)||0).toFixed(2),pps:+(Number(agg.pps)||0).toFixed(2),mods:Array.isArray(opts.zenith_mods)?opts.zenith_mods:[],
+      floor10:!!local.incomingAttacks?.floor10,lull:local.incomingAttacks?.lull!==false,test:local.testMode||'solo',bot:!!local.bot,engine:local.engine||null,patch:String(window.__qpPatchVersion||''),date:record.date};
+     const url='https://github.com/kei1215/tetrio-hub/issues/new?template=pb.yml&title='+encodeURIComponent('PB: '+data.name+' '+data.altitude+'m')+'&data='+encodeURIComponent(JSON.stringify(data));
+     window.open(url,'_blank','noopener');
+    });
     const remove=button('🗑',()=>{if(!confirm('このローカル記録とTTRを削除しますか？'))return;QPLocalZen.deleteRecord(record.id);api.show(host,play,filter)});remove.setAttribute('aria-label','記録とTTRを削除');remove.title='記録とTTRを削除';
     host.appendChild(row);
    }

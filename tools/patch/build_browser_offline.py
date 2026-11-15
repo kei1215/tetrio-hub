@@ -14,6 +14,21 @@ Usage:
 import argparse, hashlib, json, re, shutil, zipfile
 from pathlib import Path
 
+CONFIG_SHIM = r"""/* Browser QP OFFLINE (v5.07, user: configのハンドリング以外の設定がオフラインで維持されない): the
+   page shares tetr.io's localStorage, so the open tetr.io tab could overwrite the offline settings and
+   the offline page wrote tetr.io's own userConfig. Offline reads and writes "qp-offline-userConfig"
+   instead (copied once from userConfig on the first start). Must run before client.js. */
+(()=>{if(location.protocol!=='blob:'||Storage.prototype.__qpOfflineCfg)return;try{
+ const K='userConfig',Q='qp-offline-userConfig',P=Storage.prototype,get=P.getItem,set=P.setItem,del=P.removeItem;
+ if(get.call(localStorage,Q)===null){const v=get.call(localStorage,K);if(v!==null)set.call(localStorage,Q,v)}
+ const map=(s,k)=>s===localStorage&&k===K?Q:k;
+ P.getItem=function(k){return get.call(this,map(this,k))};
+ P.setItem=function(k,v){return set.call(this,map(this,k),v)};
+ P.removeItem=function(k){return del.call(this,map(this,k))};
+ Object.defineProperty(P,'__qpOfflineCfg',{value:true});
+}catch(e){console.warn('[QP offline config]',e)}})();
+"""
+
 BROWSER_LIMITS = r"""/* Browser QP OFFLINE: keep at most 5 local records with a replay (localStorage is small). */
 (() => {
  const Z = window.QPLocalZen, LIMIT = 5;
@@ -115,6 +130,8 @@ def main():
                     raise SystemExit('qpo.svg anchor')
                 text = text.replace("icon.src='/res/local/qpo.svg'", f"icon.src='{base}qpo.svg'")
                 data = text.encode('utf-8')
+            if m == 'ui-health.js':   # loaded before client.js: offline keeps its own settings key
+                data = CONFIG_SHIM.encode('utf-8') + data
             (a.out_dir / m).write_bytes(data)
         (a.out_dir / 'mission-editor.html').write_bytes(read('mission-editor.html'))
         client = read('client.js')
