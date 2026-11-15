@@ -2,8 +2,8 @@ function qpCcFixConfig(document, window) {
  /* qp-cc-fix-config-v1 (vA only, online client): CONFIG > QP PATCH TOOLS > CC 盤面修正.
   * Loads the tool (docs/cc-fix/tetrio-cc-fix.js on tetrio-hub Pages) and opens its panel:
   * a .ttr / .ttrm + a player name in, the same file out with that player's board replayed by
-  * Cold Clear (results.qp_replay_edit, played by REPLAY BOARD EDIT). Cold Clear itself comes from
-  * the ext-ai/ folder on the same Pages site; the patch carries no outside AI. */
+  * Cold Clear (results.qp_replay_edit, played by REPLAY BOARD EDIT). The AI installed in vA's 外部AI is used;
+  * a missing one is installed first like かんたんインストール (ext-ai/catalog.json). The patch carries no outside AI. */
  if(window.location.protocol!=='https:')return;
  const TOOL='https://kei1215.github.io/tetrio-hub/cc-fix/tetrio-cc-fix.js';
  const loadTool=()=>new Promise((ok,ng)=>{

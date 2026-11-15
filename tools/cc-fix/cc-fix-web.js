@@ -2,27 +2,61 @@
 // Built into docs/cc-fix/tetrio-cc-fix.js by tools/cc-fix/build.sh.
 import { ccFix, playersOf } from "./cc-fix-core.mjs";
 
-const BASE = "https://kei1215.github.io/tetrio-hub/ext-ai/";
+const CAT = "https://kei1215.github.io/tetrio-hub/ext-ai/";
+// Choices: Cold Clear 2 S2 (default) / Cold Clear 1. The package file names match ext-ai/catalog.json.
 const ENGINES = {
-  cc2: { label: "Cold Clear 2 S2", files: ["vA-external-ai-cc2.js", "cold_clear_2_s2.wasm"] },
-  cc1: { label: "Cold Clear 1(オールスピンを知らない)", files: ["vA-external-ai-cc1.js", "cold_clear_1.wasm"] },
+  cc2: { label: "Cold Clear 2 S2", js: "vA-external-ai-cc2.js" },
+  cc1: { label: "Cold Clear 1(オールスピンを知らない)", js: "vA-external-ai-cc1.js" },
 };
 const bots = {};
 
-// The package registers itself through LocalExternalAI.register (vA package contract).
-async function loadBot(id) {
+// The AI installed in vA's 外部AI is used as it is. If the chosen one is not installed, it is
+// installed first, the same way as かんたんインストール (catalog.json -> files -> saved in IndexedDB
+// 'qp-external-ai' / 'packages', the store ai-external.js reads), then used.
+// In the vA QP OFFLINE page LocalExternalAI does it (addFiles / load); on the online tetr.io page
+// (no LocalExternalAI) this keeps the same store format in that page's IndexedDB.
+const DB = "qp-external-ai", STORE = "packages";
+const db = () => new Promise((ok, ng) => { const r = indexedDB.open(DB, 1); r.onupgradeneeded = () => r.result.createObjectStore(STORE, { keyPath: "name" }); r.onsuccess = () => ok(r.result); r.onerror = () => ng(r.error); });
+const tx = async (mode, fn) => { const d = await db(); return new Promise((ok, ng) => { const t = d.transaction(STORE, mode), out = fn(t.objectStore(STORE)); t.oncomplete = () => ok(out?.result ?? out); t.onerror = () => ng(t.error); }); };
+async function download(id, say) {
+  const list = await (await fetch(CAT + "catalog.json", { cache: "no-store" })).json();
+  const pkg = list.find((p) => p.files && p.files[0] === ENGINES[id].js);
+  if (!pkg) throw Error(ENGINES[id].label + " がかんたんインストールの一覧にありません");
+  say && say(pkg.label + " が入っていないので、インストールしています…");
+  const files = [];
+  for (const name of pkg.files) { const r = await fetch(CAT + name); if (!r.ok) throw Error(name + " を読み込めません (" + r.status + ")"); files.push(new File([await r.arrayBuffer()], name)); }
+  return files;
+}
+// run a package script with a register() catcher; returns the definitions it registered
+async function runScript(script) {
+  const prev = window.LocalExternalAI, defs = {};
+  window.LocalExternalAI = { register: (d) => { if (d && d.id) defs[d.id] = d; } };
+  const url = URL.createObjectURL(new Blob([script], { type: "text/javascript" }));
+  try { await new Promise((ok, ng) => { const s = document.createElement("script"); s.src = url; s.onload = ok; s.onerror = () => ng(Error("外部AIのスクリプトを実行できません")); document.head.appendChild(s); }); }
+  finally { URL.revokeObjectURL(url); if (prev) window.LocalExternalAI = prev; else delete window.LocalExternalAI; }
+  return defs;
+}
+async function loadBot(id, say) {
   if (bots[id]) return bots[id];
-  const [js, ...data] = ENGINES[id].files;
-  const files = {};
-  for (const f of data) { const r = await fetch(BASE + f); if (!r.ok) throw Error(f + " を読み込めません (" + r.status + ")"); files[f] = await r.arrayBuffer(); }
-  const prev = window.LocalExternalAI;
-  let def = null;
-  window.LocalExternalAI = { register: (d) => { if (d && d.id === id) def = d; } };
-  try {
-    await new Promise((ok, ng) => { const s = document.createElement("script"); s.src = BASE + js; s.onload = ok; s.onerror = () => ng(Error(js + " を読み込めません")); document.head.appendChild(s); });
-  } finally { if (prev) window.LocalExternalAI = prev; else delete window.LocalExternalAI; }
+  const X = window.LocalExternalAI;
+  if (X && typeof X.engines === "function" && typeof X.load === "function") {
+    if (!X.engines().includes(id)) { await X.addFiles(await download(id, say)); }
+    if (!X.engines().includes(id)) throw Error(ENGINES[id].label + " をインストールできませんでした");
+    // the vA host may run it in a Worker; the core only needs begin/step/stop/result
+    return (bots[id] = await X.load(id));
+  }
+  let pkg = (await tx("readonly", (s) => s.getAll())).find((p) => (p.ids || []).includes(id));
+  if (!pkg) {
+    const list = await download(id, say), js = list.find((f) => /\.m?js$/i.test(f.name)), files = {};
+    for (const f of list) if (f !== js) files[f.name] = await f.arrayBuffer();
+    pkg = { name: js.name, script: await js.text(), files, added: Date.now() };
+    pkg.ids = Object.keys(await runScript(pkg.script));
+    if (!pkg.ids.includes(id)) throw Error(ENGINES[id].label + " が登録されませんでした");
+    await tx("readwrite", (s) => s.put(pkg));
+  }
+  const def = (await runScript(pkg.script))[id];
   if (!def) throw Error(ENGINES[id].label + " が登録されませんでした");
-  return (bots[id] = await def.create(files, { strength: null }));
+  return (bots[id] = await def.create(pkg.files, { strength: null }));
 }
 
 const css = `#qp-ccfix{position:fixed;right:16px;top:80px;z-index:2147483646;width:330px;background:#15131fee;color:#eee;border:1px solid #7a6ad0;border-radius:8px;padding:12px;font:13px/1.5 sans-serif}
@@ -66,7 +100,7 @@ function open() {
     const id = $('[data-k="engine"]').value, user = $('[data-k="user"]').value;
     try {
       status(ENGINES[id].label + " を読み込み中…");
-      const bot = await loadBot(id);
+      const bot = await loadBot(id, status);
       const t0 = performance.now();
       const ms = Math.max(20, Math.min(3000, Number($('[data-k="ms"]').value) || 150));
       const idle = () => new Promise((r) => setTimeout(r, 0));

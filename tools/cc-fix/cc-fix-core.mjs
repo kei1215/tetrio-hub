@@ -110,6 +110,8 @@ async function fixOne(info, rep, bot, opt, T) {
     const job = bot.begin(input()), t0 = Date.now();
     while (!job.step(opt.sliceMs) && Date.now() - t0 < opt.thinkMs) await opt.idle();
     if (!job.done) job.stop?.();
+    // a Worker host (vA LocalExternalAI.load) answers stop() asynchronously
+    for (const t1 = Date.now(); !job.done && Date.now() - t1 < 2000;) await opt.idle();
     return job.result();
   };
 
