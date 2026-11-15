@@ -192,7 +192,7 @@
   // 1手戻す(Ctrl+Z)用: ミノを置くたびに、次のミノが出た時点の状態を積む。undo[0] は止めた場面
   let undo = [], redo = [], placed = 0;
   let deadAt = 0;                // 自滅した時刻(0 = していない)
-  let presses = [], pressKey = null;   // 今のミノを動かした押下ごとの位置(fumen の回転入れページ用)
+  let presses = [], pressKey = null, pressBefore = null;   // 今のミノを動かした押下ごとの位置(押す前・押した後。fumen の回転入れページ用)
   let stepping = false;          // このスクリプトがゲームを1フレーム進めている最中か
   let preClear = null;           // ライン消去の直前の盤面(置いたミノとそろったラインが見える)
 
@@ -336,7 +336,12 @@
       if (recGrav !== S.noGravity) { rec.push({ f, t: 'g', v: S.noGravity }); recGrav = S.noGravity; }
       const now = queue.filter(e => e.frame <= f);
       queue = queue.filter(e => e.frame > f);
-      for (const e of now) { rec.push({ f, t: e.type === 'keydown' ? 'd' : 'u', k: e.data.key }); this.Emit({ ...e, frame: f }); if (e.type === 'keydown') pressKey = e.data.key; }
+      for (const e of now) {
+        rec.push({ f, t: e.type === 'keydown' ? 'd' : 'u', k: e.data.key });
+        // 押す直前の位置(fumen で「回転・左右の前」のページにする)。同じフレームの2つ目以降は最初の押下の前のまま
+        if (e.type === 'keydown' && !pressKey) { try { pressBefore = lockCells(n.fm, n.gsm.falling); } catch (x) { pressBefore = null; } }
+        this.Emit({ ...e, frame: f }); if (e.type === 'keydown') pressKey = e.data.key;
+      }
       // 元のプレイが手本のマネ練習: リプレイのおじゃまなど(キー以外)を元のフレームで受ける
       if (feedIge) while (vEmit < vf) { vEmit++; try { this._replay.GetEventsAtFrame(vEmit).forEach(ev => { if (ev.type !== 'keydown' && ev.type !== 'keyup' && ev.type !== 'end') this.Emit({ ...ev, frame: f }); }); } catch (x) { } }
     });
@@ -478,7 +483,7 @@
     n.gsm.setoptions.noreplay = true;
     applyHandling(n);
     placed = n.gsm.stats.piecesplaced || 0;
-    deadAt = 0; wrongAt = 0; lastLock = null; acc = 0; queue = []; presses = []; pressKey = null;
+    deadAt = 0; wrongAt = 0; lastLock = null; acc = 0; queue = []; presses = []; pressKey = null; pressBefore = null;
     // 記録も、その場面までの操作に作り直す(各場面は前の場面からの操作 seg を持っている)
     const i = undo.indexOf(u);
     if (i >= 0) { rec = []; for (let k = 0; k <= i; k++) rec.push(...(undo[k].seg || [])); }
@@ -768,7 +773,16 @@
       // 回転入れ: そのミノの動き(押すごとの位置)を、置く前の地形に重ねたページにする(最後の位置は次の「置いた」ページ)
       if (pageMode === 'piece' && S.fumenPress !== 'off' && Array.isArray(u.presses) && u.presses.length > 1) {
         let ps = u.presses.slice(0, -1);
-        if (S.fumenPress === 'spin') {
+        if (S.fumenPress === 'spin' && u.presses.some(x => x.before)) {
+          // 難しい手(接地しているか屋根の下での回転・左右 = 回転入れ・差し込み)の、押す直前の位置を1ページずつ。
+          // 最後の位置は次の「置いた」ページ(user: 回転する前の状態を出す、左右も難易度によっては出す)
+          const Hb = prevBoard.length;
+          const solid = (x, y) => y >= Hb || x < 0 || x >= W10 || (y >= 0 && filled(prevBoard[y][x]));
+          const hard = c => c.some(([x, y]) => solid(x, y + 1)) || c.some(([x, y]) => { for (let yy = y - 1; yy >= 0; yy--) if (filled(prevBoard[yy] && prevBoard[yy][x])) return true; return false; });
+          ps = u.presses.filter(x => /^(rotate|move)/.test(x.key) && x.before && hard(x.before)).map(x => ({ type: x.type, cells: x.before }));
+          ps = ps.filter((x, k) => !k || x.cells.join() !== ps[k - 1].cells.join());
+        } else if (S.fumenPress === 'spin') {
+          // 押す前の位置がない古い記録: ソフトドロップ後に回転があれば、その後の位置
           const sd = ps.findIndex(x => x.key === 'softDrop');
           ps = sd >= 0 && ps.slice(sd + 1).some(x => /^rotate/.test(x.key)) ? ps.slice(sd) : [];
         }
@@ -1324,7 +1338,7 @@
     bReset.style.display = S.active ? '' : 'none';
     bFumen.textContent = S.active ? `fumen に書き出す(止めた場面 + ${undo.length - 1}ミノ)` : 'fumen で今の盤面を開く';
     bFumenPage.textContent = 'fumen のページ: ' + (S.fumenPage === 'seven' ? '1巡(7ミノ)ごと・消したラインは次のページで消す' : '1ミノごと');
-    bFumenGray.textContent = 'fumen の押下ページ(1ミノごとのとき): ' + ({ spin: '回転入れだけ1押しずつ', all: '全部の手を1押しずつ', off: 'なし' })[S.fumenPress];
+    bFumenGray.textContent = 'fumen の押下ページ(1ミノごとのとき): ' + ({ spin: '回転入れ・差し込み(接地中・屋根の下の回転と左右)の前', all: '全部の手を1押しずつ', off: 'なし' })[S.fumenPress];
     const tgt = pick(list);
     bSide.textContent = '操作する盤面: ' + (tgt ? name(tgt) : '-') + (list.length > 1 ? '(押すと切り替え)' : '');
     bPractice.textContent = 'マネ練習(手本の配置を目標に出す): ' + (S.practice ? 'ON' : 'OFF');
@@ -1531,7 +1545,7 @@
             // 相手も仮のリプレイ時刻 vf までリプレイどおりに進める(手本のミノを置くのを待つ間は止まる)
             for (const x of partners) { const g = x.g; if (!alive(g)) continue; for (let k = 0; k < 900 && g.esm.frame < vf; k++) { const b = g.esm.frame; g.lm.Update(); if (g.esm.frame === b) break; } }
           } finally { stepping = false; }
-          if (pressKey) { try { const fp = n.gsm.falling; presses.push({ key: pressKey, type: String(fp.type || 'x'), cells: lockCells(n.fm, fp) }); } catch (e) { } pressKey = null; }
+          if (pressKey) { try { const fp = n.gsm.falling; presses.push({ key: pressKey, type: String(fp.type || 'x'), before: pressBefore, cells: lockCells(n.fm, fp) }); } catch (e) { } pressKey = null; pressBefore = null; }
           const p = n.gsm.stats.piecesplaced || 0;
           if (p !== placed && !deadAt) {
             placed = p;
