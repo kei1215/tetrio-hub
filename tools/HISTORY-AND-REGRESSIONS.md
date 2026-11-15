@@ -66,6 +66,7 @@
   - 地形のマネ練習:止めた場面からリプレイのとおりに裏で進め、実際に置いた所(最大80手)を目標のミノとして重ねて描く。同じ所に置くと次へ、違えば置く前に戻す。せり上がりの差はずらして合わせる。
   - 「操作が反応しない・ミノが滑る」:下の再発チェックの行。オンライン版では再現できず(ブラウザ枠から tetr.io にテスト用リプレイを渡せない)、コードから原因を特定し OFFLINE 版クライアントで確認。
   - 埋め込みのある ttrm はパネルの「埋め込みの再生」で 修正後 / 地形練習 / 元の版 を切り替え(S.embMode、teardown 後も保持)。再生中はシークし直すと反映。
+- 2026-11-15(未 push・未ビルド):CC 盤面修正(vA だけ。CONFIG > QP PATCH TOOLS > CC 盤面修正、app-src/cc-fix-config.js → Pages の docs/cc-fix/tetrio-cc-fix.js)。.ttr/.ttrm とプレイヤーを選ぶと、そのプレイヤーの各ミノを Cold Clear(ext-ai/ の CC2 既定 / CC1)が置き直した .ttrm を作る。ソース tools/cc-fix(cc-fix-core.mjs、MP4 ツールのエンジンで再現、ハードドロップは元のプレイヤーが同じ手数目を置いたフレーム)。埋め込みは frame 0・state なし・keep(元のキー以外=受けたおじゃまはそのまま流す)・キーの subframe s。リプレイ盤面修正側:state なしは再生の最初に取った状態からシーク時に早送り、keep の上に手で直すと keepUntil で止めた場面まで。Node テスト tools/cc-fix/test-node.mjs(CC1)、OFFLINE クライアントで再生しても Node と同じ手数・火力(79 手・63)。
 
 - 2026-11-13(未ビルド):AI のルーム対戦(TL・CUSTOM)を1試合1つの .ttrm で保存。ラウンドごとに上書きし、ローカル記録に「名前 vs 名前 勝ち数」で出す(ai-src/engine/local-ai-room.js、offline-src/local-replays.js)。
 - 2026-11-13(未ビルド→v4.8266 に入れる):T-Spin の地形の見方。ユーザーと 5han の TL リプレイ(1.5万ミノ)から「数手以内に TSD/TST」になる地形パターン表を学習(ai-tshape-table.js、ユーザーの試合で AUC 0.74)。planner の tShape 10。CC2 戦(4 PPS・32試合)APP 0.59→0.64、T-Spin 割合 47→55%、勝ちはまだ 0〜1。
@@ -76,6 +77,7 @@
 
 | 壊れたこと | 原因と直し方 | 確かめ方 |
 |---|---|---|
+| CC 盤面修正の .ttrm で、受けたおじゃまが来ない/途中から盤面がずれる | 埋め込み後は元のイベントを全部止めていた。keep のときはキー以外を GetEventsAtFrame から流す。キーは subframe も同じに | test-node.mjs の再生チェックと、OFFLINE/オンラインで再生した最後の手数・火力が Node の報告と同じ |
 | 盤面修正中に Space でリプレイが再開する | 再生ボタンにフォーカスが残っていた。フォーカスを外し、keypress を止める | 止めて Space を押しても再開しない |
 | 操作中にリプレイを閉じると盤面が残る | GameOver を止めるのは1フレームずつ進めている間だけにする | 操作中に閉じても盤面が消える |
 | 戻した後に DAS が止まらない | InjectState が押したキーまで戻していた。syncKeys で送り直す | Ctrl+Z の後に左右キーが普通に効く |

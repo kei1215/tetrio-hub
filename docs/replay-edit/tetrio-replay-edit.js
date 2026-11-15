@@ -143,7 +143,7 @@
   const embedRaw = n => {
     try {
       const r = n.esm.replay, e = r && r.results && r.results[EMB];
-      return e && e.v === 1 && Number.isFinite(e.frame) && Number.isFinite(e.end) && e.state && Array.isArray(e.events) ? e : null;
+      return e && e.v === 1 && Number.isFinite(e.frame) && Number.isFinite(e.end) && (e.state || e.frame === 0) && Array.isArray(e.events) ? e : null;
     } catch (x) { return null; }
   };
   const embedOf = n => S.embMode === 'orig' ? null : embedRaw(n);
@@ -334,7 +334,11 @@
     if (!rec.some(e => e.t === 'd' || e.t === 'u')) return null;
     const end = n.esm.frame;
     let ed = { v: 1, frame: snapFrame, end, state: JSON.parse(JSON.stringify(undo[0].state)), events: rec.slice() };
-    if (editBase && snapFrame >= editBase.frame) ed = { v: 1, frame: editBase.frame, end, state: editBase.state, events: editBase.events.filter(e => e.f < snapFrame).concat(ed.events) };
+    if (editBase && snapFrame >= editBase.frame) {
+      ed = { v: 1, frame: editBase.frame, end, state: editBase.state, events: editBase.events.filter(e => e.f < snapFrame).concat(ed.events) };
+      // 操作中は元のおじゃまを流さないので、keep(CC 盤面修正)は止めた場面までにする
+      if (editBase.keep) { ed.keep = true; ed.keepUntil = Math.min(snapFrame, editBase.keepUntil ?? Infinity); if (editBase.by) ed.by = editBase.by; }
+    }
     return { game: n, edit: ed };
   };
   const leave = restore => {
@@ -687,7 +691,10 @@
   const fastForward = (n, e, target) => {
     internal++;
     try {
-      injectAt(n, e.state, e.frame);
+      // state なし(CC 盤面修正など frame 0 から)は、再生の最初に取った状態から進める
+      const st = e.state || n.__rpeState0;
+      if (!st) return;
+      injectAt(n, st, e.frame);
       fastRun(n, () => n.esm.frame < target);
     } finally { internal--; }
   };
@@ -700,11 +707,17 @@
       const e = S.active !== n && embedOf(n), f = this._frame;
       if (n.__rpeHold && (!e || f <= e.end)) { n.gsm.pause = false; n.__rpeHold = false; }
       if (!e || f < e.frame) return pull0.call(this);
-      if (f === e.frame) { injectAt(n, e.state, f); n.__rpeGrav = false; }
+      if (f === e.frame) {
+        if (e.state) injectAt(n, e.state, f);
+        else if (!internal) { try { n.__rpeState0 = JSON.parse(JSON.stringify(siom.EjectState())); } catch (x) { } }
+        n.__rpeGrav = false;
+      }
+      // keep: 元のリプレイのキー以外(受けたおじゃま ige など)はそのまま流す。キーだけ埋め込みのものに替える
+      if (e.keep && f < (e.keepUntil ?? Infinity)) { try { this._replay.GetEventsAtFrame(f).forEach(ev => { if (ev.type !== 'keydown' && ev.type !== 'keyup') this.Emit(ev); }); } catch (x) { } }
       for (const ev of eventsAt(e, f)) {
         if (ev.t === 'g') n.__rpeGrav = !!ev.v;
         else if (ev.t === 'h') applyHandling(n, ev.h);
-        else if (ev.t === 'd' || ev.t === 'u') this.Emit({ frame: f, type: ev.t === 'd' ? 'keydown' : 'keyup', data: { key: ev.k, subframe: 0 } });
+        else if (ev.t === 'd' || ev.t === 'u') this.Emit({ frame: f, type: ev.t === 'd' ? 'keydown' : 'keyup', data: { key: ev.k, subframe: ev.s || 0 } });
       }
       if (f > e.end && !n.__rpeHold) { n.__rpeHold = true; n.gsm.pause = true; }
     }));

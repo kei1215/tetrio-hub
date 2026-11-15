@@ -518,6 +518,21 @@ def add_mp4_button(text):
     return src + text
 
 
+CC_FIX_MARK = 'qp-cc-fix-config-v1'
+
+
+def add_cc_fix(text):
+    """vA only, online client runtime: CONFIG > QP PATCH TOOLS > CC 盤面修正 (app-src/cc-fix-config.js,
+    which loads docs/cc-fix/tetrio-cc-fix.js from Pages). Refreshes the function on later builds."""
+    src = (APP_SRC / 'cc-fix-config.js').read_text(encoding='utf-8')
+    if CC_FIX_MARK in text:
+        start = text.index('function qpCcFixConfig(document, window) {')
+        end = text.index('\n}\n', start) + 3
+        return text[:start] + src.rstrip('\n') + '\n' + text[end:]
+    text = replace_once(text, TAIL_END, "\\n;('+qpCcFixConfig.toString()+')(document,window);" + TAIL_END, 'transform tail (cc fix)')
+    return src + text
+
+
 def add_updater(text):
     """Append (or refresh) the patch updater (main process) in O/music-main.js, present in every kind."""
     return replace_appended(text, UPDATER_MARK, APP_SRC / 'patch-updater.js')
@@ -585,6 +600,8 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                     text = add_duo_save(text, duo_src)
                 if offline:
                     text = add_duo_view(add_mp4_button(text))
+                if offline and kind == 'A':
+                    text = add_cc_fix(text)
                 text = fix_replay_c_key(text, 'O/transform.js')
                 data = text.encode('utf-8')
             elif offline and name == 'O/music-main.js':
