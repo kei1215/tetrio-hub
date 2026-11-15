@@ -580,6 +580,17 @@ def version_parts(v):
 # tag: 5.01 (not 5.1) from v5; update is the 2-digit minor (1 = .01, 10 = .1)
 TAG_OLD = "return f'v{self.kind}-{self.version}.{self.update}'"
 TAG_NEW = "return f'v{self.kind}-{self.version}.{self.update}' if self.version < 5 else f'v{self.kind}-{self.version}.' + (f'{self.update:02d}' if self.update % 10 else str(self.update // 10))"
+R_ANCHOR_OLD = """    full = 'function patchQPReplay(src){return patchQPReplayNaming(patchQPReplayInternal(src))}'
+    replay = 'function patchQPReplay(src){return patchQPReplayNaming(patchQPReplayBase(src))}'
+    if source.count(full) != 1:
+        raise ValueError('v4.11のReplay変換形式に対応していません。')
+    return source.replace(full, replay)"""
+R_ANCHOR_NEW = """    # the DUO view (v4.8260+) wraps the call: patchQPDuoReplayView(patchQPReplayNaming(...))
+    import re
+    found = re.findall(r'function patchQPReplay\\(src\\)\\{return [^{}]*patchQPReplayInternal\\(src\\)[^{}]*\\}', source)
+    if len(found) != 1 or source.count(found[0]) != 1:
+        raise ValueError('v4.11のReplay変換形式に対応していません。')
+    return source.replace(found[0], found[0].replace('patchQPReplayInternal(src)', 'patchQPReplayBase(src)'))"""
 MIGRATE_OLD = "return previous == self.version or (self.version == 2 and previous == 1)"
 MIGRATE_NEW = "return previous == self.version or (self.version == 2 and previous == 1) or (self.version == 5 and previous == 4)"
 
@@ -657,6 +668,13 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                     raise SystemExit(f'unexpected package.json in {old_zip.name}: {pkg}')
                 pkg['version'], pkg['update'] = version_parts(new)
                 data = json.dumps(pkg).encode('utf-8')
+            elif name == 'R/patch_asar.py':
+                # v5.02: since v4.8260 the DUO view wraps patchQPReplay, so the vR builder never found
+                # its exact anchor ("v4.11のReplay変換形式に対応していません"). Accept any wrapping.
+                text = data.decode('utf-8')
+                if R_ANCHOR_NEW not in text:
+                    text = replace_once(text, R_ANCHOR_OLD, R_ANCHOR_NEW, name)
+                data = text.encode('utf-8')
             elif name == 'shared/release.py':
                 text = data.decode('utf-8')
                 if MIGRATE_NEW not in text:
