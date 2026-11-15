@@ -3,40 +3,40 @@
  "base": "https://github.com/kei1215/tetrio-hub/releases/download/patch-v5.05/",
  "files": {
   "tetrio-patch-Linux-vA4.9999.sh": {
-   "sha256": "aff6e30e8cdfbe4a007ece579274344a199db3f8672b63e81bd18c7ac2ee632e",
-   "size": 59019483
+   "sha256": "e3fa3cda73afe48c7ea3e126f1eaf4b981688b5cd00b069128be1cdd3dbfe8c8",
+   "size": 59020499
   },
   "tetrio-patch-Linux-vO4.9999.sh": {
-   "sha256": "ac079346ba14e7b36e1993e63f93f5a4c612e15eb3d434f5618b76bda65d6ac0",
-   "size": 58712848
+   "sha256": "6a35e3d054b78499d7c71b940ddc671231645ad367e773346cb7b759a3496d6d",
+   "size": 58713864
   },
   "tetrio-patch-Linux-vR4.9999.sh": {
-   "sha256": "2ec0150a45b099858b4adf9cffff8295f577e6565227771fb7baf2b029b3a6c5",
-   "size": 6056034
+   "sha256": "acd671bb6f5204db0418e2d465559ac4d75c344120a9b81e80dea7249860acec",
+   "size": 6057050
   },
   "tetrio-patch-Mac-vA4.9999.command": {
-   "sha256": "bcaa7d6bb815b075ac95d1795ec3d8705421a3c517a8fde2a767a8e4d02b8983",
-   "size": 59019477
+   "sha256": "b22cfa56b9fbb048c032cdff66458141e9a556ae3ba13a1f2801526e84616626",
+   "size": 59020493
   },
   "tetrio-patch-Mac-vO4.9999.command": {
-   "sha256": "35a1cb4a84c2dc0eba1b83889052dac4f85f6c60366d67d9f99df12e2382936f",
-   "size": 58712842
+   "sha256": "dcf30747adc5be633a60031f4878c8e07b687a98a302e62e829309acc61efc8e",
+   "size": 58713858
   },
   "tetrio-patch-Mac-vR4.9999.command": {
-   "sha256": "3c3357e05decc51a6714caca8f1f6fe3eed1ee0c50f63b102e7fd65d27008bef",
-   "size": 6056028
+   "sha256": "ca9af76353b6a080942187d9e9cac445833109873a9c6b2f53d2c5f0288b1929",
+   "size": 6057044
   },
   "tetrio-patch-Windows-vA4.9999.cmd": {
-   "sha256": "3b163f1aa3b86d5627e8a6f3a51ec08642b7e855cd13e82e8eac5fe7795c5956",
-   "size": 58539449
+   "sha256": "3f2657d659b6ced33b8c5b0365edbbaffa7ce88b3b8aa31fad975f6a5fe8bee2",
+   "size": 58540441
   },
   "tetrio-patch-Windows-vO4.9999.cmd": {
-   "sha256": "78847e3af89cb00ea6cf74e2c2fe340a4db4b17c9b9e5bcdd14df1958a2cb24c",
-   "size": 58235307
+   "sha256": "ccabd0c3b77fbb709641cc926693dc3022ac4597b3bb4ce428c0522da8a5c41a",
+   "size": 58236299
   },
   "tetrio-patch-Windows-vR4.9999.cmd": {
-   "sha256": "15081f0f5aaf5f2edd25e8933d521f6bcfdbd78387d50a893d5c3a1dff91a26a",
-   "size": 6006654
+   "sha256": "3d38c6bf24a4607f917503c4193424d6d71e6999326da3817aa154b7a9694ebd",
+   "size": 6007646
   }
  }
 }
