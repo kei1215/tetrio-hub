@@ -19,7 +19,7 @@ function qpPatchUpdateConfig(document, window) {
    window.IPC.invoke('qp-patch-update-check').then(r=>{
     if(!r?.ok){state={available:false,busy:false,error:true};show('PATCH UPDATE: 確認できません',(r?.error||'')+'(クリックで再確認)');return}
     state={...r,error:false};
-    const now='v4.'+r.installed+' ('+r.kind+')';
+    const now='v'+(r.installedVersion||'4.'+r.installed)+' ('+r.kind+')';
     if(r.available)show('PATCH UPDATE: v'+r.version+' に更新できます','今は '+now+'。クリックで更新します(TETR.IO を終了して新しいパッチを入れ、自動で起動し直します)'+(r.failed?'\n前回の更新は完了しませんでした: '+r.failed:''));
     else show('PATCH UPDATE: 最新です','今は '+now+(r.failed?'\n前回の更新は完了しませんでした: '+r.failed:''));
    }).catch(error=>{state={available:false,busy:false,error:true};show('PATCH UPDATE: 確認できません',String(error?.message||error))});

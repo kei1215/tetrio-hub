@@ -553,9 +553,32 @@ def add_updater(text):
 def add_update_config(text):
     """Add CONFIG > QP PATCH TOOLS > PATCH UPDATE to the online-client tail in O/transform.js."""
     if UPDATE_CONFIG_MARK in text:
-        return text
+        # v5.0: show 5.x versions (the block was prepended once by an older build).
+        return text.replace("const now='v4.'+r.installed+' ('+r.kind+')';", "const now='v'+(r.installedVersion||'4.'+r.installed)+' ('+r.kind+')';")
     text = replace_once(text, TAIL_RETURN, "+')(document,window);\\n;('+qpPatchUpdateConfig.toString()+')(document,window);\\n/* qp-replay-edit-v1 */';", 'transform tail')
     return (APP_SRC / 'update-config.js').read_text(encoding='utf-8') + text
+
+
+# v5.0 (user 2026-11-15: 5.0 に上げて / 4 からでも普通に更新 / 小数は2桁まで): --old/--new take
+# 8291 (= 4.8291) or 5.0 / 5.01 ...; from 5 the minor part has at most 2 digits.
+BRIDGE_V4 = '4.9999'  # latest.json entry for v4 updaters (they accept only 4.dddd): installs the newest 5.x
+
+
+def full_version(v):
+    v = str(v)
+    major, minor = v.split('.', 1) if '.' in v else ('4', v)
+    if not (major.isdigit() and minor.isdigit()) or (int(major) >= 5 and len(minor) > 2):
+        raise SystemExit('bad version: ' + v)
+    return f'{int(major)}.{minor}'
+
+
+def version_parts(v):
+    major, minor = full_version(v).split('.')
+    return int(major), int(minor.ljust(2, '0')) if int(major) >= 5 else int(minor)
+
+
+MIGRATE_OLD = "return previous == self.version or (self.version == 2 and previous == 1)"
+MIGRATE_NEW = "return previous == self.version or (self.version == 2 and previous == 1) or (self.version == 5 and previous == 4)"
 
 
 def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=False, offline=None, incremental=False, notes='', ai=None, port_ids=None, duo_src=None):
@@ -623,16 +646,21 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
             # v4.8283 (user: バージョンの表記(上のバー)が崩れている / 4.8232 のまま): stamp the
             # current version into the window title (vA ai-loader.js) and the render diagnostics.
             if name in ('A/offline/ai-loader.js', 'O/offline/render-diagnostics.js'):
-                data = re.sub(rb'vA-4\.\d+', b'vA-4.' + str(new).encode(), data)
-                data = re.sub('描画診断 v4\\.\\d+'.encode(), ('描画診断 v4.' + str(new)).encode(), data)
+                data = re.sub(rb'vA-\d+\.\d+', b'vA-' + full_version(new).encode(), data)
+                data = re.sub('描画診断 v\\d+\\.\\d+'.encode(), ('描画診断 v' + full_version(new)).encode(), data)
             elif name == 'package.json':
                 pkg = json.loads(data)
-                if pkg.get('kind') != kind or pkg.get('update') != int(old):
+                if pkg.get('kind') != kind or (pkg.get('version'), pkg.get('update')) != version_parts(old):
                     raise SystemExit(f'unexpected package.json in {old_zip.name}: {pkg}')
-                pkg['update'] = int(new)
+                pkg['version'], pkg['update'] = version_parts(new)
                 data = json.dumps(pkg).encode('utf-8')
+            elif name == 'shared/release.py':
+                text = data.decode('utf-8')
+                if MIGRATE_NEW not in text:
+                    text = replace_once(text, MIGRATE_OLD, MIGRATE_NEW, name)
+                data = text.encode('utf-8')
             elif name == 'QP-CHANGELOG.txt' and incremental:
-                data = (f'v4.{new}\n{notes}\n' + data.decode('utf-8')).encode('utf-8')
+                data = (f'v{full_version(new)}\n{notes}\n' + data.decode('utf-8')).encode('utf-8')
             elif name == 'QP-CHANGELOG.txt':
                 entry = (f'v4.{new} replay board edit' + (' / TETR.IO 2026-11-09 client' if port else '')
                          + (' / revive mission extra effects' if offline else '') + '\n'
@@ -675,9 +703,10 @@ def build_launcher(old_file, new_file, flavor, old, new, old_sha, payload):
     if header.count(old_sha) != 1:
         raise SystemExit('payload sha not found in header of ' + old_file.name)
     new_sha = sha256(payload)
-    header = header.replace(old_sha, new_sha).replace('4.' + old, '4.' + new).replace('4' + old, '4' + new)
+    ov, nv = full_version(old), full_version(new)
+    header = header.replace(old_sha, new_sha).replace(ov, nv).replace(ov.replace('.', ''), nv.replace('.', ''))
     # The new payload SHA-256 may contain the old number by chance; check the rest only.
-    if old != new and old in header.replace(new_sha, ''):  # old == new: local rebuild of the same version
+    if ov != nv and ov in header.replace(new_sha, ''):  # old == new: local rebuild of the same version
         raise SystemExit('old version left in header of ' + old_file.name)
     b64 = base64.b64encode(payload).decode('ascii')
     prefix = '' if flavor == 'cmd' else '# '
@@ -710,6 +739,7 @@ def main():
     ap.add_argument('--ai-src', type=Path, help='folder with changed vA-only A/offline/* files (tools/patch/ai-src)')
     ap.add_argument('--manifest', type=Path, help='write the in-app updater manifest (docs/patch/latest.json)')
     a = ap.parse_args()
+    OV, NV = full_version(a.old), full_version(a.new)
     if a.new_dir.exists():
         raise SystemExit('output folder already exists: ' + str(a.new_dir))
     edit_src = (a.hub / 'replay-edit/tetrio-replay-edit.js').read_text(encoding='utf-8')
@@ -721,14 +751,14 @@ def main():
     a.new_dir.mkdir(parents=True)
     sums = {}
     for kind in KINDS:
-        old_zip = a.old_dir / f'QP-Patch-v{kind}4.{a.old}-Source.zip'
-        new_zip = a.new_dir / f'QP-Patch-v{kind}4.{a.new}-Source.zip'
+        old_zip = a.old_dir / f'QP-Patch-v{kind}{OV}-Source.zip'
+        new_zip = a.new_dir / f'QP-Patch-v{kind}{NV}-Source.zip'
         old_sha = sha256(old_zip.read_bytes())
         payload = build_zip(old_zip, new_zip, kind, a.old, a.new, edit_src, counter_src, a.port, offline, a.incremental, a.notes, ai if kind == 'A' else None, CLIENT_RENAMES_2026_11_10 if a.port1110 else CLIENT_RENAMES_2026_11_10B if a.port1110b else None, duo_src)
         sums[new_zip.name] = sha256(payload)
         for osname, ext, flavor in OS_FILES:
-            old_file = a.old_dir / f'tetrio-patch-{osname}-v{kind}4.{a.old}{ext}'
-            new_file = a.new_dir / f'tetrio-patch-{osname}-v{kind}4.{a.new}{ext}'
+            old_file = a.old_dir / f'tetrio-patch-{osname}-v{kind}{OV}{ext}'
+            new_file = a.new_dir / f'tetrio-patch-{osname}-v{kind}{NV}{ext}'
             build_launcher(old_file, new_file, flavor, a.old, a.new, old_sha, payload)
             sums[new_file.name] = sha256(new_file.read_bytes())
         print(kind, 'ok', len(payload))
@@ -745,7 +775,20 @@ def main():
         # Read by CONFIG > PATCH UPDATE (app-src/patch-updater.js). Launchers only.
         files = {k: {'sha256': v, 'size': (a.new_dir / k).stat().st_size} for k, v in sorted(sums.items()) if k.startswith('tetrio-patch-')}
         a.manifest.parent.mkdir(parents=True, exist_ok=True)
-        a.manifest.write_text(json.dumps({'version': f'4.{a.new}', 'base': f'https://github.com/kei1215/tetrio-hub/releases/download/patch-v4.{a.new}/', 'files': files}, indent=1) + '\n', encoding='utf-8')
+        base = f'https://github.com/kei1215/tetrio-hub/releases/download/patch-v{NV}/'
+        if version_parts(NV)[0] < 5:
+            a.manifest.write_text(json.dumps({'version': NV, 'base': base, 'files': files}, indent=1) + '\n', encoding='utf-8')
+        else:
+            # 5.x updaters read latest-v5.json; latest.json keeps the v4 form (BRIDGE_V4) with copies
+            # of the same launchers under 4.9999 names, uploaded to this release too.
+            (a.manifest.parent / 'latest-v5.json').write_text(json.dumps({'version': NV, 'base': base, 'files': files}, indent=1) + '\n', encoding='utf-8')
+            bridge = {}
+            for k, v in files.items():
+                bk = k.replace(f'v{k.split("-v")[1][0]}{NV}.', f'v{k.split("-v")[1][0]}{BRIDGE_V4}.')
+                assert bk != k
+                shutil.copy2(a.new_dir / k, a.new_dir / bk)
+                bridge[bk] = v
+            a.manifest.write_text(json.dumps({'version': BRIDGE_V4, 'base': base, 'files': bridge}, indent=1) + '\n', encoding='utf-8')
         print('manifest', a.manifest)
     print('done', a.new_dir)
 

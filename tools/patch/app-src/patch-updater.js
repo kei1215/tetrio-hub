@@ -22,7 +22,9 @@
    request.on('timeout',()=>request.destroy(Error('通信がタイムアウトしました')));request.on('error',reject);
   });
  }
- const MANIFEST='https://kei1215.github.io/tetrio-hub/patch/latest.json';
+ // v5.0: 5.x reads latest-v5.json. latest.json stays in the 4.xxxx form that v4 updaters accept
+ // (a bridge entry that installs the newest 5.x), so a v4 install updates normally.
+ const MANIFEST='https://kei1215.github.io/tetrio-hub/patch/latest-v5.json';
  const DOWNLOAD_BASE='https://github.com/kei1215/tetrio-hub/releases/download/';
  const RESOURCE='TETRIO-Resources-1.0.zip';
  const OS_NAME={darwin:'Mac',win32:'Windows',linux:'Linux'}[process.platform]||null;
@@ -39,10 +41,15 @@
   const response=await get(MANIFEST+'?t='+Date.now());
   if(!response.ok)throw Error('更新情報を取得できません('+response.status+')');
   let m;try{m=JSON.parse(response.body.toString('utf8'))}catch{throw Error('更新情報が正しくありません')}
-  if(!/^4\.\d{4}$/.test(String(m?.version))||typeof m.files!=='object')throw Error('更新情報が正しくありません');
+  if(!/^\d+\.\d{1,4}$/.test(String(m?.version))||typeof m.files!=='object')throw Error('更新情報が正しくありません');
   return m;
  }
- const updateNumber=version=>Number(String(version).split('.')[1]);
+ // Versions compare as [major, minor]: 4.8291 = [4,8291]; from 5 the minor has at most 2 digits
+ // (5.0 = [5,0], 5.01 = [5,1], 5.1 = [5,10]).
+ const parseVersion=version=>{const [a,b='0']=String(version).split('.');const major=Number(a);return [major,major>=5?Number(b.padEnd(2,'0')):Number(b)]};
+ const recordVersion=record=>[Number(record.version)||4,Number(record.update)||0];
+ const newer=(x,y)=>x[0]!==y[0]?x[0]>y[0]:x[1]>y[1];
+ const showVersion=v=>v[0]>=5?v[0]+'.'+(v[1]%10?String(v[1]).padStart(2,'0'):String(v[1]/10)):v[0]+'.'+v[1];
  function resourceFolder(){
   const downloads=(()=>{try{return app.getPath('downloads')}catch{return path.join(os.homedir(),'Downloads')}})();
   // all-tetrio-patch first: launchers are kept there, next to the resource pack.
@@ -55,9 +62,10 @@
   try{
    if(!allowed(event))throw Error('Unsupported page');
    const record=installRecord();if(!record||!['A','R','O'].includes(record.kind))throw Error('パッチのインストール記録が見つかりません');
-   const m=await manifest(),latest=updateNumber(m.version),state=readState();
-   const failed=state.target&&record.update<state.target?(tail(state.log)||'更新が完了しませんでした'):'';
-   return {ok:true,kind:record.kind,installed:record.update,latest,version:m.version,available:latest>record.update&&!!OS_NAME,os:OS_NAME,failed};
+   const m=await manifest(),latest=parseVersion(m.version),state=readState(),installed=recordVersion(record);
+   const target=state.targetVersion?parseVersion(state.targetVersion):state.target?[4,Number(state.target)]:null;
+   const failed=target&&newer(target,installed)?(tail(state.log)||'更新が完了しませんでした'):'';
+   return {ok:true,kind:record.kind,installed:record.update,installedVersion:showVersion(installed),latest:latest[1],version:m.version,available:newer(latest,installed)&&!!OS_NAME,os:OS_NAME,failed};
   }catch(error){return {ok:false,error:error.message}}
  });
  let running=false;
@@ -67,8 +75,8 @@
    if(running)throw Error('更新の準備中です');
    if(!OS_NAME)throw Error('この OS では自動更新できません');
    const record=installRecord();if(!record||!['A','R','O'].includes(record.kind))throw Error('パッチのインストール記録が見つかりません');
-   const m=await manifest(),latest=updateNumber(m.version);
-   if(!(latest>record.update))throw Error('すでに最新です');
+   const m=await manifest(),latest=parseVersion(m.version);
+   if(!newer(latest,recordVersion(record)))throw Error('すでに最新です');
    const name=`tetrio-patch-${OS_NAME}-v${record.kind}${m.version}${EXT[OS_NAME]}`;
    const entry=m.files[name];
    if(!entry||!/^[0-9a-f]{64}$/.test(String(entry.sha256)))throw Error('この OS・種類のファイルがありません: '+name);
@@ -96,7 +104,7 @@
    fs.writeFileSync(launcher,data,{mode:0o755});
    // Remove only the launcher this updater downloaded last time (never other files).
    const previous=readState().launcher;
-   if(previous&&previous!==launcher&&/^tetrio-patch-(Mac|Windows|Linux)-v[ARO]4\.\d{4}\.(command|cmd|sh)$/.test(path.basename(previous)))try{fs.unlinkSync(previous)}catch{}
+   if(previous&&previous!==launcher&&/^tetrio-patch-(Mac|Windows|Linux)-v[ARO]\d+\.\d{1,4}\.(command|cmd|sh)$/.test(path.basename(previous)))try{fs.unlinkSync(previous)}catch{}
    // The waiter is a file, so its command line never matches the installer's own
    // "is TETR.IO running?" check.
    const work=fs.mkdtempSync(path.join(os.tmpdir(),'tetrio-patch-update-'));
@@ -149,7 +157,7 @@
     child=spawn('/bin/sh',[script],{detached:true,stdio:'ignore',env});
    }
    child.unref();
-   writeState({target:latest,from:record.update,kind:record.kind,launcher,log,at:Date.now()});
+   writeState({targetVersion:m.version,from:showVersion(recordVersion(record)),kind:record.kind,launcher,log,at:Date.now()});
    setTimeout(()=>app.quit(),800);
    return {ok:true,version:m.version,launcher};
   }catch(error){running=false;return {ok:false,error:error.message}}
