@@ -34,7 +34,7 @@
   if(state.inputPatched){
    if(state.options)state.options.inverted=state.originalOption;
    if(state.setoptions)state.setoptions.inverted=state.originalInput;
-   if(state.gsm&&state.rotateOriginal)state.gsm._ProcessRotate=state.rotateOriginal;
+   if(state.input&&state.rotateOriginal)state.input._ProcessRotate=state.rotateOriginal;
    const shift=state.gsm;
    if(shift?.lShift&&shift?.rShift){
     shift.lShift.held=false;shift.rShift.held=false;
@@ -60,10 +60,10 @@
   // constructed or rebuilt. Defer activation rather than aborting the mission.
   function frame(timestamp){
    if(running.get(game)!==state)return;
-   const H=holderData(game),gsm=runtime(game);
+   const H=holderData(game),gsm=runtime(game),input=game?.source?.self?.im;
    const holder=H?.holder;
    if(!H?.holderstate||!holder||holder._destroyed||!gsm?.setoptions||
-      (reverseRotation&&typeof gsm._ProcessRotate!=='function')){
+      (reverseRotation&&typeof input?._ProcessRotate!=='function')){
     if(state.missingSince===null)state.missingSince=timestamp;
     if(timestamp-state.missingSince>=5000){
      if(!state.reported){
@@ -71,7 +71,7 @@
       if(!H?.holderstate)missing.push('holderstate');
       if(!holder||holder._destroyed)missing.push('holder');
       if(!gsm?.setoptions)missing.push('setoptions');
-      if(reverseRotation&&typeof gsm?._ProcessRotate!=='function')missing.push('_ProcessRotate');
+      if(reverseRotation&&typeof input?._ProcessRotate!=='function')missing.push('_ProcessRotate');
       window.LocalUIHealth?.fail?.('Revive RUN盤面回転','プレイヤー盤面の準備ができません：'+missing.join(', '));
       state.reported=true;
      }
@@ -92,13 +92,12 @@
     state.originalOption=!!state.options?.inverted;
     state.originalInput=!!state.setoptions.inverted;
     state.gsm=gsm;
-    state.rotateOriginal=typeof gsm._ProcessRotate==='function'?gsm._ProcessRotate:null;
+    state.input=input;state.rotateOriginal=typeof input?._ProcessRotate==='function'?input._ProcessRotate:null;
     if(reverseHorizontal){
-     if(state.options)state.options.inverted=!state.originalOption;
-     state.setoptions.inverted=!state.originalInput;
+     for(const object of new Set([state.options,state.setoptions].filter(Boolean)))object.inverted=!(object===state.options?state.originalOption:state.originalInput);
     }
     if(reverseRotation){
-     gsm._ProcessRotate=function(direction){
+     input._ProcessRotate=function(direction){
       const opposite=direction===1?-1:direction===-1?1:direction;
       return state.rotateOriginal.call(this,opposite);
      };

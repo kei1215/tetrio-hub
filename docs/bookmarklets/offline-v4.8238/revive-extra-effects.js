@@ -29,14 +29,15 @@
   const layers=[];            // {owner, restoreAt, key, value}
   const bases=new Map();      // key -> run value before the first layer
   let preMission=null;        // option values before the current mission's MOD values
-  const read=key=>key==='boardheight'?Number(S.setoptions.boardheight):key==='pieces'?null:S.setoptions[key];
-  function setBoardHeight(height){
-   const bm=engine.bm,current=Number(S.setoptions.boardheight);
-   if(!bm?.SetSize||!Number.isInteger(height)||height===current)return false;
+  const read=key=>key==='boardsize'?{width:W(),height:Number(S.setoptions.boardheight)}:key==='handling'?{...(S.handling||{})}:key==='pieces'?null:S.setoptions[key];
+  // v4.8241: width and height (native SetSize keeps the stack and moves the falling piece).
+  function setBoardSize(size){
+   const bm=engine.bm,width=Number(size?.width)||W(),height=Number(size?.height)||Number(S.setoptions.boardheight);
+   if(!bm?.SetSize||!Number.isInteger(width)||!Number.isInteger(height)||width===W()&&height===Number(S.setoptions.boardheight))return false;
    try{
-    bm.SetSize(W(),height,Number(S.setoptions.boardbuffer)||20);
+    bm.SetSize(width,height,Number(S.setoptions.boardbuffer)||20);
     bm.Resize?.();
-    for(const object of optionObjects())object.boardheight=height;
+    for(const object of optionObjects()){object.boardwidth=width;object.boardheight=height}
     bm.ClearIsLegalAtPosMemo?.();bm.PushUpFallingIfNeeded?.();
     return true;
    }catch(error){window.LocalUIHealth?.fail?.('リバイブ効果: 盤面の高さ',error);return false}
@@ -44,11 +45,13 @@
   let holderNeeded=false;
   function writeKey(key,value){
    if(key==='pieces')return;
-   if(key==='boardheight'){if(setBoardHeight(value))holderNeeded=true;return}
+   if(key==='boardsize'){if(setBoardSize(value))holderNeeded=true;return}
+   if(key==='handling'){if(S.handling&&value)Object.assign(S.handling,value);return}
    for(const object of optionObjects())object[key]=value;
   }
   function reassert(key){
    const top=[...layers].reverse().find(l=>l.key===key);
+   if(key==='handling'){if(top){writeKey(key,{...(bases.get(key)||{}),...top.value});return}if(bases.has(key)){writeKey(key,bases.get(key));bases.delete(key)}return}
    if(top){writeKey(key,top.value);return}
    if(bases.has(key)){writeKey(key,bases.get(key));bases.delete(key)}
   }
@@ -219,9 +222,15 @@
    }
    return out;
   }
+  const visibleHeight=()=>Math.max(1,Number(S.setoptions.boardheight)||20);
   function fireGarbage(task,entry,state){
    if(isReplay())return;
-   const n=entry.rows,block=rows(entry,state,n);
+   // A template is used whole (its own height), fitted to the current board: at most the
+   // visible height, keeping its bottom rows. Other patterns use the row count.
+   const templateRowsCount=entry.pattern.type==='template'?entry.pattern.template.split('\n').length:0;
+   const n=Math.min(templateRowsCount||entry.rows,visibleHeight());
+   if(templateRowsCount)state.row=templateRowsCount-n;
+   const block=rows(entry,state,n);
    const concrete=block.map(h=>h||[Math.floor(state.rng()*W())]); // terrain needs real holes
    if(entry.bombs){bombOwners.add(task.id);if(!bombsOn())push('bombs','auto','usebombs',true);bombSkin(true)}
    for(const method of entry.methods){
@@ -232,7 +241,8 @@
     }else if(method==='terrain'){
      // Rewrite the bottom N rows above unclearable rows; no rise.
      const floor=blockFloor();
-     for(let i=0;i<n&&floor-1-i>=0;i++)writeRow(floor-1-i,concrete[n-1-i],entry.bombs);
+     const limit=Math.max(0,floor-(S.board.length-visibleHeight()));
+     for(let i=0;i<n&&i<limit;i++)writeRow(floor-1-i,concrete[n-1-i],entry.bombs);
      dirty();
     }else if(method==='holes'){
      // Only move the holes of the garbage rows that are already on the board.
@@ -250,31 +260,40 @@
 
   // ---------- mission lifecycle ----------
   let active=null; // {task, timers:[{fire, seconds, pieces, frame, placed}]}
-  const frame=()=>Number(game.getFrame?.()||0),placed=()=>Number(S.stats?.piecesplaced||0);
-  function beforeMods(){preMission=Object.fromEntries(OPTION_KEYS.map(k=>[k,S.setoptions[k]]));preMission.boardheight=Number(S.setoptions.boardheight)}
+  const frame=()=>Number(game.getFrame?.()||0),placed=()=>Number(S.stats?.piecesplaced||0),received=()=>Number(S.stats?.garbage?.received||0);
+  function beforeMods(){preMission=Object.fromEntries(OPTION_KEYS.map(k=>[k,S.setoptions[k]]));preMission.boardsize={width:W(),height:Number(S.setoptions.boardheight)}}
   function activate(task){
    holderNeeded=false;
    const x=task?.effects?.extra;
-   if(!x){for(const key of new Set(layers.map(l=>l.key)))if(key!=='boardheight')reassert(key);preMission=null;return false}
+   if(!x){for(const key of new Set(layers.map(l=>l.key)))if(key!=='boardsize')reassert(key);preMission=null;return false}
    const owner=task.id;
    // Kept layers from an earlier mission win over this mission's MOD values.
-   for(const key of new Set(layers.map(l=>l.key)))if(key!=='boardheight')reassert(key);
-   if(x.board?.enabled&&!isReplay())push(owner,x.board.restoreAt,'boardheight',x.board.height);
+   for(const key of new Set(layers.map(l=>l.key)))if(key!=='boardsize')reassert(key);
+   if(x.board?.enabled&&!isReplay())push(owner,x.board.restoreAt,'boardsize',{width:x.board.width||W(),height:x.board.height});
+   if(x.handling?.enabled){const c=x.handling.change||{},v={};for(const k of ['das','arr','sdf','dcd'])if(c[k])v[k]=x.handling[k];if(Object.keys(v).length)push(owner,x.handling.restoreAt,'handling',v)}
    if(x.messiness?.enabled){push(owner,x.messiness.restoreAt,'messiness_change',1-x.messiness.straight/100);push(owner,x.messiness.restoreAt,'messiness_inner',1-x.messiness.innerStraight/100)}
    if(x.spin?.enabled)push(owner,x.spin.restoreAt,'spinbonuses',x.spin.rule);
    if(x.pieces?.enabled)push(owner,x.pieces.restoreAt,'pieces',{delta:x.pieces.delta,i5:x.pieces.i5});
    preMission=null;
    const timers=[];
+   // Place single blocks on empty cells (column 1-10, row counted from the board bottom); no rise.
+   if(x.stamp?.enabled&&x.stamp.cells?.length&&!isReplay()){
+    const b=S.board;let changed=false;
+    for(const [col,row]of x.stamp.cells){const yy=b.length-row,xx=col-1;if(b[yy]&&xx>=0&&xx<W()&&b[yy][xx]===null){b[yy][xx]='gb';S.boardedges[yy][xx]=255;changed=true}}
+    if(changed)dirty();
+   }
    if(x.unclearable?.enabled&&!isReplay()){
     const fire=()=>{removeUnclearable(x.unclearable.remove);addUnclearable(x.unclearable.add)};
     fire();timers.push({fire,...x.unclearable.repeat,frame:frame(),placed:placed()});
    }
+   const onGarbage=[];
    (x.garbage||[]).forEach((entry,index)=>{
     if(!entry.enabled)return;
     const state=makeState(task,entry,index),fire=()=>fireGarbage(task,entry,state);
+    if(entry.when==='garbage'){onGarbage.push(fire);return}
     fire();timers.push({fire,...entry.repeat,frame:frame(),placed:placed()});
    });
-   active={task,timers};
+   active={task,timers,onGarbage,received:received()};
    return holderNeeded;
   }
   function missionEnd(){
@@ -291,6 +310,8 @@
     if(t.seconds>0&&f-t.frame>=t.seconds*60){t.frame=f;t.fire()}
     if(t.pieces>0&&p-t.placed>=t.pieces){t.placed=p;t.fire()}
    }
+   // "When garbage is received": once per frame in which an attack arrived.
+   if(active&&active.onGarbage.length&&game.isPlaying?.()&&!isReplay()){const r=received();if(r>active.received){active.received=r;for(const fire of active.onGarbage)fire()}}
    const incap=!!S.zenith?.allyincapacitated;
    if(wasIncapacitated&&!incap)drop(l=>l.restoreAt==='revive'); // revive finished
    wasIncapacitated=incap;
@@ -305,7 +326,7 @@
   function cleanup(){
    holderNeeded=false;active=null;layers.length=0;bombSkin(false);
    // The run is over: put the option values back without resizing the finished board.
-   for(const [key,value]of bases){if(key==='pieces')continue;for(const object of optionObjects())object[key]=value}
+   for(const [key,value]of bases){if(key==='pieces')continue;if(key==='handling'){if(S.handling)Object.assign(S.handling,value);continue}if(key==='boardsize'){for(const object of optionObjects()){object.boardwidth=value.width;object.boardheight=value.height}continue}for(const object of optionObjects())object[key]=value}
    bases.clear();
    if(bam&&originalPopulate){if(ownPopulate)bam.PopulateBag=originalPopulate;else delete bam.PopulateBag}
    if(sdm&&originalDrawStack){if(ownDrawStack)sdm.DrawStack=originalDrawStack;else delete sdm.DrawStack}

@@ -11,6 +11,31 @@
    default:return null;
   }
  }
+ // TETR.IO rewrites falling-mino alpha while processing an input. A normal
+ // once-per-frame assignment therefore flashes a hidden mino for one draw.
+ // An own, temporary alpha accessor wins over those writes until restore().
+ function hardHide(obj){
+  if(obj.__qpHardHide)return;
+  try{const own=Object.getOwnPropertyDescriptor(obj,'alpha');obj.__qpHardHide={own,value:obj.alpha};Object.defineProperty(obj,'alpha',{configurable:true,get:()=>0,set:()=>{}})}
+  catch{obj.visible=false;obj.__qpHardHide={fallback:true}}
+ }
+ function releaseHardHide(obj){
+  const lock=obj?.__qpHardHide;if(!lock)return;
+  try{delete obj.alpha;if(lock.own)Object.defineProperty(obj,'alpha',lock.own);else obj.alpha=obj.__qpNativeAlpha??lock.value??1;obj.visible=true}catch{}
+  delete obj.__qpHardHide;
+ }
+ function hookFalling(entry,falling){
+  if(!falling||entry.falling===falling)return;
+  if(entry.falling&&entry.addChild&&entry.falling.addChild===entry.patched)entry.falling.addChild=entry.addChild;
+  entry.falling=falling;entry.addChild=falling.addChild;
+  entry.patched=function(...nodes){
+   const result=entry.addChild.apply(this,nodes);
+   // Hide a just-created active mino before PIXI can draw its first frame.
+   if(entry.rule?.modes?.active?.mode==='hidden')for(const node of nodes){if(node&&Number(node.alpha)>.3){if(node.__qpNativeAlpha===undefined)node.__qpNativeAlpha=node.alpha;node.__qpNativeGhost=false;hardHide(node)}}
+   return result;
+  };
+  falling.addChild=entry.patched;
+ }
  function apply(game,entry){
   const H=game.source?.self?.hm?.H,rule=entry.rule,now=(game.getFrame()-entry.started)/60;
   if(!H)return;
@@ -26,7 +51,7 @@
     if(a===null)obj.alpha=1;
    }
   }
-  const falling=H.fallingobj;
+  const falling=H.fallingobj;hookFalling(entry,falling);
   // Match the selected position in a five-piece NEXT batch.
   // This avoids accidentally hiding every active piece.
   const selected=Array.isArray(rule.nextWhenSpawnSlots)?rule.nextWhenSpawnSlots:[];
@@ -42,6 +67,8 @@
    if(obj.__qpNativeGhost===undefined)obj.__qpNativeGhost=(typeof obj.__qpNativeAlpha==='number'&&obj.__qpNativeAlpha<=.3);
    const isGhost=obj.__qpNativeGhost;
    const setting=hideSpawn&&!isGhost?{mode:'hidden'}:rule.modes?.[isGhost?'ghost':'active'];
+   if(setting?.mode==='hidden'){hardHide(obj);continue;}
+   releaseHardHide(obj);
    if(!setting||setting.mode==='normal'){obj.alpha=obj.__qpNativeAlpha;continue;}
    const amount=alpha(setting,now);if(amount!==null)obj.alpha=isGhost?Math.min(obj.__qpNativeAlpha,amount):amount;
   }
@@ -66,13 +93,14 @@
   if(hold&&holdRule&&holdRule.mode!=='normal')hold.alpha=alpha(holdRule,now);
  }
  function restore(game){const old=active.get(game);if(!old)return;active.delete(game);
+  if(old.falling&&old.addChild&&old.falling.addChild===old.patched)old.falling.addChild=old.addChild;
   const H=game.source?.self?.hm?.H;
-  if(H){if(H.fallingobj){H.fallingobj.alpha=1;for(const obj of H.fallingobj.children||[])if(obj)obj.alpha=obj.__qpNativeAlpha??1}
+  if(H){if(H.fallingobj){H.fallingobj.alpha=1;for(const obj of H.fallingobj.children||[])if(obj){releaseHardHide(obj);obj.alpha=obj.__qpNativeAlpha??1}}
    if(H.stackobj){H.stackdirty=true;for(const obj of H.stackobj.children||[])if(obj)obj.alpha=1}
    for(const obj of H.nextobj||[])if(obj)obj.alpha=1;
    if(H.holdobj)H.holdobj.alpha=1;
   }
  }
- function activate(game,rule){restore(game);if(!rule?.modes)return;active.set(game,{rule,started:game.getFrame(),startedPieces:Number(game.state?.stats?.piecesplaced??game.state?.stats?.pieces??0)})}
+ function activate(game,rule){restore(game);if(!rule?.modes)return;const entry={rule,started:game.getFrame(),startedPieces:Number(game.state?.stats?.piecesplaced??game.state?.stats?.pieces??0)};active.set(game,entry);/* Apply now as well, so a hidden active mino cannot flash for one frame before the next renderer tick. */apply(game,entry)}
  window.LocalVisibilityEffects={activate,restore,tick(game){const entry=active.get(game);if(entry)apply(game,entry)}};
 })();

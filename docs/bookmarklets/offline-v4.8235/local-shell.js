@@ -3,6 +3,10 @@
  offlineStyle.textContent=`
  body.qp-local-mode .ceriad,body.qp-local-mode [data-cid]{display:none!important;min-height:0!important;height:0!important;margin:0!important;padding:0!important}
  body.qp-local-mode.qp-local-playing #pixi{display:block!important}
+ /* v4.8277 (user: CONFIG "no background in menus" broke the display): the native CSS hides
+    #pixi unless body is .ingame; local TL / outside-AI rooms and replays never set it. Show the
+    board canvas whenever the menus are hidden. */
+ body.qp-local-mode:has(#menus.hidden) #pixi{display:block!important}
  body.qp-local-mode .qp-online-unavailable{position:relative;cursor:not-allowed}
  body.qp-local-mode .qp-online-unavailable::after{content:'OFFLINE — ONLINE PLAY IS UNAVAILABLE';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(30,0,0,.85);color:white;font:700 clamp(16px,2vw,36px) sans-serif;text-align:center;z-index:20;pointer-events:none}
  body.qp-local-mode .qp-online-unavailable>*{opacity:.35}
@@ -74,15 +78,38 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
  const utilities=document.createElement('div');utilities.id='local-utility-actions';utilities.setAttribute('aria-label','ローカル操作');utilities.style.cssText='display:flex;flex-wrap:wrap;gap:.35em;margin:.45em 0';
  const noRenderButton=document.createElement('button');noRenderButton.id='local-no-render-toggle';noRenderButton.textContent='描画停止：OFF';noRenderButton.onclick=()=>{const enabled=window.LocalRenderDiagnostics?.noRender(!window.LocalRenderDiagnostics?.isNoRender());noRenderButton.textContent='描画停止：'+(enabled?'ON':'OFF')};utilities.appendChild(noRenderButton);
  const qpSettingsButton=document.createElement('button');qpSettingsButton.id='local-open-qp-settings';qpSettingsButton.textContent='QP設定を開く';qpSettingsButton.onclick=()=>openNativeQP(true);utilities.appendChild(qpSettingsButton);
+ // v4.8241: patch update (desktop app only; the main process downloads the launcher for this
+ // OS and the installed kind, quits TETR.IO and installs). Nothing happens when already latest.
+ if(location.protocol==='tetrio-local:'&&window.IPC?.invoke){
+  const updateButton=document.createElement('button');updateButton.id='local-patch-update';updateButton.textContent='パッチ更新：確認中…';updateButton.disabled=true;utilities.appendChild(updateButton);
+  let info=null;
+  const check=()=>window.IPC.invoke('qp-patch-update-check').then(r=>{info=r;
+   if(!r?.ok){updateButton.textContent='パッチ更新：確認できません';updateButton.title=r?.error||'';updateButton.disabled=false;return}
+   updateButton.textContent=r.available?'パッチを v'+r.version+' に更新':'パッチ：最新(v4.'+r.installed+' '+r.kind+')';updateButton.title=r.failed?'前回の更新は完了しませんでした: '+r.failed:'';updateButton.disabled=!r.available;
+  }).catch(error=>{info=null;updateButton.textContent='パッチ更新：確認できません';updateButton.title=String(error?.message||error);updateButton.disabled=false});
+  updateButton.onclick=()=>{
+   if(!info?.ok){updateButton.disabled=true;updateButton.textContent='パッチ更新：確認中…';check();return}
+   if(!info.available)return;
+   if(!confirm('パッチを v'+info.version+' に更新します。\nTETR.IO を終了して新しいパッチを入れ、自動で起動し直します。よろしいですか?'))return;
+   updateButton.disabled=true;updateButton.textContent='パッチ更新：ダウンロード中…';
+   window.IPC.invoke('qp-patch-update-run').then(r=>{if(!r?.ok){updateButton.textContent='パッチ更新：できません';updateButton.title=r?.error||'';info=null;updateButton.disabled=false;alert('パッチを更新できませんでした。\n'+(r?.error||''));return}updateButton.textContent='パッチ更新：TETR.IO を終了して更新します…'})
+    .catch(error=>{updateButton.textContent='パッチ更新：できません';info=null;updateButton.disabled=false;alert('パッチを更新できませんでした。\n'+String(error?.message||error))});
+  };
+  check();
+ }
  const stopButton=document.getElementById('local-stop');if(stopButton?.parentNode)stopButton.parentNode.insertBefore(utilities,stopButton.nextSibling);else panel.appendChild(utilities);panel.appendChild(diagnostics);
  const localSettings=document.createElement('details');localSettings.id='local-speed-settings';const localSettingsTitle=document.createElement('summary');localSettingsTitle.textContent='オフライン専用設定・ゲーム速度';localSettings.appendChild(localSettingsTitle);
  const speedRow=document.createElement('label');speedRow.textContent='ゲーム時間速度 ';const speedSelect=document.createElement('select');for(const value of [0,.25,.5,1,1.5,2,3,4,8]){const option=document.createElement('option');option.value=String(value);option.textContent=value===0?'0×（停止）':value+'×';speedSelect.appendChild(option)}speedSelect.value=localStorage.getItem('qp-local-game-speed')||'1';speedSelect.onchange=()=>LocalNative.setGameSpeed(Number(speedSelect.value));speedRow.appendChild(speedSelect);localSettings.appendChild(speedRow);
  const fpsRow=document.createElement('label');fpsRow.textContent='描画FPS上限 ';const fpsSelect=document.createElement('select');for(const [value,label]of [[0,'制限なし'],[60,'60 FPS'],[120,'120 FPS'],[240,'240 FPS']]){const option=document.createElement('option');option.value=String(value);option.textContent=label;fpsSelect.appendChild(option)}fpsSelect.value=localStorage.getItem('qp-local-fps-limit')||'60';fpsSelect.onchange=()=>LocalNative.setFrameLimit(Number(fpsSelect.value));fpsRow.appendChild(fpsSelect);localSettings.appendChild(fpsRow);
+ // v4.8281 (user: 基本オフ、オンにしてたら維持): these five toggles are off unless set to '1'.
+ // v4.8280 (user: separate ON/OFF for the warning sound and the warning mino): read by the
+ // native WarningSiren / HyperTopoutWarning sounds and HoldWarning (client.js fix_warn_toggles).
+ const warnState=()=>{window.__qpWarn={sound:localStorage.getItem('qp-local-warn-sound')==='1',piece:localStorage.getItem('qp-local-warn-piece')==='1'}};warnState();
+ for(const [key,label] of [['qp-local-warn-sound','警告音'],['qp-local-warn-piece','警告ミノ'],['qp-local-rise-line','せり上がり予告線'],['qp-local-tl-score-rise','TL点数の+1演出'],['qp-local-tl-scoreslide','TL勝敗後の点数画面'],['qp-local-tl-music','TLの曲']]){const row=document.createElement('label'),input=document.createElement('input');row.style.display='block';input.type='checkbox';input.checked=localStorage.getItem(key)==='1';input.addEventListener('change',()=>{localStorage.setItem(key,input.checked?'1':'0');warnState()});row.append(input,' '+label);localSettings.appendChild(row)}
  const replaySettings=document.createElement('details');replaySettings.id='local-replay-settings';const replaySettingsTitle=document.createElement('summary');replaySettingsTitle.textContent='リプレイ表示設定';replaySettings.appendChild(replaySettingsTitle);
  const replayToggle=(label,key,enabled=true)=>{const row=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.checked=localStorage.getItem(key)!==(enabled?'0':'1');input.addEventListener('change',()=>{localStorage.setItem(key,input.checked?'1':'0');window.dispatchEvent(new CustomEvent('qp-replay-settings-changed',{detail:{key,value:input.checked}}))});row.append(label,input);replaySettings.appendChild(row);return input};
  replayToggle('QPリプレイ背景', 'qp-replay-qp-background-v1');
  replayToggle('TL開始演出', 'qp-replay-tl-presentation-v1');
- replayToggle('TL点数上昇演出（Cキーでも切替）', 'qp-patch-tl-score-rise-v1');
  panel.append(localSettings,replaySettings);
  const localRoutes=new Map();
  const ownPress=(element,activate)=>localRoutes.set(element.id,activate);
@@ -106,6 +133,7 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
    document.body.classList.remove('qp-local-qp-open');
    document.body.classList.add('qp-local-playing');
    const game=await action();
+   try{window.LocalRiseLine?.track(game)}catch{}
    if(game){const configured=Number(localStorage.getItem('qp-local-game-speed')??1);const speed=[0,.25,.5,1,1.5,2,3,4,8].includes(configured)?configured:1;game.playbackSpeed(speed);game._localSpeedChanges=[{frame:game.getFrame(),speed}];LocalTestQP.setSpeed(speed);}
    // The game's listener table also contains the native ZEN undo snapshots.
    // Clearing it breaks Ctrl+Z/Ctrl+Y and ZEN's stop/autosave handler.
@@ -135,7 +163,7 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
   return LocalNative.solo(mode,aiName);
  });
  const qp=document.createElement('div');qp.id='game_qp_offline';qp.className='scroller_item has_image has_description ns';
- const icon=document.createElement('img');icon.src='https://kei1215.github.io/tetrio-hub/bookmarklets/offline-v4.8235/qpo.svg';icon.alt='';qp.appendChild(icon);
+ const icon=document.createElement('img');icon.src='https://kei1215.github.io/tetrio-hub/bookmarklets/offline-v4.8255/qpo.svg';icon.alt='';qp.appendChild(icon);
  const qpTitle=document.createElement('h1');qpTitle.textContent='QP OFFLINE';qp.appendChild(qpTitle);
  const qpHint=document.createElement('p');qpHint.textContent='LOCAL ONLY · NO OPPONENTS · NO KILLS';qp.appendChild(qpHint);
  const zenithMenu=document.getElementById('zenithmenu');
@@ -152,14 +180,32 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
  const saved=(key,fallback)=>localStorage.getItem(key)??fallback;
  const attackMode=field('受ける攻撃',document.createElement('select'));attackMode.setAttribute('aria-label','受ける攻撃');
  for(const [value,label]of [['none','攻撃なし'],['periodic','定期攻撃'],['floor','高層ほど強い攻撃']]){const option=document.createElement('option');option.value=value;option.textContent=label;attackMode.appendChild(option)}attackMode.value=saved('qp-local-attack-mode','none');
- const attackLines=field('攻撃段数',document.createElement('input'));attackLines.type='number';attackLines.min='1';attackLines.max='20';attackLines.value=saved('qp-local-attack-lines','2');attackLines.setAttribute('aria-label','攻撃段数');
+ const attackLines=field('攻撃段数',document.createElement('input'));attackLines.type='number';attackLines.min='1';attackLines.value=saved('qp-local-attack-lines','2');attackLines.setAttribute('aria-label','攻撃段数');
  const attackSeconds=field('攻撃間隔（ゲーム内秒）',document.createElement('input'));attackSeconds.type='number';attackSeconds.min='.5';attackSeconds.max='60';attackSeconds.step='.5';attackSeconds.value=saved('qp-local-attack-seconds','5');attackSeconds.setAttribute('aria-label','攻撃間隔');
+ // Practice for players (2026-11-14): targeted like floor 10 from the start - the floor attack
+ // counts as floor 10 or more and garbage holes are at least as scattered as on floor 10.
+ const floor10=field('最初から10F相当（狙われ方・穴のばらけ・ゴミの猶予・攻撃間隔）',document.createElement('input'));floor10.type='checkbox';floor10.checked=saved('qp-local-floor10','false')==='true';floor10.setAttribute('aria-label','最初から10F相当');
  const missionSource=field('復活ミッション',document.createElement('select'));missionSource.setAttribute('aria-label','復活ミッション');for(const [value,label]of [['standard','標準のみ'],['custom','自作のみ'],['both','すべて表示']]){const option=document.createElement('option');option.value=value;option.textContent=label;missionSource.appendChild(option)}missionSource.value=saved('qp-local-mission-source','standard');
  const missionTools=document.createElement('div');missionTools.id='local-mission-tools';missionTools.style.cssText='display:flex;flex-wrap:wrap;gap:.45em;margin:.7em 0';
  const missionImport=document.createElement('input');missionImport.type='file';missionImport.accept='application/json,text/plain,.json,.txt';missionImport.hidden=true;
  const missionButton=(label,action)=>{const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=action;missionTools.appendChild(button);return button};
  missionButton('自作ミッションを管理',()=>window.LocalMissionLibrary?.open?.());
- missionButton('詳細エディタを開く',()=>window.open(window.__qpMissionEditorUrl||'/mission-editor.html','_blank','noopener'));
+ missionButton('詳細エディタを開く',()=>{
+  // v4.8238: hand the current mission library to the editor in the URL fragment
+  // (never sent to a server; the browser editor is on another origin).
+  let url=window.__qpMissionEditorUrl||'/mission-editor.html';
+  try{const library=window.LocalMissionLibrary?.read?.();if(library){const bytes=new TextEncoder().encode(JSON.stringify(library));let bin='';for(let i=0;i<bytes.length;i+=32768)bin+=String.fromCharCode(...bytes.subarray(i,i+32768));url=url.split('#')[0]+'#qp-missions='+btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}}
+  catch(error){window.LocalUIHealth?.fail?.('ミッションエディタへの受け渡し',error)}
+  // v4.8240: the desktop app hands same-origin window.open() to the OS, which cannot open
+  // tetrio-local:// URLs (on every OS). Ask the patch's main process for an editor window.
+  if(location.protocol==='tetrio-local:'){
+   const full=new URL(url,location.href).href;
+   Promise.resolve(window.IPC?.invoke?.('qp-open-mission-editor',full)).then(reply=>{if(!reply?.ok)throw Error(reply?.error||'このバージョンのアプリでは開けません');})
+    .catch(error=>{window.LocalUIHealth?.fail?.('ミッションエディタを開く',error);alert('ミッションエディタを開けませんでした。\n'+error.message)});
+   return;
+  }
+  window.open(url,'_blank','noopener');
+ })
  missionButton('ミッションJSONを書き出す',()=>window.LocalMissionLibrary?.download?.());
  missionButton('ミッションJSONを読み込む',()=>missionImport.click());
  missionImport.onchange=async()=>{try{const file=missionImport.files?.[0];if(file)await window.LocalMissionLibrary?.importFile?.(file)}catch(error){window.LocalUIHealth?.fail?.('ミッションJSON',error);alert('ミッションJSONを読み込めません: '+error.message)}finally{missionImport.value=''}};
@@ -215,7 +261,7 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
  refreshFixed();settings.appendChild(fixedPanel);
  const attackRequired=field('攻撃なしでも攻撃必須ミッションを表示',document.createElement('input'));attackRequired.type='checkbox';attackRequired.checked=saved('qp-local-mission-attack-required','false')==='true';attackRequired.setAttribute('aria-label','攻撃必須ミッションも表示');
  const modHyper=field('MOD中も条件を満たせばHYPERSPEEDを許可',document.createElement('input'));modHyper.type='checkbox';modHyper.checked=saved('qp-local-mod-hyper','false')==='true';modHyper.setAttribute('aria-label','MOD中HYPERSPEED');
- for(const control of [attackMode,attackLines,attackSeconds,missionSource,attackRequired,modHyper])control.addEventListener('change',()=>{localStorage.setItem('qp-local-attack-mode',attackMode.value);localStorage.setItem('qp-local-attack-lines',attackLines.value);localStorage.setItem('qp-local-attack-seconds',attackSeconds.value);localStorage.setItem('qp-local-mission-source',missionSource.value);localStorage.setItem('qp-local-mission-attack-required',String(attackRequired.checked));localStorage.setItem('qp-local-mod-hyper',String(modHyper.checked))});
+ for(const control of [attackMode,attackLines,attackSeconds,floor10,missionSource,attackRequired,modHyper])control.addEventListener('change',()=>{localStorage.setItem('qp-local-floor10',String(floor10.checked));localStorage.setItem('qp-local-attack-mode',attackMode.value);localStorage.setItem('qp-local-attack-lines',attackLines.value);localStorage.setItem('qp-local-attack-seconds',attackSeconds.value);localStorage.setItem('qp-local-mission-source',missionSource.value);localStorage.setItem('qp-local-mission-attack-required',String(attackRequired.checked));localStorage.setItem('qp-local-mod-hyper',String(modHyper.checked))});
  // The stock deck uses transforms and overflow clipping.  A fixed child is
  // then fixed to that clipped deck rather than the application viewport.
  // Place the dialog directly below <body>, just like the detached SETTING
@@ -291,7 +337,7 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
   if(duo!=='solo'&&comboEnabled.checked){for(const [name,selector]of comboSelectors){if(selector.value!=='off')selected[name]=selector.value}}
   const config=LocalQPOptions.build(selected,modHyper.checked);
   config.testMode=duo;config.attackMode=attackMode.value;
-  config.attackLines=Number(attackLines.value);config.attackSeconds=Number(attackSeconds.value);
+  config.attackLines=Number(attackLines.value);config.attackSeconds=Number(attackSeconds.value);config.floor10=floor10.checked;
   config.missions={source:missionSource.value,attackEnabled:config.attackMode!=='none',includeAttackRequired:attackRequired.checked,allowControlPenalties:controlPenalties.checked};
   return config;
  }
@@ -414,11 +460,54 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
  for(const [id,mode] of [['start_40l','40l'],['start_blitz','blitz'],['start_zen','zen'],['start_custom','custom']]){
   document.getElementById(id).addEventListener('click',event=>{event.preventDefault();event.stopImmediatePropagation();playSolo(mode)},true);
  }
- LocalUIHealth.check().then(()=>{if(!window.OriginalReplay)throw Error('OFFLINE本体の初期化に失敗しました');return window.OriginalReplay.init()}).then(()=>{LocalUIHealth.stage('メニュー初期化');LocalNative.menus();LocalNative.view('play1p');const fps=localStorage.getItem('qp-local-fps-limit');if(fps!==null)LocalNative.setFrameLimit(fps);LocalUIHealth.complete();panel.hidden=true}).catch(error=>{LocalUIHealth.fail(null,error);probeLog(error.stack)});
+ LocalUIHealth.check().then(()=>{if(!window.OriginalReplay)throw Error('OFFLINE本体の初期化に失敗しました');return window.OriginalReplay.init()}).then(()=>{LocalUIHealth.stage('メニュー初期化');LocalNative.menus();try{window.__qpCustomOpts?.()}catch(error){probeLog('CUSTOM設定: '+error.message)}LocalNative.view('play1p');const fps=localStorage.getItem('qp-local-fps-limit');if(fps!==null)LocalNative.setFrameLimit(fps);LocalUIHealth.complete();panel.hidden=true}).catch(error=>{LocalUIHealth.fail(null,error);probeLog(error.stack)});
  window.addEventListener('pagehide' ,()=>{const game=window.OriginalReplay?.game?.();if(game?.options.zenlevels&&game.isPlaying())game.endNow()});
  // The Tab panel belongs only to the isolated local origin. Never install
  // this shortcut on the online TETR.IO page.
  if(location.protocol==='tetrio-local:'||window.__qpChromeOffline===true||window.__qpLocalOffline===true)window.addEventListener('keydown',event=>{
   if(event.key==='Tab'&&!event.repeat&&!event.ctrlKey&&!event.metaKey){event.preventDefault();event.stopImmediatePropagation();panel.hidden=!panel.hidden;if(!panel.hidden)window.LocalRenderDiagnostics?.refresh()}
  },true);
+})();
+
+/* v4.8280 (user: 登った後の最上部の状態が見れる様に / 線だけ / 操作ミノより後ろ / 上昇演出 = 次に
+   上がったらここにミノが出ますよ / ボードより上にすでに出てる部分がある場合は出さない):
+   the stack's top edge shifted up by the next garbage rise (impending garbage, capped by
+   garbagecap) is drawn as a line, only where it would stick out above the board, on a
+   sprite placed just under the falling piece layer. Nothing is drawn while any block is
+   already above the board. Tab panel toggle qp-local-rise-line (default off). */
+(() => {
+ const games=new Set();let raf=0;
+ const enabled=()=>localStorage.getItem('qp-local-rise-line')==='1';
+ function layer(game){
+  const H=game.source?.self?.hm?.H,stack=H?.stackobj,falling=H?.fallingobj;if(!stack?.parent||falling?.parent!==stack.parent)return null;
+  if(game.__qpRise&&game.__qpRise.sprite.parent===stack.parent&&!game.__qpRise.sprite.destroyed)return game.__qpRise;
+  const sample=stack.children.find(c=>c.texture?.constructor?.from);if(!sample)return null;
+  const canvas=document.createElement('canvas'),Tex=sample.texture.constructor,texture=Tex.from(canvas),sprite=new sample.constructor(texture);
+  stack.parent.addChildAt(sprite,stack.parent.getChildIndex(falling));
+  return game.__qpRise={canvas,texture,sprite,key:''};
+ }
+ function draw(game){
+  const st=game.state,board=st?.board,B=Number(game.options?.boardbuffer)||20;if(!board?.length)return;
+  const L=layer(game);if(!L)return;const {canvas,sprite}=L,W=board[0].length;
+  let n=0;for(const d of st.impendingdamage||[])n+=Number(d?.amt)||0;const cap=Number(game.options?.garbagecap);if(cap>0)n=Math.min(n,cap);
+  let above=false;for(let y=0;y<B&&!above;y++)if(board[y].some(c=>c!==null))above=true;
+  const tops=[];for(let x=0;x<W;x++){let y=0;while(y<board.length&&board[y][x]===null)y++;tops.push(y-n)} // row index of the top after the rise
+  const show=enabled()&&n>0&&!above&&game.isPlaying?.()&&tops.some(t=>t<B);
+  const stack=game.source.self.hm.H.stackobj,cell=stack.children[0]?(stack.children[0].x/(stack.children[0].__x||1)||stack.children[0].width):0;
+  const key=show?tops.join(',')+'|'+cell:'';if(key===L.key)return;L.key=key;sprite.visible=!!show&&cell>0;if(!sprite.visible)return;
+  const R=2,cw=Math.ceil(W*cell*R),ch=Math.ceil(B*cell*R);canvas.width=cw+8;canvas.height=ch+8;
+  const g=canvas.getContext('2d');g.clearRect(0,0,canvas.width,canvas.height);g.strokeStyle='#ff3b3b';g.lineWidth=Math.max(2,cell*R*.12);g.lineJoin='round';g.lineCap='round';
+  const Y=t=>4+Math.min(B,t)*cell*R,X=x=>4+x*cell*R;g.beginPath();let pen=false;
+  for(let x=0;x<W;x++){const t=Math.min(B,tops[x]),prev=x?Math.min(B,tops[x-1]):B,next=x<W-1?Math.min(B,tops[x+1]):B;
+   if(t>=B){pen=false;continue}
+   if(!pen){g.moveTo(X(x),Y(prev));pen=true}g.lineTo(X(x),Y(t));g.lineTo(X(x+1),Y(t));if(next>=B)g.lineTo(X(x+1),Y(B))}
+  g.stroke();L.texture.update?.();L.texture.baseTexture?.update?.();
+  sprite.scale.set(1/R);sprite.position.set(stack.x-4/R,stack.y-B*cell-4/R);
+ }
+ function loop(){raf=0;for(const game of games){let alive=false;try{alive=!!game.source?.self?.hm?.H?.holder?.parent}catch{}if(!alive){games.delete(game);continue}try{draw(game)}catch{}}if(games.size)raf=requestAnimationFrame(loop)}
+ window.LocalRiseLine={track(game){if(!game||games.has(game))return;games.add(game);if(!raf)raf=requestAnimationFrame(loop)}};
+ window.addEventListener('local-ai-match-start',e=>{for(const g of e.detail?.games||[])window.LocalRiseLine.track(g)});
+ // v4.8280 (user: マウスの上下スクロールでプレイ中に音量調整): client.js fix_wheel_volume lets the native
+ // wheel volume handler run when this says a local game is playing and the wheel is over the board.
+ window.__qpLocalWheel=e=>{const t=e?.target;if(!(t===document.body||t?.id==='pixi'||t?.closest?.('#pixi')))return false;for(const g of games){try{if(g.isPlaying?.())return true}catch{}}return false};
 })();

@@ -1,6 +1,76 @@
 /* Device-local custom revive mission library. JSON is portable and never sent
    to a server, so players can share a mission pack without sharing records. */
 (() => {
+ // QP revive-mission extra effects (v4.8238): JSON normalizer.
+// The same text is inlined into custom-missions.js and mission-editor.html by
+// tools/patch/build_release.py (marker: QP_EXTRA_SCHEMA). Edit only this file.
+const QP_EXTRA_SCHEMA=(()=>{
+ const SPIN_RULES=['none','T-spins','T-spins+','all','all+','all-mini','all-mini+','mini-only','handheld','stupid'];
+ const RESTORE=['mission','revive','run'];
+ const PATTERNS=['native','random','fixed','alternate','twoHoles','checker','shape','template'];
+ const SHAPES=['tsd','tst','well4','stairs','zigzag'];
+ const METHODS=['rise','terrain','holes','queue'];
+ const PIECES=['I','O','T','S','Z','J','L'];
+ const obj=v=>v&&typeof v==='object'&&!Array.isArray(v)?v:{};
+ const int=(value,min,max,label)=>{const n=Number(value);if(!Number.isInteger(n)||n<min||n>max)throw Error(label+'が不正です（'+min+'～'+max+'）');return n};
+ const pick=(value,list,fallback)=>list.includes(value)?value:fallback;
+ const repeat=r=>{r=obj(r);return {seconds:int(r.seconds??0,0,600,'繰り返し秒数'),pieces:int(r.pieces??0,0,100,'繰り返しミノ数')}};
+ // Template rows: '#'/'x'/'X' = block, '.'/'_'/'o' = hole (short rows are padded with blocks).
+ // Top row first. Rows without any block at the top and bottom are trimmed; empty rows in
+ // the middle stay (they rise as empty rows), so a shape can be drawn on the board grid.
+ const templateRows=text=>{
+  const rows=String(text??'').replace(/\r/g,'').split('\n').map(s=>s.replace(/\s+$/,'')).filter(s=>s.length);
+  const hasBlock=r=>/[#xX]/.test(r.padEnd(10,'#'));
+  while(rows.length&&!hasBlock(rows[0]))rows.shift();
+  while(rows.length&&!hasBlock(rows[rows.length-1]))rows.pop();
+  if(rows.length>40)throw Error('テンプレートは40段までです');
+  for(const row of rows){
+   if(row.length>20||/[^#xX._o ]/.test(row))throw Error('テンプレートの行は # と . の20文字以内です');
+   if(!row.padEnd(10,'#').split('').some(c=>/[._o ]/.test(c)))throw Error('テンプレートの各行には穴を1つ以上入れてください（全部ブロックの段はすぐ消えます）');
+  }
+  return rows.join('\n');
+ };
+ const garbageEntry=(g,i)=>{
+  g=obj(g);const p=obj(g.pattern);const label='強制ゴミ'+(i+1)+'の';
+  const methods=[...new Set((Array.isArray(g.methods)?g.methods:['queue']).map(String))].filter(m=>METHODS.includes(m));
+  const type=pick(p.type,PATTERNS,'native');
+  const columns=[...new Set((Array.isArray(p.columns)?p.columns:[]).map(Number))];
+  if(columns.some(c=>!Number.isInteger(c)||c<1||c>20)||columns.length>19)throw Error(label+'穴の列は1～20（19個まで）です');
+  if(type==='fixed'&&!columns.length)throw Error(label+'固定の穴の列を1つ以上選んでください');
+  const template=type==='template'?templateRows(p.template):String(p.template??'').slice(0,440);
+  if(type==='template'&&!template)throw Error(label+'テンプレートが空です');
+  return {enabled:g.enabled!==false,rows:int(g.rows??1,1,20,label+'段数'),methods:methods.length?methods:['queue'],
+   pattern:{type,columns:columns.sort((a,b)=>a-b),seedSource:p.seedSource==='fixed'?'fixed':'game',seed:int(p.seed??0,0,2147483647,label+'シード'),
+    shape:pick(p.shape,SHAPES,'tsd'),template,mirror:pick(p.mirror,['none','random','always'],'none')},
+   bombs:g.bombs===true,repeat:repeat(g.repeat),when:g.when==='garbage'?'garbage':'start'};
+ };
+ // Handling values may have one decimal (TETR.IO stores DAS/ARR/DCD in 0.1 frames).
+ const dec=(value,min,max,label)=>{const n=Math.round(Number(value)*10)/10;if(!Number.isFinite(n)||n<min||n>max)throw Error(label+'が不正です（'+min+'～'+max+'）');return n};
+ function normalize(effects){
+  const e=obj(effects);
+  const hd=obj(e.handling),hc=obj(hd.change);
+  const u=obj(e.unclearable),b=obj(e.board),m=obj(e.messiness),s=obj(e.spin),p=obj(e.pieces),d=obj(p.delta);
+  const garbage=Array.isArray(e.garbage)?e.garbage:[];
+  const st=obj(e.stamp),cells=Array.isArray(st.cells)?st.cells:[];
+  if(cells.length>200)throw Error('置くブロックは200マスまでです');
+  const stampCells=[...new Map(cells.map(c=>{if(!Array.isArray(c)||c.length!==2)throw Error('置くブロックの位置が不正です');const x=int(c[0],1,20,'置くブロックの列'),y=int(c[1],1,40,'置くブロックの段');return [x+','+y,[x,y]]})).values()];
+  if(garbage.length>6)throw Error('強制ゴミは6件までです');
+  return {
+   unclearable:{enabled:u.enabled===true,add:int(u.add??0,0,20,'消せない段の追加数'),remove:int(u.remove??0,0,20,'消せない段の削除数'),repeat:repeat(u.repeat)},
+   garbage:garbage.map(garbageEntry),
+   stamp:{enabled:st.enabled===true,cells:stampCells},
+   board:{enabled:b.enabled===true,height:int(b.height??20,4,40,'盤面の高さ'),width:int(b.width??10,4,20,'盤面の横幅'),restoreAt:pick(b.restoreAt,RESTORE,'mission')},
+   handling:{enabled:hd.enabled===true,change:{das:hc.das===true,arr:hc.arr===true,sdf:hc.sdf===true,dcd:hc.dcd===true},das:dec(hd.das??10,1,20,'DAS'),arr:dec(hd.arr??2,0,5,'ARR'),sdf:int(hd.sdf??6,5,41,'SDF'),dcd:dec(hd.dcd??0,0,20,'DCD'),restoreAt:pick(hd.restoreAt,RESTORE,'mission')},
+   messiness:{enabled:m.enabled===true,straight:int(m.straight??0,0,100,'直列率'),innerStraight:int(m.innerStraight??100,0,100,'ゴミごとの直列率'),restoreAt:pick(m.restoreAt,RESTORE,'mission')},
+   spin:{enabled:s.enabled===true,rule:pick(s.rule,SPIN_RULES,'T-spins'),restoreAt:pick(s.restoreAt,RESTORE,'mission')},
+   pieces:{enabled:p.enabled===true,delta:Object.fromEntries(PIECES.map(k=>[k,int(d[k]??0,-1,4,k+'ミノの増減')])),i5:int(p.i5??0,0,4,'I5ミノの数'),restoreAt:pick(p.restoreAt,RESTORE,'mission')}
+  };
+ }
+ const defaults=()=>normalize({});
+ const newGarbage=()=>garbageEntry({},0);
+ return {normalize,defaults,newGarbage,SPIN_RULES,RESTORE,PATTERNS,SHAPES,METHODS,PIECES};
+})();
+
  const KEY='qp-local-custom-missions-v1', BASE=['pieces','pieceheight','lines','spin','attack','survive'],MOD=/^(nohold|messy|gravity|volatile|doublehole|invisible|allspin|expert)(?:_reversed)?$/;
  // Official event IDs are evaluated by the native Zenith mission engine.
  const EVENTS=[...new Set([...BASE,'leavewindow','combo','double','quad','osingle','odouble','szdouble','ljtriple','iholdlines','hold','rotate','singleconsecutive','tspinsingle','tspindouble','szspin','ljspin','iflat','placeoconsecutive','norotateclockwise','singlenocombo','spam','noclear','ispinclear','upperhalfquad','quadcombo','szsingle','combonohold','noclearspin','szljspin','tspintriple','triple','b2b','quadbuckets','holdconsecutive','softdrop','top3rows','linesnoti','szspintriple','odoubleconsecutive','tspinminiclear','doublespiece','ljgarbage','szgarbage','columnopiece','spinclear','iclearspam','holddas','oclear','spinbuckets','quadconsecutive','singlesonly','nogarbage','nocancel','tspindoubleup','ljspintriple','nohold','oclearspam','tnorotate','tspincombo','ispindouble','szspinconsecutive','ljspinconsecutive','colorclear','combospin','tspindtcolumn','send'])];
@@ -100,24 +170,27 @@
   const horizontal=['any','leftHeld','rightHeld','eitherHeld'].includes(inputRules.horizontal)?inputRules.horizontal:'any';
   const spinType=['any','full','mini','empty'].includes(inputRules.spinType)?inputRules.spinType:'any';
   const resetOnMismatch=inputRules.resetOnMismatch===true;
+  // v4.8239: failure => instant death (time limit / accepted reset).
+  const dieOnTimeout=inputRules.dieOnTimeout===true,dieOnReset=inputRules.dieOnReset===true,washer=inputRules.washer===true&&event==='rotate';
   const rules={piece:pieces.length===1?pieces[0]:'',pieces,
    facing:facings.length===1?facings[0]:'',facings,
    holdRequired:inputRules.holdRequired===true,
-   columnMin:number(inputRules.columnMin??1,1,10,'columnMin'),columnMax:number(inputRules.columnMax??10,1,10,'columnMax'),height,lines,resetOn,rotationInput,softDrop,horizontal,spinType,resetOnMismatch};
+   columnMin:number(inputRules.columnMin??1,1,10,'columnMin'),columnMax:number(inputRules.columnMax??10,1,10,'columnMax'),height,lines,resetOn,rotationInput,softDrop,horizontal,spinType,resetOnMismatch,dieOnTimeout,dieOnReset,washer};
   if(rules.columnMin>rules.columnMax)throw Error('列指定の範囲が逆です');
-  if(!['pieces','pieceheight','spin','lines'].includes(event)&&(pieces.length||facings.length||rules.holdRequired||rules.columnMin!==1||rules.columnMax!==10||height.enabled||lines.enabled||spinType!=='any'))
+  if(!['pieces','pieceheight','spin','lines'].includes(event)&&(pieces.length&&event!=='rotate'||facings.length||rules.holdRequired||rules.columnMin!==1||rules.columnMax!==10||height.enabled||lines.enabled||spinType!=='any'))
     throw Error('詳細なミノ条件は設置・高さ・Spin・ラインミッションで使用します');
   if(event==='pieceheight'&&lines.enabled)throw Error('操作ミノの高さにはライン数を指定できません');
   if(!['spin','lines'].includes(event)&&lines.enabled)throw Error('ライン数はSpin・ライン消去で指定します');
   if(event!=='spin'&&spinType!=='any')throw Error('Spin種類はSpinで指定します');
   if(event==='pieceheight'&&target>100)throw Error('操作ミノの高さミッションの目標回数は1～100です');
-  // A mission with MODs always *appears* as A in the deck, while retaining
+  // An automatic-rank mission with MODs appears as A; a fixed rank is kept as saved.
   // its stored original rank for reversibility. No rank => normal-level auto.
   const savedRank=typeof row.rank==='string'?row.rank.trim().toUpperCase():'';
   const rankMode=row.rankMode==='auto'||!savedRank?'auto':'fixed';
   if(savedRank&&!['A','B','C','D','E','F'].includes(savedRank))throw Error('ランクが不正です');
   const modLabels=mods(row.modLabels??missionMods);
   const applyModRules=row.applyModRules!==false;
+  const rewardAltitude=number(row.rewardAltitude??0,0,1000,'達成時の距離'),rewardAttack=number(row.rewardAttack??0,0,1000,'達成時の火力');
   // Native failure event names, not player-written JavaScript. By default,
   // reuse the official penalty for the selected mission event; No Hold also
   // fails on the engine's actual `nohold` failure event.
@@ -125,7 +198,7 @@
   if(!Array.isArray(rawPenalty)||rawPenalty.length>24||rawPenalty.some(x=>typeof x!=='string'||!/^[a-z][a-z0-9_]{0,39}$/.test(x)))throw Error('ペナルティイベントIDが不正です');
   const penaltyEvents=[...new Set(rawPenalty)];
   
-  return {id:'custom_'+rawId.replace(/^custom_/,'').replace(/^local_mod_/,'').slice(0,45),source:'custom',name,event,target,count:target,timeout,timerStart,mods:missionMods,mod:missionMods[0]||'',modLabels,applyModRules,penaltyEvents,requiresAttack:row.requiresAttack===true,rank:rankMode==='fixed'?savedRank:null,rankMode,rules,when:conditions,effects:{visibility,boardRotation,screen,controls,holdEnabled:typeof effects.holdEnabled==='boolean'?effects.holdEnabled:!(applyModRules&&missionMods.some(m=>m==='nohold'||m==='nohold_reversed')),sound}};
+  return {id:'custom_'+rawId.replace(/^custom_/,'').replace(/^local_mod_/,'').slice(0,45),source:'custom',name,event,target,count:target,timeout,timerStart,mods:missionMods,mod:missionMods[0]||'',modLabels,applyModRules,penaltyEvents,requiresAttack:row.requiresAttack===true,rewardAltitude,rewardAttack,rank:rankMode==='fixed'?savedRank:null,rankMode,rules,when:conditions,effects:{visibility,boardRotation,screen,controls,holdEnabled:typeof effects.holdEnabled==='boolean'?effects.holdEnabled:!(applyModRules&&missionMods.some(m=>m==='nohold'||m==='nohold_reversed')),sound,extra:QP_EXTRA_SCHEMA.normalize(effects.extra)}};
  };
  // Only a mission ID from the imported JSON is allowed for each forced slot.
  const testSequence=(input,missions)=>{
@@ -151,7 +224,7 @@
   let dialog=document.getElementById('local-mission-manager');if(dialog){dialog.hidden=false;return}
   dialog=document.createElement('section');dialog.id='local-mission-manager';dialog.setAttribute('role','dialog');dialog.style.cssText='position:fixed;z-index:2147483647;inset:10vh 15vw auto 15vw;max-height:78vh;overflow:auto;padding:1em;background:#1c1720;color:#fff;border:2px solid #b9815b;box-shadow:0 0 0 100vmax #0009;font:15px system-ui';
   const title=document.createElement('h2');title.textContent='自作復活ミッション（端末内JSON）';
-  const note=document.createElement('p');note.textContent='独立したミッションエディタ v6.2.html でJSONを作成・保存してから、ここで読み込んでください。イベントには公式復活ミッションIDを指定可能。HOLD表示/使用・NEXT個数/個別非表示・同時MODを扱います。';
+  const note=document.createElement('p');note.textContent='独立したミッションエディタ v6.5 でJSONを作成・保存してから、ここで読み込んでください。イベントには公式復活ミッションIDを指定可能。HOLD表示/使用・NEXT個数/個別非表示・同時MODを扱います。v6.5 の追加効果（消せない段・強制ゴミ・盤面の高さ・直列率・Spinルール・ミノの増減・I5）も読み込めます。';
   const area=document.createElement('textarea');area.rows=16;area.style.width='100%';area.value=JSON.stringify(read(),null,2);
   const status=document.createElement('p'),save=document.createElement('button'),defaults=document.createElement('button'),out=document.createElement('button'),close=document.createElement('button');save.textContent='保存して反映';defaults.textContent='初期MODミッションを追加';out.textContent='JSONを書き出す';close.textContent='閉じる';
   save.onclick=()=>{try{const value=write(JSON.parse(area.value));area.value=JSON.stringify(value,null,2);status.textContent=`保存しました（${value.missions.length}件）`;window.dispatchEvent(new Event('local-custom-missions'))}catch(error){status.textContent='保存失敗: '+error.message}};
@@ -159,6 +232,8 @@
   out.onclick=download;close.onclick=()=>dialog.hidden=true;
   dialog.append(title,note,area,status,save,defaults,out,close);document.body.appendChild(dialog);
  };
+ // v4.8240: the desktop editor window saves into the same storage; reload the missions here.
+ window.addEventListener('storage',event=>{if(event.key===KEY)window.dispatchEvent(new Event('local-custom-missions'))});
  window.LocalMissionLibrary={read,write,download,importFile,open,clean};
  window.dispatchEvent(new Event('local-mission-library-ready'));
 })();
