@@ -2033,7 +2033,13 @@
     async create(files) {
       const iters = 200;
       const data = dataOf(files), opts = data ? data.options : {};
-      const like = data ? { openers: data.openers || null, pickBeta: data.beta || 0, misdrop: 0 } : {};
+      const rev = (m) => {
+        let r = 0;
+        for (let x = 0; x < W; x++) if (m >> x & 1) r |= 1 << W - 1 - x;
+        return r;
+      };
+      const openers = data && data.openers ? data.openers.flatMap((o) => o.mirror ? [o, { ...o, rows: o.rows.map(rev), empty: (o.empty || []).map(rev) }] : [o]) : null;
+      const like = data ? { openers, pickBeta: data.beta || 0, misdrop: 0 } : {};
       let live = false, lastCells = -1, ready = null, follow = null;
       return {
         begin(input) {
@@ -2062,19 +2068,14 @@
               follow = null;
             } else if (cells < lastCells) {
               const lines = Math.max(1, Math.round((lastCells + 4 - cells) / 10));
-              if (live && ready && ready.then && ready.then.length) follow = { then: ready.then.slice(1), protect: (ready.empty || []).slice(lines) };
-              else if (follow) {
-                follow.then = follow.then.slice(1);
-                follow.protect = follow.protect.slice(lines);
-                if (!follow.then.length) follow = null;
-              }
+              follow = null;
               live = false;
             }
             if (live && like.openers) ready = like.openers.find((o) => o.rows.every((m, k) => (m & ~(rowsB[k] || 0)) === 0) && (o.empty || []).every((m, k) => (m & (rowsB[k] || 0)) === 0)) || ready;
             lastCells = cells;
           }
           const fol = follow && follow.then.length ? { followKind: follow.then[0], protect: follow.protect } : {};
-          const fol0 = live && ready && ready.then && ready.then.length ? { followKind: ready.then[0] } : {};
+          const fol0 = live && ready && ready.then && ready.then.length ? { followKind: ready.then[0], protect: ready.empty || null } : {};
           const job = import_ai_tree_planner.default.create(
             null,
             { board, falling: input.current, hold: input.hold || null, queue: (input.queue || []).slice(0, 5), holdAllowed: true, b2b: Math.max(0, input.b2b | 0), combo: Math.max(0, input.combo | 0) },

@@ -173,13 +173,18 @@ export async function learn(files, playerArg, opt = {}) {
       const all = [...openings.entries()].map(([k, n]) => { const [m, e] = k.split("|"); const rows = m.split(",").map(Number); return { key: k, rows, empty: e.split(",").map(Number), n, cells: rows.reduce((a, r) => a + pc(r), 0) }; });
       const inside = (a, b) => a.rows.length <= b.rows.length && a.rows.every((m, i) => (m & ~b.rows[i]) === 0);
       const sim = (a, b) => { let i = 0, u = 0; for (let k = 0; k < Math.max(a.rows.length, b.rows.length); k++) { const x = a.rows[k] || 0, y = b.rows[k] || 0; i += pc(x & y); u += pc(x | y); } return u ? i / u : 0; };
-      const groupOf = (a) => all.filter((b) => b === a || sim(a, b) >= 0.6 || inside(b, a) || inside(a, b));
+      // a setup and its mirror image are the same setup (user: PCOみたいに左右反転あり): members are turned to face the
+      // same way as the first one; the setup is offered both ways only if the player built it both ways
+      const rev = (m) => { let r = 0; for (let x = 0; x < 10; x++) if (m >> x & 1) r |= 1 << (9 - x); return r; };
+      const flip = (b) => ({ ...b, rows: b.rows.map(rev), empty: b.empty.map(rev), flipped: !b.flipped, src: b.src || b });
+      const near = (a, b) => b === a || sim(a, b) >= 0.6 || inside(b, a) || inside(a, b);
+      const groupOf = (a) => { const g = []; for (const b of all) { if (near(a, b)) g.push(b); else { const f = flip(b); if (near(a, f)) g.push(f); } } return g; };
       for (const a of all) a.sup = groupOf(a).reduce((t, b) => t + b.n, 0);
       all.sort((a, b) => b.sup - a.sup || b.cells - a.cells);
       const used = new Set(), out = [];
       for (const a of all) {
         if (used.has(a) || a.sup < 2) continue;
-        const g = groupOf(a).filter((b) => !used.has(b)); g.forEach((b) => used.add(b));
+        const g = groupOf(a).filter((b) => !used.has(b.src || b)); g.forEach((b) => used.add(b.src || b));
         // the boards that are not just an early cut of another one in the group
         const full = g.filter((b) => !g.some((c) => c !== b && c.cells > b.cells && inside(b, c)));
         const L = Math.max(...full.map((b) => b.rows.length)), must = [], empty = [];
@@ -200,13 +205,16 @@ export async function learn(files, playerArg, opt = {}) {
           while (empty.length < L + 1) { empty.push(0); must.push(0); }
           for (let k = top + 1; k < L; k++) for (let x = 0; x < 10; x++) if (must[k] >> x & 1 && slotUnder(x, k)) {
             for (let j = k + 1; j <= L; j++) if (never(x, j)) empty[j] |= 1 << x; else break;          // above the roof
-            for (let X = x - 1; X >= 0 && !(must[k] >> X & 1); X--) if (never(X, k)) empty[k] |= 1 << X; else break;   // left of it
+            // the side the T comes in from: toward the slot (left for a DT cannon, right for its mirror)
+            let sx = 0, sn = 0; for (let j = 0; j < k; j++) for (let X = 0; X < 10; X++) if (empty[j] >> X & 1) { sx += X; sn++; }
+            const dir = sn && sx / sn > x ? 1 : -1;
+            for (let X = x + dir; X >= 0 && X < 10 && !(must[k] >> X & 1); X += dir) if (never(X, k)) empty[k] |= 1 << X; else break;   // beside it
           } }
         while (must.length && !must[must.length - 1]) must.pop();
         // how the player attacked from it: the most common first two clears (e.g. tspin2>tspin3 = DT砲)
-        const fm = new Map(); for (const b of g) for (const [q, c] of follows.get(b.key) || []) fm.set(q, (fm.get(q) || 0) + c);
+        const fm = new Map(); for (const b of g) for (const [q, c] of follows.get((b.src || b).key) || []) fm.set(q, (fm.get(q) || 0) + c);
         const then = fm.size ? [...fm.entries()].sort((p, q) => q[1] - p[1])[0][0].split(">") : [];
-        if (must.length) out.push({ rows: must, empty, n: a.sup, seen: full.length, then });
+        if (must.length) out.push({ rows: must, empty, n: a.sup, seen: full.length, then, mirror: g.some((b) => b.flipped) });
         if (out.length >= 4) break;
       }
       return out;

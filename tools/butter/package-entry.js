@@ -32,7 +32,10 @@ LocalExternalAI.register({
     // the player's own Butter plays like the player (user: 開幕テンプレが全く違う・動きが効率的すぎる): their opening
     // shapes and their spread of choices (not in CC 盤面修正, which wants the best plausible move).
     // Misdrops are not copied (user: ミスに関してはオフ状態だからいい).
-    const like = data ? { openers: data.openers || null, pickBeta: data.beta || 0, misdrop: 0 } : {};
+    // a setup the player built both ways is offered mirrored too (user: PCOみたいに左右反転あり)
+    const rev = (m) => { let r = 0; for (let x = 0; x < W; x++) if (m >> x & 1) r |= 1 << (W - 1 - x); return r; };
+    const openers = data && data.openers ? data.openers.flatMap((o) => (o.mirror ? [o, { ...o, rows: o.rows.map(rev), empty: (o.empty || []).map(rev) }] : [o])) : null;
+    const like = data ? { openers, pickBeta: data.beta || 0, misdrop: 0 } : {};
     // opener only from an empty board until the first line clear or garbage (cells drop, or jump by more than a piece);
     // the 9-cell rows of a DT cannon must not be taken for garbage here
     let live = false, lastCells = -1, ready = null, follow = null;
@@ -51,14 +54,13 @@ LocalExternalAI.register({
           if (!cells) { live = true; follow = null; ready = null; }
           else if (lastCells < 0 || cells - lastCells > 4) { live = false; follow = null; }
           else if (cells < lastCells) { const lines = Math.max(1, Math.round((lastCells + 4 - cells) / 10));
-            if (live && ready && ready.then && ready.then.length) follow = { then: ready.then.slice(1), protect: (ready.empty || []).slice(lines) };
-            else if (follow) { follow.then = follow.then.slice(1); follow.protect = follow.protect.slice(lines); if (!follow.then.length) follow = null; }
+            follow = null;   // only the first attack from a setup is fixed (user: DT砲で確定で打つのは1回目のみ、2回目は J・Z スピンで B2B にする時もある)
             live = false; }
           if (live && like.openers) ready = like.openers.find((o) => o.rows.every((m, k) => (m & ~(rowsB[k] || 0)) === 0) && (o.empty || []).every((m, k) => (m & (rowsB[k] || 0)) === 0)) || ready;
           lastCells = cells; }
         const fol = follow && follow.then.length ? { followKind: follow.then[0], protect: follow.protect } : {};
         // the T-spins of a setup like a DT cannon need several turns after the drop (maxTail 5 while they are due)
-        const fol0 = live && ready && ready.then && ready.then.length ? { followKind: ready.then[0] } : {};
+        const fol0 = live && ready && ready.then && ready.then.length ? { followKind: ready.then[0], protect: ready.empty || null } : {};
         const job = TP.create(null, { board, falling: input.current, hold: input.hold || null, queue: (input.queue || []).slice(0, 5), holdAllowed: true, b2b: Math.max(0, input.b2b | 0), combo: Math.max(0, input.combo | 0) },
           { ...opts, ...like, ...fol0, ...fol, ...(fol0.followKind || fol.followKind ? { maxTail: 5 } : {}), openLive: live && !!like.openers, ...(input.human ? { maxTail: 2, pickBeta: 0 } : {}), ms: 1e9, maxIters: iters, incoming: inc, gRows: g, seed: (Date.now() & 0xffff) + 1 });
         const conv = (p) => {
