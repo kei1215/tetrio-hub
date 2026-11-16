@@ -182,6 +182,9 @@ export async function learn(files, playerArg, opt = {}) {
         // under a setup cell nothing is free (it would become a hole): filled in half of them or more -> setup cell
         const tot = full.reduce((t, b) => t + b.n, 0);
         for (let x = 0; x < 10; x++) { let roof = false; for (let k = L - 1; k >= 0; k--) { if (must[k] >> x & 1) roof = true; else if (!roof) empty[k] &= ~(1 << x); else if (!(empty[k] >> x & 1) && full.reduce((t, b) => t + ((b.rows[k] || 0) >> x & 1 ? b.n : 0), 0) >= tot / 2) must[k] |= 1 << x; } }
+        // rows a T-spin clears (user: 右端は自由になっちゃダメ): a row with a slot that was full except the slot in at
+        // least a third of them is a setup row all the way across, so the right end is not free there
+        for (let k = 0; k < L; k++) if (empty[k]) { const fullRow = full.reduce((t, b) => t + (((b.rows[k] || 0) | empty[k]) === 1023 ? b.n : 0), 0); if (fullRow * 3 >= tot) must[k] = 1023 & ~empty[k]; }
         while (must.length && !must[must.length - 1]) { must.pop(); empty.pop(); }
         if (must.length) out.push({ rows: must, empty, n: a.sup, seen: full.length });
         if (out.length >= 4) break;
