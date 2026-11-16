@@ -4,7 +4,11 @@ import { ccFix, ccImprove, playersOf } from "./cc-fix-core.mjs";
 
 const CAT = "https://kei1215.github.io/tetrio-hub/ext-ai/";
 // Choices: Cold Clear 2 S2 (default) / Cold Clear 1. The package file names match ext-ai/catalog.json.
+// vA Tree (default, 2026-11-16, user: プレーヤーがしそうな手で一番いいもの・無理のない最適解): moves a player makes
+// (input.human: at most two keys after landing). When a per-player vA Tree for the chosen player is
+// installed (vA-tree-player → id va-tree-<name>), that one is used.
 const ENGINES = {
+  "va-tree": { label: "vA Tree(無理のない最適解・置きミスの直し)", js: "vA-external-ai-tree.js" },
   cc2: { label: "Cold Clear 2 S2", js: "vA-external-ai-cc2.js" },
   cc1: { label: "Cold Clear 1(オールスピンを知らない)", js: "vA-external-ai-cc1.js" },
 };
@@ -36,8 +40,24 @@ async function runScript(script) {
   finally { URL.revokeObjectURL(url); if (prev) window.LocalExternalAI = prev; else delete window.LocalExternalAI; }
   return defs;
 }
+const slugOf = (name) => String(name || "").toLowerCase().replace(/[^a-z0-9_-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 22);
+// a per-player vA Tree already installed for this player: its id, else null
+async function playerTree(user) {
+  const want = ("va-tree-" + slugOf(user)).slice(0, 32); if (want === "va-tree-") return null;
+  const X = window.LocalExternalAI;
+  if (X && typeof X.engines === "function") return X.engines().includes(want) ? want : null;
+  try { const all = await tx("readonly", (s) => s.getAll()); return all.some((p) => (p.ids || []).includes(want)) ? want : null; } catch { return null; }
+}
 async function loadBot(id, say) {
   if (bots[id]) return bots[id];
+  if (!ENGINES[id]) {
+    // an installed package that is not in the list (per-player vA Tree)
+    const X = window.LocalExternalAI;
+    if (X && typeof X.load === "function") return (bots[id] = await X.load(id));
+    const pkg = (await tx("readonly", (s) => s.getAll())).find((p) => (p.ids || []).includes(id));
+    const def = pkg && (await runScript(pkg.script))[id]; if (!def) throw Error(id + " が見つかりません");
+    return (bots[id] = await def.create(pkg.files, { strength: null }));
+  }
   const X = window.LocalExternalAI;
   if (X && typeof X.engines === "function" && typeof X.load === "function") {
     if (!X.engines().includes(id)) { await X.addFiles(await download(id, say)); }
@@ -73,11 +93,13 @@ function open() {
 <label>リプレイ(.ttr / .ttrm)</label><input data-k="file" type="file" accept=".ttr,.ttrm,.json">
 <label>直すプレイヤー</label><select data-k="user"></select>
 <label>AI</label><select data-k="engine">${Object.entries(ENGINES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join("")}</select>
-<label>直し方</label><select data-k="mode"><option value="weak">弱い所だけ(火力が出ていない所・REN/QUAD を見直し、何か所でも)</option><option value="all">全部 AI が置き直す</option><option value="rescue">トップアウト救済(死んだ所の何手前に戻れば助かるか)</option></select>
+<label>直し方</label><select data-k="mode"><option value="weak">弱い所と置きミスの所(火力が出ていない所・REN/QUAD・置きミスを見直し、何か所でも)</option><option value="all">全部 AI が置き直す</option><option value="rescue">トップアウト救済(死んだ所の何手前に戻れば助かるか)</option></select>
 <label>1手の考える時間(ミリ秒)</label><input data-k="ms" type="number" min="20" max="3000" value="150">
 <div class="row"><button data-a="go" disabled>作る</button><button data-a="close">閉じる</button></div>
 <div class="s"></div>
-<div class="n">弱い所だけ:プレイヤーの置き方はそのままで、10手ずつ見て、火力が平均より出ていない所や REN・QUAD の所を AI が同じミノで置き直し、火力が 2 以上増えた所だけを修正にします。再生ではその所に来ると修正を見せ(相手は止まる)、終わると元のプレイに戻ります。
+<div class="n">vA Tree:プレイヤーが入力できる置き方(接地してから 2 キーまで)の中で一番よい手を選びます。そのプレイヤーのデータ入り vA Tree(vA-tree-player で作ったもの)が入っていれば、それを使います。
+置きミスの所:置いた手がとても選ばれにくく、1列・1回転ずらした所がずっと良い手を置きミスとみて、そのミノから 8 手を置き直し、火力が増えたか地形がきれいになった(穴が減った)ときに修正にします。
+弱い所だけ:プレイヤーの置き方はそのままで、10手ずつ見て、火力が平均より出ていない所や REN・QUAD の所を AI が同じミノで置き直し、火力が 2 以上増えた所だけを修正にします。再生ではその所に来ると修正を見せ(相手は止まる)、終わると元のプレイに戻ります。
 全部:最初から最後まで AI が置き直します(相手は動き、AI の火力が届きます)。
 トップアウト救済:そのプレイヤーが死んだラウンドで、1手前・2手前…と戻って AI が同じミノ・同じおじゃまで置き、死んだフレームを越えて生き残れる一番少ない手数を探します。そこから少し前まで、REN を QUAD か T-SPIN で締める助かり方(10 手以内、またはおじゃまを 4 段以上掘るもの)や、深く掘る REN の途中で QUAD を打つ助かり方も探し、見つかれば死んだ所の先も REN が切れるまで見せます。もっと REN を伸ばせた・深く掘れた・火力が出た助かり方があれば、そのあとに続けて見せます(あなたのプレイとの比較つき)。再生では戻る所と次に置く所を盤面に出し、助かった盤面で止まります。ミノを置く速さは元のプレイヤーと同じです。
 開くには CONFIG の REPLAY BOARD EDIT を ON にして、パネルの「埋め込みの再生」で 修正後 / 元の版 を切り替えます(マネ練習はどちらでも使えます)。</div>`;
@@ -100,15 +122,16 @@ function open() {
   $('[data-a="go"]').onclick = async () => {
     if (!text || busy) return;
     busy = true; $('[data-a="go"]').disabled = true;
-    const id = $('[data-k="engine"]').value, user = $('[data-k="user"]').value;
+    const pick = $('[data-k="engine"]').value, user = $('[data-k="user"]').value;
+    const id = pick === "va-tree" ? (await playerTree(user)) || "va-tree" : pick;
     try {
-      status(ENGINES[id].label + " を読み込み中…");
+      status((ENGINES[id] ? ENGINES[id].label : "vA Tree: " + user + "(このプレイヤーのデータ)") + " を読み込み中…");
       const bot = await loadBot(id, status);
       const t0 = performance.now();
       const ms = Math.max(20, Math.min(3000, Number($('[data-k="ms"]').value) || 150));
       const idle = () => new Promise((r) => setTimeout(r, 0));
       const { json, report } = await ccFix(text, user, bot, {
-        thinkMs: ms, engineId: id, idle, mode: $('[data-k="mode"]').value,
+        thinkMs: ms, engineId: id, idle, human: pick === "va-tree", mode: $('[data-k="mode"]').value,
         onProgress: (p) => status(`ラウンド ${p.round + 1}/${p.rounds}  ` + (p.back ? `${p.back} 手前から試し中  ` : "") + (p.spots ? `候補 ${p.spot}/${p.spots}  ` : "") + `${p.pieces} 手目`),
       });
       const m = /^(.*?)(\.ttrm|\.ttr|\.json)?$/i.exec(name);
@@ -118,7 +141,7 @@ function open() {
       a.download = out; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 10000);
       const sum = report.map((r) => r.rescue !== undefined ? (r.died === false ? `R${r.round + 1}: 死んでいない` : !r.rescue ? `R${r.round + 1}: 戻っても助かる置き方が見つからない` : `R${r.round + 1}: ${r.rescue.minBack} 手前まで戻れば助かる。見せるのは ${r.rescue.back} 手前から` + (r.rescue.ren ? (r.rescue.ren === "dig-quad" ? `(掘り REN・QUAD 入り ${r.rescue.dug} 段を最後まで)` : `(REN を ${r.rescue.ren === "quad" ? "QUAD" : "T-SPIN"} で締める)`) : "(REN の QUAD / T-SPIN は見つからず)") + (r.rescue.betters || []).map((b) => `\n  もっと伸ばせた ${b.order === "same" ? "(1) 同じ順番のまま" : "(2) 順番を変えれば・HOLD"}: ${b.back} 手前から REN ${r.rescue.m.ren}→${b.m.ren}・掘り ${r.rescue.m.dug}→${b.m.dug}・火力 ${r.rescue.m.atk}→${b.m.atk}${b.m.quad ? "・QUAD あり" : ""}`).join("") + `\n  あなた: REN ${r.rescue.mine.ren}・掘り ${r.rescue.mine.dug}・火力 ${r.rescue.mine.atk}`)
-        : r.fixed ? `R${r.round + 1}: 修正 ${r.fixed.length} か所` + r.fixed.map((x) => `\n  ${x.piece} 手目から 火力 ${x.orig} → ${x.cc}${x.ren ? " (REN)" : ""}${x.quad ? " (QUAD)" : ""}`).join("")
+        : r.fixed ? `R${r.round + 1}: 修正 ${r.fixed.length} か所` + r.fixed.map((x) => x.miss ? `\n  ${x.piece} 手目 置きミス → ` + (x.miss.why === "atk" ? `こう置けば火力 ${x.orig} → ${x.cc}` + (x.miss.holes[1] < x.miss.holes[0] ? `・穴 ${x.miss.holes[0]} → ${x.miss.holes[1]}` : "") : `こう置けば地形がきれい(穴 ${x.miss.holes[0]} → ${x.miss.holes[1]})`) : `\n  ${x.piece} 手目から 火力 ${x.orig} → ${x.cc}${x.ren ? " (REN)" : ""}${x.quad ? " (QUAD)" : ""}`).join("")
         : `R${r.round + 1}: ${r.pieces} 手 / 置けた ${r.matched} / 火力 ${r.attack}${r.topout ? " / 窒息" : ""}`).join("\n");
       status(`保存しました: ${out}(${((performance.now() - t0) / 1000).toFixed(0)} 秒)\n${sum}`);
     } catch (err) { console.warn("[cc fix]", err); status("できませんでした: " + (err.message || err)); }

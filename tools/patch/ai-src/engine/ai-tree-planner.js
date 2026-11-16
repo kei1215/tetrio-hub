@@ -34,7 +34,7 @@
   atkW:105,clear1:-90,clear2:-60,clear3:-30,wastedT:-152,tMiniSolo:-130,renQuad:160,digW:45,
   pcAttack:5,pcB2B:1,charging:true,chargeAt:4,chargeBase:3,simGarbage:true,garbageCap:8,
   // search
-  ms:45,maxNodes:1e7,maxIters:1e9,merge:true,speculate:true,seed:1,
+  ms:45,maxNodes:1e7,maxIters:1e9,maxTail:3,merge:true,speculate:true,seed:1,
  };
  function heightsOf(rows){const H=rows.length,h=new Int8Array(W);let seen=0;for(let y=0;y<H&&seen!==FULL;y++){let nb=rows[y]&~seen;if(!nb)continue;seen|=nb;while(nb){const b=nb&-nb;h[31-Math.clz32(b)]=H-y;nb^=b}}return h}
  function filled(rows,x,y){return x<0||x>=W||y>=rows.length||(y>=0&&(rows[y]>>x&1)===1)}
@@ -187,7 +187,7 @@
    const out=[];const opts=[[cur,node.hold,1,false]];
    if(holdOk){if(node.hold&&node.hold!==cur)opts.push([node.hold,cur,1,true]);else if(!node.hold&&next)opts.push([next,cur,2,true])}
    for(const [type,hold,adv,held] of opts){
-    for(const p of SP.placements(node.rows,type,4,19,3)){
+    for(const p of SP.placements(node.rows,type,4,19,P.maxTail)){
      const r=lock(node.rows,type,p,node.g);
      const c=child(node,type,p,r,hold,adv,held);nodes++;if(c)out.push(c);
     }

@@ -1055,6 +1055,7 @@
           ms: 45,
           maxNodes: 1e7,
           maxIters: 1e9,
+          maxTail: 3,
           merge: true,
           speculate: true,
           seed: 1
@@ -1440,7 +1441,7 @@
               else if (!node.hold && next) opts.push([next, cur, 2, true]);
             }
             for (const [type, hold, adv, held] of opts) {
-              for (const p of SP2.placements(node.rows, type, 4, 19, 3)) {
+              for (const p of SP2.placements(node.rows, type, 4, 19, P.maxTail)) {
                 const r = lock(node.rows, type, p, node.g);
                 const c2 = child(node, type, p, r, hold, adv, held);
                 nodes++;
@@ -1757,7 +1758,7 @@
           const job = import_ai_tree_planner.default.create(
             null,
             { board, falling: input.current, hold: input.hold || null, queue: (input.queue || []).slice(0, 5), holdAllowed: true, b2b: Math.max(0, input.b2b | 0), combo: Math.max(0, input.combo | 0) },
-            { ...opts, ms: 1e9, maxIters: iters, incoming: inc, gRows: g, seed: (Date.now() & 65535) + 1 }
+            { ...opts, ...input.human ? { maxTail: 2 } : {}, ms: 1e9, maxIters: iters, incoming: inc, gRows: g, seed: (Date.now() & 65535) + 1 }
           );
           const conv = (p) => {
             if (!p) return null;

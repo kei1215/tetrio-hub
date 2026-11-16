@@ -14,12 +14,15 @@ const [inPath, user, outPath, think = "60"] = process.argv.slice(2);
 let def;
 const ctx = { LocalExternalAI: { register: (d) => (def = d) }, WebAssembly, performance, console };
 vm.createContext(ctx);
-vm.runInContext(fs.readFileSync(CC1 + "vA-external-ai-cc1.js", "utf8"), ctx);
-const bot = await def.create({ "cold_clear_1.wasm": fs.readFileSync(CC1 + "cold_clear_1.wasm") }, { strength: null });
+// TREE_PKG=<vA-external-ai-tree.js>: test with vA Tree (human moves) instead of CC1
+const TREE = process.env.TREE_PKG;
+ctx.TextDecoder = TextDecoder;
+vm.runInContext(fs.readFileSync(TREE || CC1 + "vA-external-ai-cc1.js", "utf8"), ctx);
+const bot = await def.create(TREE ? {} : { "cold_clear_1.wasm": fs.readFileSync(CC1 + "cold_clear_1.wasm") }, { strength: null });
 const src = fs.readFileSync(inPath, "utf8");
 console.log("players", playersOf(src).map((p) => p.username + ":" + p.rounds.length).join(" "));
 const t0 = Date.now();
-const { json, report } = await ccFix(src, user, bot, { thinkMs: Number(think), engineId: "cc1", mode: process.env.MODE || "weak" });
+const { json, report } = await ccFix(src, user, bot, { thinkMs: Number(think), engineId: TREE ? "va-tree" : "cc1", human: !!TREE, mode: process.env.MODE || "weak" });
 console.log("time", ((Date.now() - t0) / 1000).toFixed(1) + "s");
 for (const r of report) console.log(JSON.stringify(r));
 fs.writeFileSync(outPath, JSON.stringify(json));

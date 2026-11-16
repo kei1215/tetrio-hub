@@ -9,6 +9,8 @@
 import { parseReplayFile, PlayerSim } from "../../../tetrio-replay-video/src/replay.js";
 import { tetrominoes } from "../../../tetrio-replay-video/vendor/triangle/engine/utils/tetromino/data.ts";
 import { kicks as KD } from "../../../tetrio-replay-video/vendor/triangle/engine/utils/kicks/data.ts";
+import SP from "../patch/ai-src/engine/ai-spin-planner.js";
+import TP from "../patch/ai-src/engine/ai-tree-planner.js";
 
 export const EMB = "qp_replay_edit";
 const W = 10;
@@ -130,7 +132,7 @@ async function fixOne(info, rep, bot, opt, T) {
     const h = H(), board = [];
     for (let k = 0; k < 40; k++) board.push(Array.from({ length: W }, (_, x) => (k < h && e.board.state[k][x] ? "G" : null)));
     const incoming = (e.zenith?.impendingdamage || e.garbageQueue?.queue || []).filter((d) => d && d.active !== false && (d.amt || d.amount) > 0).map((d) => Math.round(d.amt || d.amount));
-    return { board, current: low(e.falling.symbol), hold: e.held ? low(e.held) : null, queue: e.queue.slice(0, 13).map(low), b2b: Math.max(0, e.stats.b2b || 0), combo: Math.max(0, e.stats.combo || 0), incoming };
+    return { board, current: low(e.falling.symbol), hold: e.held ? low(e.held) : null, queue: e.queue.slice(0, 13).map(low), b2b: Math.max(0, e.stats.b2b || 0), combo: Math.max(0, e.stats.combo || 0), incoming, human: !!opt.human };
   };
   // range.order: the player's placed minos from the start; the AI must place that mino each time (same order)
   let wanted = null;
@@ -217,6 +219,7 @@ async function fixOne(info, rep, bot, opt, T) {
     push("keydown", k); push("keyup", k, 0.5); keys.shift(); doneN++;
     sim.step();
   }
+  stat.endRows = rowsOf();
   if (range && range.rescue) return { seg: { v: 1, frame: range.F, end: sim.frame, state: null, lazy: true, ige: true, by: opt.engineId || "cc", events: out }, stat, endFrame };
   if (range) return { seg: { v: 1, frame: range.F, end: sim.frame, state: null, lazy: true, ige: true, by: opt.engineId || "cc", events: out }, stat };
   const end = stat.topout ? sim.frame : endFrame;
@@ -227,8 +230,11 @@ async function fixOne(info, rep, bot, opt, T) {
 // with no key held (a fix starts there, so nothing held carries into it).
 function analyze(info, rep) {
   const s = new PlayerSim(structuredClone(rep), info), locks = [];
-  s.onLock = (r, f) => locks.push({ f, atk: (r.rawGarbage || []).reduce((a, b) => a + b, 0), lines: r.lines || 0, spin: r.spin || "none", mino: low(r.mino), combo: r.stats?.combo || 0, dug: r.garbageCleared || 0 });
-  while (!s.finished) s.step();
+  // boards just before / after each lock (misdrop check, terrain after a fix)
+  const rowsNow = () => { const st = s.engine.board.state, h = st.length, rows = []; for (let y = 0; y < h; y++) { let m = 0; const row = st[h - 1 - y]; for (let x = 0; x < W; x++) if (row[x]) m |= 1 << x; rows.push(m); } return rows; };
+  let pre = null, ctx = null;
+  s.onLock = (r, f) => locks.push({ f, atk: (r.rawGarbage || []).reduce((a, b) => a + b, 0), lines: r.lines || 0, spin: r.spin || "none", mino: low(r.mino), combo: r.stats?.combo || 0, dug: r.garbageCleared || 0, pre, ctx, post: rowsNow(), cells: (r.cells || s.lastLock?.cells || []).slice() });
+  while (!s.finished) { const e = s.engine; pre = rowsNow(); ctx = { b2b: Math.max(0, e.stats?.b2b || 0), combo: Math.max(0, e.stats?.combo || 0), g: e.board.state.filter((row) => row.some((c) => c && c.mino === "gb")).length, hold: e.held ? low(e.held) : null, tAhead: (e.queue || []).slice(0, 5).map(low).includes("t") }; s.step(); }
   const keys = rep.events.filter((x) => KEY.has(x.type)).sort((a, b) => a.frame - b.frame || (a.data?.subframe || 0) - (b.data?.subframe || 0));
   const held = new Set(); let k = 0;
   const freeAfter = locks.map(() => null);
@@ -258,6 +264,35 @@ function weakSpots(an, W, max) {
     const L = an.locks.slice(s, s + K), sum = L.reduce((x, l) => x + l.atk, 0);
     const ren = L.some((l) => l.combo >= 2), quad = L.some((l) => l.lines >= 4);
     if (sum / K < avg * 0.8 || ren || quad) out.push({ i: s, sum, avg, F: an.spawnAt[s - 1], K, ren, quad, release: true });
+  }
+  return out;
+}
+
+// Misdrops (user: 盤面修正で置きミスがあった部分は、どうすると火力になるか・地形が綺麗になってたかを出す).
+// Same test as the vA Tree player data: with the vA Tree weights the placed spot is very unlikely
+// (softmax, p < 2%) while the same piece one column (same rotation) or one rotation (same column)
+// away is clearly better. Each one becomes a fix that starts at that piece.
+const BETA = 0.004;
+function terrain(rows) { const F = {}; const v = TP.boardValue(rows, { b2b: 0 }, TP.DEFAULTS, F); return { v, holes: (F.cavity || 0) + (F.overhang || 0) }; }
+function misdropSpots(an, T, opt, K, max) {
+  const c4 = [[0, 0, 0, 3], [2, 0, 0, 1], [2, 2, 1, 2], [0, 2, 2, 3]];
+  SP.setTables({ shapes: T.shapes, kicks: T.ks.kicks, ikicks: T.ks.i_kicks || T.ks.kicks, corner: [c4, c4, c4, c4] });
+  SP.useRules({ allow180: opt.allow180 !== false });
+  const key = (cells) => cells.map(([x, y]) => x + "," + y).sort().join(";"), out = [];
+  for (let i = 1; i < an.locks.length - 2 && out.length < max; i++) {
+    const l = an.locks[i]; if (!l.pre || !l.cells?.length || an.freeAfter[i - 1] == null) continue;
+    const h = l.pre.length, want = key(l.cells.map(([x, y]) => [x, h - 1 - y]));
+    const cands = SP.placements(l.pre, l.mino, 4, 19, 2), ci = cands.findIndex((q) => key(T.shapes[l.mino][q.r].map(([cx, cy]) => [q.x + cx, q.y + cy])) === want);
+    if (ci < 0 || cands.length < 2) continue;
+    const sc = cands.map((q) => { const F = TP.moveFeatures(l.pre, l.mino, q, l.ctx).F; let v = 0; const w = TP.weightsOf(); for (const k in F) v += (w[k] || 0) * F[k]; return v; });
+    const mx = Math.max(...sc); let z = 0; for (const v of sc) z += Math.exp(BETA * (v - mx));
+    if (Math.exp(BETA * (sc[ci] - mx)) / z > 0.02) continue;
+    const me = cands[ci];
+    const near = cands.some((q, j) => ((q.r === me.r && Math.abs(q.x - me.x) === 1) || (q.x === me.x && q.r !== me.r)) && sc[j] - sc[ci] > 3 / BETA);
+    if (!near) continue;
+    const k = Math.min(K, an.locks.length - i);
+    out.push({ i, F: an.spawnAt[i - 1], K: k, sum: an.locks.slice(i, i + k).reduce((a, x) => a + x.atk, 0), miss: true, release: true });
+    i += k - 1; // next check after this fix
   }
   return out;
 }
@@ -443,11 +478,22 @@ export async function ccFix(json, username, bot, opt = {}) {
       continue;
     }
     // weak spots only: the player's own play stays; each spot is a fix the replay edit inserts there
-    const an = analyze(pl, pl.replay), spots = weakSpots(an, o.window || 10, o.maxSpots || 30), segs = [], kept = [];
+    const an = analyze(pl, pl.replay), segs = [], kept = [];
+    // misdrop spots first; weak spots that overlap one are dropped (fixes must not overlap)
+    const miss = o.misdrops === false ? [] : misdropSpots(an, T, pl.replay.options || {}, o.missK || 8, o.maxSpots || 30);
+    const over = (a, b) => a.i < b.i + b.K && b.i < a.i + a.K;
+    const spots = [...miss, ...weakSpots(an, o.window || 10, o.maxSpots || 30).filter((w) => !miss.some((m) => over(m, w)))].sort((a, b) => a.i - b.i);
     for (let si = 0; si < spots.length; si++) {
       const sp = spots[si];
       const { seg, stat } = await fixOne(pl, pl.replay, bot, { ...o, range: sp, onProgress: prog && ((x) => prog({ ...x, round: ri, rounds: p.rounds.length, spot: si + 1, spots: spots.length })) }, T);
       // used only when the AI attacks more than the player did with the same pieces
+      if (sp.miss) {
+        // a misdrop: kept when the AI's line attacks more, or ends with a cleaner board than the player's after the same pieces
+        const mine = terrain(an.locks[sp.i + sp.K]?.pre || an.locks[sp.i + sp.K - 1].post), ai = terrain(stat.endRows), atkGain = stat.attack - sp.sum;
+        const why = !stat.topout && atkGain >= 1 ? "atk" : !stat.topout && (ai.holes < mine.holes || ai.v - mine.v >= 150) ? "terrain" : null;
+        if (why) { const info = { piece: sp.i + 1, why, holes: [mine.holes, ai.holes] }; segs.push({ ...seg, orig: sp.sum, cc: stat.attack, miss: info }); kept.push({ piece: sp.i + 1, frame: sp.F, orig: sp.sum, cc: stat.attack, miss: info }); }
+        continue;
+      }
       if (!stat.topout && stat.attack >= sp.sum + (o.minGain ?? 2)) { segs.push({ ...seg, orig: sp.sum, cc: stat.attack }); kept.push({ piece: sp.i + 1, frame: sp.F, orig: sp.sum, cc: stat.attack, ren: sp.ren, quad: sp.quad }); }
     }
     if (segs.length) ref.results[EMB] = { ...segs[0], segs };
