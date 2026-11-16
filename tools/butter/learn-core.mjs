@@ -20,6 +20,23 @@ const shapes = {}; for (const t of ["t", "s", "z", "l", "j", "i", "o"]) shapes[t
 const c4 = [[0, 0, 0, 3], [2, 0, 0, 1], [2, 2, 1, 2], [0, 2, 2, 3]];
 const key = (cells) => cells.map(([x, y]) => x + "," + y).sort().join(";");
 const rowsOf = (st) => { const h = st.length, rows = []; for (let y = 0; y < h; y++) { let m = 0; const row = st[h - 1 - y]; for (let x = 0; x < 10; x++) if (row[x]) m |= 1 << x; rows.push(m); } return rows; };
+// a setup (user: DT砲は2巡目は左以外テンプレじゃない、右側は自由積み、Tは持ち越し): from the board before the first
+// clear (rows top first) and which piece filled each cell: the first bag's pieces, and later pieces that touch a
+// T-spin slot (an empty cell under a filled one), are the setup ("must"); the slots stay empty; the rest is free.
+// Key: "must rows|empty rows", bottom first.
+function setupOf(board, idx) {
+  const H = board.length, at = (k, x) => k >= 0 && k < H && x >= 0 && x < 10 && (board[H - 1 - k] >> x & 1) === 1;
+  let top = 0; for (let k = 0; k < H; k++) if (board[H - 1 - k]) top = k + 1;
+  const slot = new Set(); for (let x = 0; x < 10; x++) { let roof = false; for (let k = top - 1; k >= 0; k--) { if (at(k, x)) roof = true; else if (roof) slot.add(k + "," + x); } }
+  const byPiece = new Map(); for (const [c, p] of idx) { const [k, x] = c.split(",").map(Number); if (!at(k, x)) continue; if (!byPiece.has(p)) byPiece.set(p, []); byPiece.get(p).push([k, x]); }
+  const must = Array(top).fill(0), empty = Array(top).fill(0);
+  for (const [p, cs] of byPiece) { const keep = p <= 7 || cs.some(([k, x]) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dk, dx]) => slot.has((k + dk) + "," + (x + dx)))); if (keep) for (const [k, x] of cs) must[k] |= 1 << x; }
+  for (const c of slot) { const [k, x] = c.split(",").map(Number); empty[k] |= 1 << x; }
+  while (must.length && !must[must.length - 1]) { must.pop(); empty.pop(); }
+  if (!must.length) return null;
+  empty.length = must.length;
+  return must.join(",") + "|" + empty.join(",");
+}
 const K = TP.FIT_KEYS, NK = K.length, idx = Object.fromEntries(K.map((k, i) => [k, i]));
 // sparse feature vector: {i: Uint8Array, v: Float32Array}
 const sparse = (f) => { const ks = Object.keys(f).filter((k) => k in idx && f[k]); return { i: Uint8Array.from(ks.map((k) => idx[k])), v: Float32Array.from(ks.map((k) => f[k])) }; };
@@ -50,7 +67,7 @@ export async function learn(files, playerArg, opt = {}) {
       SP.setTables({ shapes, kicks: ks.kicks, ikicks: ks.i_kicks || ks.kicks, corner: [c4, c4, c4, c4] });
       SP.useRules({ allow180: o.allow180 !== false });
       let sim; try { sim = new PlayerSim(p.replay, { ts: p.ts }); } catch { continue; }
-      games++; realName ??= p.username; let placed = 0, prevB = 0, openSt = 0, openPrev = null;
+      games++; realName ??= p.username; let placed = 0, prevB = 0, openSt = 0, openPrev = null; const openIdx = new Map();
       for (let guard = 0; guard < 300000 && !sim.finished; guard++) {
         const e = sim.engine, pre = rowsOf(e.board.state), b2b = Math.max(0, e.stats?.b2b ?? 0), combo = Math.max(0, e.stats?.combo ?? 0);
         const hold = e.held ? String(e.held).toLowerCase() : null, queue = (e.queue || []).slice(0, 5).map((q) => String(q).toLowerCase());
@@ -64,8 +81,10 @@ export async function learn(files, playerArg, opt = {}) {
           //待ち、3巡目のTまで要る): so a DT cannon / PC setup is kept whole, and the planner fills it in piece order
           // garbage that came in meanwhile is taken off (the setup is what the player built on top of it)
           if (openSt === 0) { const own = preOwn, cells = own.reduce((a, m) => a + popc(m), 0);
-            if (cells !== (placed - 1) * 4) { openSt = 1; if (openPrev && placed - 2 >= 4 && placed - 2 <= 22) { const t = []; for (let y = openPrev.length - 1; y >= 0 && openPrev[y]; y--) t.push(openPrev[y]); const k = t.join(","); openings.set(k, (openings.get(k) || 0) + 1); } }
+            if (cells !== (placed - 1) * 4) { openSt = 1; if (openPrev && placed - 2 >= 4 && placed - 2 <= 22) { const sh = setupOf(openPrev, openIdx); if (sh) openings.set(sh, (openings.get(sh) || 0) + 1); } }
             else if (placed > 23) openSt = 1;
+            else { // which piece (1, 2, ...) filled each cell: the new cells since the last lock (no clears yet)
+              const H = own.length; for (let y = 0; y < H; y++) { const nw = own[y] & ~((openPrev && openPrev[y]) || 0); for (let x = 0; x < 10; x++) if (nw >> x & 1) openIdx.set((H - 1 - y) + "," + x, placed - 1); } }
             openPrev = own; }
           const type = String(lk.res.mino).toLowerCase(), h = pre.length;
           if (!shapes[type]) continue;
@@ -141,15 +160,14 @@ export async function learn(files, playerArg, opt = {}) {
     agree: { default: +beforeClean.top.toFixed(3), fitted: +after.top.toFixed(3) },
     misdrop: { rate: +(mis.size / data.length).toFixed(4), count: mis.size, byPiece, dir },
     beta, openers: (() => {
-      // setups the player built the same way at least twice; a shorter board that fits inside one is the same setup
-      // cut short (a clear came early), so it counts for it; keep the best supported setups, not the ones inside an already kept one (any length up
-      // to 3 bags: DT cannon / PCO used for B2B / ...)
-      const all = [...openings.entries()].map(([k, n]) => ({ rows: k.split(",").map(Number), n }));
+      // setups built the same way at least twice (setupOf above); a smaller one inside a bigger one is the same setup
+      // cut short and counts for it; up to 4, not one inside an already kept one
+      const all = [...openings.entries()].map(([k, n]) => { const [m, e] = k.split("|"); return { rows: m.split(",").map(Number), empty: e.split(",").map(Number), n }; });
       const inside = (a, b) => a.rows.length <= b.rows.length && a.rows.every((m, i) => (m & ~b.rows[i]) === 0);
       for (const a of all) a.sup = all.reduce((t, b) => t + (inside(b, a) ? b.n : 0), 0);
       all.sort((a, b) => b.sup - a.sup || b.rows.length - a.rows.length);
       const keep = []; for (const a of all) { if (a.n < 2 || keep.some((k) => inside(a, k))) continue; keep.push(a); if (keep.length >= 4) break; }
-      return keep.map((a) => ({ rows: a.rows, n: a.sup }));
+      return keep.map((a) => ({ rows: a.rows, empty: a.empty, n: a.sup }));
     })(),
     b2b: b2bStyle, mix: MIX, options: { ...TP.optionsOf(fitted), ...b2bOpt, ban, kindBias, tank: false }, raw, kinds: never, // own version plays like the player (no tank)
   };

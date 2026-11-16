@@ -33,6 +33,9 @@ LocalExternalAI.register({
     // shapes and their spread of choices (not in CC 盤面修正, which wants the best plausible move).
     // Misdrops are not copied (user: ミスに関してはオフ状態だからいい).
     const like = data ? { openers: data.openers || null, pickBeta: data.beta || 0, misdrop: 0 } : {};
+    // opener only from an empty board until the first line clear or garbage (cells drop, or jump by more than a piece);
+    // the 9-cell rows of a DT cannon must not be taken for garbage here
+    let live = false, lastCells = -1;
     return {
       begin(input) {
         SP.setTables(TABLES);
@@ -41,8 +44,9 @@ LocalExternalAI.register({
         // ゴミ行の目安: 下から続く「1マスだけ空き」の行
         let g = 0; for (let y = H - 1; y >= 0; y--) { const n = board[y].filter(Boolean).length; if (n === W - 1) g++; else break; }
         const inc = (input.incoming || []).reduce((a, n) => a + (Number(n) || 0), 0);
+        { const cells = board.reduce((a, r) => a + r.filter(Boolean).length, 0); if (!cells) live = true; else if (lastCells < 0 || cells < lastCells || cells - lastCells > 4) live = false; lastCells = cells; }
         const job = TP.create(null, { board, falling: input.current, hold: input.hold || null, queue: (input.queue || []).slice(0, 5), holdAllowed: true, b2b: Math.max(0, input.b2b | 0), combo: Math.max(0, input.combo | 0) },
-          { ...opts, ...like, ...(input.human ? { maxTail: 2, pickBeta: 0 } : {}), ms: 1e9, maxIters: iters, incoming: inc, gRows: g, seed: (Date.now() & 0xffff) + 1 });
+          { ...opts, ...like, openLive: live && !!like.openers, ...(input.human ? { maxTail: 2, pickBeta: 0 } : {}), ms: 1e9, maxIters: iters, incoming: inc, gRows: g, seed: (Date.now() & 0xffff) + 1 });
         const conv = (p) => {
           if (!p) return null;
           const cells = TABLES.shapes[p.type][p.r].map(([cx, cy]) => [p.x + cx, H - 1 - (p.y + cy)]);

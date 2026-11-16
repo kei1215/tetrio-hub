@@ -1069,8 +1069,8 @@
           //  player's own spread; misdrop: that share of moves lands one column off (the player's misdrop rate).
           openers: null,
           openW: 45,
-          openBudget: 1500,
-          openDepth: 5,
+          openBudget: 250,
+          openDepth: 4,
           pickBeta: 0,
           misdrop: 0,
           // search
@@ -1455,11 +1455,10 @@
           }
           return ORI;
         }
-        function tilings(rem, avail, cap, budget) {
+        function tilings(rem, free, avail, cap, budget) {
           const n = rem.reduce((a, m) => a + popc(m), 0);
-          if (n % 4) return 0;
           if (!n) return 1;
-          const O = oris(), cnt = {}, stack = [];
+          const O = oris(), cnt = {}, stack = [], L = rem.length;
           let found = 0, left = budget;
           const order = () => {
             const n2 = stack.length, after = stack.map(() => []);
@@ -1479,31 +1478,40 @@
           const rec = () => {
             if (found >= cap || left-- <= 0) return;
             let k = 0;
-            while (k < rem.length && !rem[k]) k++;
-            if (k >= rem.length) {
+            while (k < L && !rem[k]) k++;
+            if (k >= L) {
               if (order()) found++;
               return;
             }
             const x = 31 - Math.clz32(rem[k] & -rem[k]);
             for (const o of O) {
               if ((cnt[o.type] | 0) >= (avail[o.type] | 0)) continue;
-              let ok = true;
-              for (const [dx, dk] of o.c) {
-                const X = x + dx, K = k + dk;
-                if (X < 0 || X >= W2 || K < 0 || K >= rem.length || !(rem[K] >> X & 1)) {
-                  ok = false;
-                  break;
+              for (const [ax, ak] of o.c) {
+                const cs = o.c.map(([dx, dk]) => [x + dx - ax, k + dk - ak]);
+                let ok = true;
+                for (const [X, K] of cs) {
+                  if (X < 0 || X >= W2 || K < 0 || K >= L || !((rem[K] | free[K]) >> X & 1) || (K < k || K === k && X < x) && rem[K] >> X & 1) {
+                    ok = false;
+                    break;
+                  }
                 }
+                if (!ok) continue;
+                const was = cs.map(([X, K]) => rem[K] >> X & 1);
+                for (const [X, K] of cs) {
+                  rem[K] &= ~(1 << X);
+                  free[K] &= ~(1 << X);
+                }
+                cnt[o.type] = (cnt[o.type] | 0) + 1;
+                stack.push(cs);
+                rec();
+                stack.pop();
+                cnt[o.type]--;
+                cs.forEach(([X, K], i) => {
+                  if (was[i]) rem[K] |= 1 << X;
+                  else free[K] |= 1 << X;
+                });
+                if (found >= cap) return;
               }
-              if (!ok) continue;
-              for (const [dx, dk] of o.c) rem[k + dk] &= ~(1 << x + dx);
-              cnt[o.type] = (cnt[o.type] | 0) + 1;
-              stack.push(o.c.map(([dx, dk]) => [x + dx, k + dk]));
-              rec();
-              stack.pop();
-              cnt[o.type]--;
-              for (const [dx, dk] of o.c) rem[k + dk] |= 1 << x + dx;
-              if (found >= cap) return;
             }
           };
           rec();
@@ -1539,7 +1547,10 @@
           };
           let rootCells = 0;
           for (const m of rows0) if (m) rootCells += popc(m);
-          const opens = (P.openers || []).map((o) => o.rows || o).filter((t) => !g0 && t.reduce((a, m) => a + popc(m), 0) >= rootCells), openOn = opens.length > 0;
+          const opens = (P.openers || []).map((o) => {
+            const rows = o.rows || o;
+            return { rows, empty: o.empty || rows.map(() => 0) };
+          }).filter(() => P.openLive !== void 0 ? !!P.openLive : !g0), openOn = opens.length > 0;
           const seen = /* @__PURE__ */ new Map();
           let nodes = 0, done = false, spent = 0, best = null, maxDepth = 0, iters = 0;
           const pieceAt = (i, extra) => i < seq.length ? seq[i] : extra;
@@ -1667,12 +1678,13 @@
           function openBonus(rows) {
             let best2 = Infinity;
             const H2 = rows.length;
-            for (const t of opens) {
+            for (const o of opens) {
+              const t = o.rows;
               let s = 0;
-              for (let k = 0; k < t.length && k < H2; k++) s += popc(rows[H2 - 1 - k] & ~t[k]);
+              for (let k = 0; k < t.length && k < H2; k++) s += popc(t[k] & ~rows[H2 - 1 - k]) + popc(o.empty[k] & rows[H2 - 1 - k]);
               if (s < best2) best2 = s;
             }
-            return -P.openW * best2;
+            return -P.openW * best2 / 4;
           }
           function wellOf(rows) {
             const h = heightsOf(rows);
@@ -1758,76 +1770,78 @@
           }
           function openPlan(list) {
             if (!openOn) return null;
-            const H2 = rows0.length;
-            const inT = (rows, t) => {
-              for (let k = 0; k < H2; k++) {
-                const m = rows[H2 - 1 - k];
-                if (m && m & ~(t[k] || 0)) return false;
-              }
-              return true;
-            };
-            const covered = (rows, t) => {
-              let c2 = 0;
-              for (let x = 0; x < W2; x++) {
-                let top = false;
-                for (let k = H2 - 1; k >= 0; k--) {
-                  const f = rows[H2 - 1 - k] >> x & 1;
-                  if (f) top = true;
-                  else if (top && k < t.length && t[k] >> x & 1) c2++;
-                }
-              }
-              return c2;
-            };
-            const blocked = (rows, t) => {
-              const top = new Int8Array(W2).fill(-1);
-              for (let x = 0; x < W2; x++) for (let k = H2 - 1; k >= 0; k--) if (rows[H2 - 1 - k] >> x & 1) {
-                top[x] = k;
-                break;
-              }
-              let c2 = 0;
-              for (let k = 0; k < t.length; k++) {
-                const row = rows[H2 - 1 - k];
-                for (let x = 0; x < W2; x++) {
-                  if (!(t[k] >> x & 1) || row >> x & 1 || top[x] < k) continue;
-                  let ok = false;
-                  for (const dir of [-1, 1]) for (let s = 1, X = x + dir; s <= 3 && X >= 0 && X < W2 && !(row >> X & 1); s++, X += dir) if (top[X] < k) {
-                    ok = true;
-                    break;
-                  }
-                  if (!ok) c2++;
-                }
-              }
-              return c2;
-            };
-            const better = (a, b) => a.ok !== b.ok ? a.ok > b.ok : a.d !== b.d ? a.d > b.d : a.ways !== b.ways ? a.ways > b.ways : a.cv < b.cv;
-            const D0 = rootCells / 4 + (rootNode.hold ? 1 : 0);
+            const H2 = rows0.length, D0 = rootCells / 4 + (rootNode.hold ? 1 : 0);
+            const better = (a, b) => a.ok !== b.ok ? a.ok > b.ok : a.g !== b.g ? a.g > b.g : a.ways > b.ways;
             let best2 = null;
-            for (let ti = 0; ti < opens.length; ti++) {
-              const t = opens[ti];
-              if (!inT(rows0, t)) continue;
+            for (const o of opens) {
+              const t = o.rows, e = o.empty, L = t.length;
+              const bad = (rows) => {
+                for (let k = 0; k < L; k++) if (rows[H2 - 1 - k] & e[k]) return true;
+                return false;
+              };
+              const need = (rows) => {
+                let c2 = 0;
+                for (let k = 0; k < L; k++) c2 += popc(t[k] & ~rows[H2 - 1 - k]);
+                return c2;
+              };
+              if (bad(rows0) || !need(rows0)) continue;
+              const blocked = (rows) => {
+                const top = new Int8Array(W2).fill(-1);
+                for (let x = 0; x < W2; x++) for (let k = H2 - 1; k >= 0; k--) if (rows[H2 - 1 - k] >> x & 1) {
+                  top[x] = k;
+                  break;
+                }
+                let c2 = 0;
+                for (let k = 0; k < L; k++) {
+                  const row = rows[H2 - 1 - k];
+                  for (let x = 0; x < W2; x++) {
+                    if (!(t[k] >> x & 1) || row >> x & 1 || top[x] < k) continue;
+                    let ok = false;
+                    for (const dir of [-1, 1]) for (let s = 1, X = x + dir; s <= 3 && X >= 0 && X < W2 && !(row >> X & 1); s++, X += dir) if (top[X] < k) {
+                      ok = true;
+                      break;
+                    }
+                    if (!ok) c2++;
+                  }
+                }
+                return c2;
+              };
               const memo = /* @__PURE__ */ new Map(), tmemo = /* @__PURE__ */ new Map();
               let budget = P.openBudget;
               const leaf = (rows, hold, qi) => {
                 const left = seq.slice(qi), key = rows.join(",") + "|" + hold + "|" + left.join("");
                 let w = tmemo.get(key);
                 if (w === void 0) {
-                  const rem = t.map((m, k) => m & ~rows[H2 - 1 - k]), n = rem.reduce((a, m) => a + popc(m), 0) / 4, avail = {};
+                  const rem = [], free = [];
+                  for (let k = 0; k < L + 2; k++) {
+                    const b = rows[H2 - 1 - k] || 0, tk = t[k] || 0;
+                    rem.push(tk & ~b);
+                    free.push(FULL & ~tk & ~(e[k] || 0) & ~b);
+                  }
+                  const n = Math.ceil(rem.reduce((a, m) => a + popc(m), 0) / 4) + 2, avail = {};
                   for (const x of left) avail[x] = (avail[x] || 0) + 1;
                   if (hold) avail[hold] = (avail[hold] || 0) + 1;
                   const gl = D0 + seq.length - 1, B = Math.floor(gl / 7), inB = /* @__PURE__ */ new Set();
                   for (let j = 0; j < seq.length; j++) if (Math.floor((D0 + j) / 7) === B) inB.add(seq[j]);
-                  const restN = 6 - gl % 7, unknownB = Math.max(0, D0 - B * 7);
-                  let more = n - left.length - (hold ? 1 : 0);
+                  const restN = 6 - gl % 7;
                   if (restN > 0) {
-                    for (const x of PIECES) if (!inB.has(x)) avail[x] = (avail[x] || 0) + (unknownB ? 1 : 1);
+                    for (const x of PIECES) if (!inB.has(x)) avail[x] = (avail[x] || 0) + 1;
                   }
-                  more -= restN;
-                  const bags = Math.max(0, Math.ceil(more / 7));
+                  const bags = Math.max(0, Math.ceil((n - left.length - (hold ? 1 : 0) - restN) / 7));
                   if (bags) for (const x of PIECES) avail[x] = (avail[x] || 0) + bags;
-                  w = tilings(rem, avail, 16, 3e3);
+                  avail.t = 0;
+                  w = tilings(rem, free, avail, 4, 400);
                   tmemo.set(key, w);
                 }
-                return { d: 0, ok: w > 0 ? 1 : 0, ways: w, cv: covered(rows, t) };
+                return { ok: w > 0 ? 1 : 0, g: 0, ways: w };
+              };
+              const tKeep = !(rootNode.hold === "t" && seq[0] === "t");
+              const okMove = (rows, type, p) => {
+                const r = lock(rows, type, p, 0);
+                if (r.lines || bad(r.rows)) return null;
+                if (type === "t" && tKeep) return null;
+                if (blocked(r.rows) > blocked(rows)) return null;
+                return r;
               };
               const dfs = (rows, hold, qi) => {
                 const cur = qi < P.openDepth ? seq[qi] : null;
@@ -1835,27 +1849,34 @@
                 const key = rows.join(",") + "|" + hold + "|" + qi;
                 if (memo.has(key)) return memo.get(key);
                 let out2 = leaf(rows, hold, qi);
-                const opts = [[cur, hold, qi + 1, false]];
+                const opts = [[cur, hold, qi + 1]];
                 if (holdOk) {
-                  if (hold && hold !== cur) opts.push([hold, cur, qi + 1, true]);
-                  else if (!hold && seq[qi + 1]) opts.push([seq[qi + 1], cur, qi + 2, true]);
+                  if (hold && hold !== cur) opts.push([hold, cur, qi + 1]);
+                  else if (!hold && seq[qi + 1]) opts.push([seq[qi + 1], cur, qi + 2]);
                 }
-                for (const [type, h2, q2, held] of opts) for (const p of SP2.placements(rows, type, 4, 19, P.maxTail)) {
-                  const r2 = lock(rows, type, p, 0);
-                  if (r2.lines || !inT(r2.rows, t) || blocked(r2.rows, t) > blocked(rows, t)) continue;
-                  const sub = dfs(r2.rows, h2, q2), v = { d: sub.d + 1, ok: sub.ok, ways: sub.ways, cv: sub.cv, type, p, held };
+                const n02 = need(rows);
+                for (const [type, h2, q2] of opts) for (const p of SP2.placements(rows, type, 4, 19, P.maxTail)) {
+                  const r = okMove(rows, type, p);
+                  if (!r) continue;
+                  const sub = dfs(r.rows, h2, q2), v = { ok: sub.ok, g: sub.g + n02 - need(r.rows), ways: sub.ways };
                   if (better(v, out2)) out2 = v;
                 }
                 memo.set(key, out2);
                 return out2;
               };
-              const r = dfs(rows0, rootNode.hold, 0);
-              r.t = t;
-              if (r.d > 0 && r.ok && (!best2 || better(r, best2))) best2 = r;
+              const n0 = need(rows0);
+              for (const c2 of list) {
+                if (c2.dead) continue;
+                const m = c2.move;
+                const r = okMove(rows0, m.type, m);
+                if (!r) continue;
+                const h2 = m.hold ? rootNode.hold ? seq[0] : seq[0] : rootNode.hold, q2 = m.hold && !rootNode.hold ? 2 : 1;
+                const sub = dfs(r.rows, h2, q2), v = { ok: sub.ok, g: sub.g + n0 - need(r.rows), ways: sub.ways, c: c2 };
+                if (v.ok && (!best2 || better(v, best2))) best2 = v;
+              }
             }
-            if (root.__openDbg) root.__openDbg(best2 && { t: opens.indexOf(best2.t), d: best2.d, ok: best2.ok, ways: best2.ways, type: best2.type }, rootCells);
-            if (!best2) return null;
-            return list.find((c2) => !c2.dead && c2.move.type === best2.type && c2.move.x === best2.p.x && c2.move.y === best2.p.y && c2.move.r === best2.p.r && !!c2.move.hold === best2.held) || null;
+            if (root.__openDbg) root.__openDbg(best2 && { g: best2.g, ways: best2.ways, type: best2.c.move.type }, rootCells);
+            return best2 ? best2.c : null;
           }
           function result() {
             const list = rootNode.children || [];
@@ -1996,6 +2017,7 @@
       const iters = 200;
       const data = dataOf(files), opts = data ? data.options : {};
       const like = data ? { openers: data.openers || null, pickBeta: data.beta || 0, misdrop: 0 } : {};
+      let live = false, lastCells = -1;
       return {
         begin(input) {
           import_ai_spin_planner.default.setTables(TABLES);
@@ -2012,10 +2034,16 @@
             else break;
           }
           const inc = (input.incoming || []).reduce((a, n) => a + (Number(n) || 0), 0);
+          {
+            const cells = board.reduce((a, r) => a + r.filter(Boolean).length, 0);
+            if (!cells) live = true;
+            else if (lastCells < 0 || cells < lastCells || cells - lastCells > 4) live = false;
+            lastCells = cells;
+          }
           const job = import_ai_tree_planner.default.create(
             null,
             { board, falling: input.current, hold: input.hold || null, queue: (input.queue || []).slice(0, 5), holdAllowed: true, b2b: Math.max(0, input.b2b | 0), combo: Math.max(0, input.combo | 0) },
-            { ...opts, ...like, ...input.human ? { maxTail: 2, pickBeta: 0 } : {}, ms: 1e9, maxIters: iters, incoming: inc, gRows: g, seed: (Date.now() & 65535) + 1 }
+            { ...opts, ...like, openLive: live && !!like.openers, ...input.human ? { maxTail: 2, pickBeta: 0 } : {}, ms: 1e9, maxIters: iters, incoming: inc, gRows: g, seed: (Date.now() & 65535) + 1 }
           );
           const conv = (p) => {
             if (!p) return null;
