@@ -291,7 +291,8 @@ onmessage = async (e) => { const m = e.data;
     // Same PPS: an outside AI borrows the other side's vA profile (its key driver and pace) when there is one.
     const other = i => [L, R][1 - i], drv = i => (String(other(i)).startsWith('ai:') ? other(i) : 'ai:' + profiles[0].id);
     const side = (v, e, i) => (e ? drv(i) : v);
-    const labels = engines.map(e => (e ? defs[e].label || e : null));
+    // the AI list shows "Butter <player>", the game itself just "Butter" (user: 表記名はAI選択画面ではプレーヤー名が入った butter、プレイ中は butter だけ)
+    const labels = engines.map(e => (e ? (/^va-tree/.test(e) ? 'Butter' : defs[e].label || e) : null));
     try { localStorage.setItem('qp-local-ai-ext-ft', String($('input[data-k="ft"]').value)); } catch {}
     const ft = Number($('input[data-k="ft"]').value); if (Number.isInteger(ft) && ft >= 1 && ft <= 99) window.LocalAIRoom.ft?.(ft);
     if ($('select[data-k="mode"]').value === 'qp') {

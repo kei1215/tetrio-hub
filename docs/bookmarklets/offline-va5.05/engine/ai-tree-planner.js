@@ -48,7 +48,7 @@
   //  openW (no reward for matching: a reward that stops when the shape is done made the search avoid finishing).
   //  pickBeta: the move is drawn from the top lines with weight exp(pickBeta x (value - best)) like the
   //  player's own spread; misdrop: that share of moves lands one column off (the player's misdrop rate).
-  openers:null,openW:45,pickBeta:0,misdrop:0,
+  openers:null,openW:45,followKind:null,followW:300,protect:null,protectW:600,openBudget:250,openDepth:4,pickBeta:0,misdrop:0,
   // search
   ms:45,maxNodes:1e7,maxIters:1e9,maxTail:3,merge:true,speculate:true,seed:1,
  };
@@ -191,6 +191,32 @@
  }
  function rng(seed){let s=seed>>>0||1;return()=>{s^=s<<13;s>>>=0;s^=s>>>17;s^=s<<5;s>>>=0;return s/4294967296}}
 
+ // can the rest of an opener still be filled with pieces? (user: どこに置いたら形が作れるか / どこまで組めば
+ // あとは確定できるか) Exact cover of the opener's empty cells by tetrominoes, lowest-leftmost cell first, each kind
+ // at most as many times as it can still come (avail, from the 7-bag). Returns how many ways (up to cap); 0 = this setup is lost.
+ let ORI=null;
+ function oris(){if(ORI)return ORI;ORI=[];const S=SP.__shapes(),seen=new Set();
+  for(const type of PIECES)for(const cells of S[type]){const c=cells.map(([cx,cy])=>[cx,-cy]).sort((a,b)=>a[1]-b[1]||a[0]-b[0]),o=c.map(([x,k])=>[x-c[0][0],k-c[0][1]]),key=type+o.join(';');if(!seen.has(key)){seen.add(key);ORI.push({type,c:o})}}
+  return ORI}
+ function tilings(rem,free,avail,cap,budget){
+  const n=rem.reduce((a,m)=>a+popc(m),0);if(!n)return 1;
+  const O=oris(),cnt={},stack=[],L=rem.length;let found=0,left=budget;
+  // a way only counts if the pieces can go in from below to above: a piece that has another one's cell under it in
+  // the same column comes after it; a loop means it cannot be built
+  const order=()=>{const n=stack.length,after=stack.map(()=>[]);
+   for(let a=0;a<n;a++)for(let b=0;b<n;b++)if(a!==b&&stack[a].some(([x,k])=>stack[b].some(([X,K])=>X===x&&K>k)))after[a].push(b);
+   const st=new Int8Array(n);const loop=v=>{st[v]=1;for(const w of after[v]){if(st[w]===1||st[w]===0&&loop(w))return true}st[v]=2;return false};
+   for(let v=0;v<n;v++)if(!st[v]&&loop(v))return false;return true};
+  // the lowest-leftmost setup cell is covered by some piece, which may also use free cells (DT砲の右側は自由)
+  const rec=()=>{if(found>=cap||left--<=0)return;let k=0;while(k<L&&!rem[k])k++;if(k>=L){if(order())found++;return}
+   const x=31-Math.clz32(rem[k]&-rem[k]);
+   for(const o of O){if((cnt[o.type]|0)>=(avail[o.type]|0))continue;
+    for(const [ax,ak] of o.c){const cs=o.c.map(([dx,dk])=>[x+dx-ax,k+dk-ak]);let ok=true;
+     for(const [X,K] of cs){if(X<0||X>=W||K<0||K>=L||!((rem[K]|free[K])>>X&1)||(K<k||K===k&&X<x)&&(rem[K]>>X&1)){ok=false;break}}
+     if(!ok)continue;const was=cs.map(([X,K])=>rem[K]>>X&1);
+     for(const [X,K] of cs){rem[K]&=~(1<<X);free[K]&=~(1<<X)}cnt[o.type]=(cnt[o.type]|0)+1;stack.push(cs);
+     rec();stack.pop();cnt[o.type]--;cs.forEach(([X,K],i)=>{if(was[i])rem[K]|=1<<X;else free[K]|=1<<X});if(found>=cap)return}}};
+  rec();return found}
  function create(engine,state,options={}){
   const P={...DEFAULTS,...(root.__treePlannerParams||{}),...options};
   if(!SP.load(engine,String(P.kickset||'SRS+')))return null;
@@ -204,7 +230,7 @@
    pend:Math.max(0,Number(P.incoming)||0),g:g0,gi:0,acc:0,eval:0,children:null,spec:null,depth:0};
   // opening shapes in play only when the search starts from an opening (no garbage, no more cells than the shape)
   let rootCells=0;for(const m of rows0)if(m)rootCells+=popc(m);
-  const opens=(P.openers||[]).map(o=>o.rows||o).filter(t=>!g0&&t.reduce((a,m)=>a+popc(m),0)>=rootCells),openOn=opens.length>0;
+  const opens=(P.openers||[]).map(o=>{const rows=o.rows||o;return {rows,empty:o.empty||rows.map(()=>0)}}).filter(()=>P.openLive!==undefined?!!P.openLive:!g0),openOn=opens.length>0;
   const seen=new Map();let nodes=0,done=false,spent=0,best=null,maxDepth=0,iters=0;
   const pieceAt=(i,extra)=>i<seq.length?seq[i]:extra;
   // children of a node for one known current piece (and the hold swap)
@@ -220,7 +246,10 @@
    return out;
   }
   function child(node,type,p,r,hold,adv,held){
-   let rew=0,b2b=node.b2b,combo=node.combo,pend=node.pend,g=node.g-r.dug,rows=r.rows,gi=node.gi;
+   let rew=0;
+   // the setup's slots stay open until its T-spins are done (protect: rows from the bottom)
+   if(P.protect&&!r.lines){const H=r.rows.length;for(let k=0;k<P.protect.length;k++)if(r.rows[H-1-k]&P.protect[k]){rew-=P.protectW;break}}
+   let b2b=node.b2b,combo=node.combo,pend=node.pend,g=node.g-r.dug,rows=r.rows,gi=node.gi;
    const fullT=type==='t'&&p.spin===2;
    if(r.lines){
     combo++;
@@ -246,7 +275,12 @@
     }
     if(r.lines===4&&combo>=2&&node.g>0)rew+=P.renQuad;
     rew+=P.digW*r.dug;
-    if(P.ban&&P.ban.length){const k=kindOf(type,p.spin,r.lines,r.dug,combo,node.g);if(k&&P.ban.includes(k))rew-=P.banW}
+    // after a setup: the player's next attack from it (followKind, e.g. tspin2 then tspin3)
+    if(P.followKind&&kindOf(type,p.spin,r.lines,r.dug,combo,node.g)===P.followKind)rew+=P.followW;
+    if((P.ban&&P.ban.length)||P.kindBias){const k=kindOf(type,p.spin,r.lines,r.dug,combo,node.g);if(k){if(P.ban&&P.ban.includes(k))rew-=P.banW;
+     // the player's mix of attacks (user: 攻撃の種類の割合も合わせる、ただし高さや地形で変える): a soft bonus/penalty per
+     // kind, added to the search value, so the board (height, shape, a TSM combo coming) still decides
+     if(P.kindBias&&P.kindBias[k])rew+=P.kindBias[k]}}
     if(P.tank&&pend>0&&atk>0){const h=heightsOf(rows);let top=0;for(let x=0;x<W;x++)if(h[x]>top)top=h[x];if(top+pend<=P.tankSafe)rew-=P.tankW*Math.min(pend,atk)}
     pend=Math.max(0,pend-atk);
    }else{
@@ -266,8 +300,8 @@
    return n;
   }
   function openBonus(rows){let best=Infinity;const H=rows.length;
-   for(const t of opens){let s=0;for(let k=0;k<t.length&&k<H;k++)s+=popc(rows[H-1-k]&~t[k]);if(s<best)best=s}
-   return -P.openW*best}
+   for(const o of opens){const t=o.rows;let s=0;for(let k=0;k<t.length&&k<H;k++)s+=popc(t[k]&~rows[H-1-k])+popc(o.empty[k]&rows[H-1-k]);if(s<best)best=s}
+   return -P.openW*best/4}
   function wellOf(rows){const h=heightsOf(rows);let w=0;for(let x=1;x<W;x++)if(h[x]<=h[w])w=x;return w}
   function expand(node){
    const cur=pieceAt(node.qi,null);
@@ -305,8 +339,65 @@
     n.eval=score(n)}}
    return path.length===1&&rootNode.children&&!rootNode.children.length;
   }
+  // opener in piece order (user: テンプレを組める順番を考えて組んでほしい): look through the known pieces (and hold)
+  // for the placements that only fill the opener's own cells, no line clear; take the first move of the line that
+  // places the most pieces into the opener (and covers the fewest of its empty cells). Most common opener first.
+  // opener in piece order (user: テンプレを組める順番を考えて / どこに置いたら形が作れるか / どこまで組めばあとは確定 /
+  // DT砲は2巡目は左以外テンプレじゃない、右側は自由積み、Tは持ち越し). An opener = setup cells (must), slot cells (stay
+  // empty) and free cells. Moves keep the slots empty, never cover a setup cell that could not be reached any more,
+  // put no T into the setup (it is kept for the T-spins), clear no line. Over the known pieces (and hold) look for the
+  // line that fills the most setup cells while the rest can still be filled with the pieces the 7-bag can give
+  // (tilings); among the root moves that do as well, the tree's own order decides (free cells are played well).
+  function openPlan(list){
+   if(!openOn)return null;const H=rows0.length,D0=rootCells/4+(rootNode.hold?1:0);
+   const better=(a,b)=>(a.ok!==b.ok?a.ok>b.ok:a.g!==b.g?a.g>b.g:a.ways>b.ways);
+   let best=null;
+   for(const o of opens){const t=o.rows,e=o.empty,L=t.length;
+    const bad=rows=>{for(let k=0;k<e.length;k++)if(rows[H-1-k]&e[k])return true;return false};
+    const need=rows=>{let c=0;for(let k=0;k<L;k++)c+=popc(t[k]&~rows[H-1-k]);return c};
+    if(bad(rows0)||!need(rows0))continue;
+    const blocked=rows=>{const top=new Int8Array(W).fill(-1);for(let x=0;x<W;x++)for(let k=H-1;k>=0;k--)if(rows[H-1-k]>>x&1){top[x]=k;break}
+     let c=0;for(let k=0;k<L;k++){const row=rows[H-1-k];for(let x=0;x<W;x++){if(!(t[k]>>x&1)||row>>x&1||top[x]<k)continue;
+      let ok=false;for(const dir of [-1,1])for(let s=1,X=x+dir;s<=3&&X>=0&&X<W&&!(row>>X&1);s++,X+=dir)if(top[X]<k){ok=true;break}
+      if(!ok)c++}}return c};
+    const memo=new Map(),tmemo=new Map();let budget=P.openBudget;
+    const leaf=(rows,hold,qi)=>{const left=seq.slice(qi),key=rows.join(',')+'|'+hold+'|'+left.join('');let w=tmemo.get(key);
+     if(w===undefined){const rem=[],free=[];for(let k=0;k<L+1;k++){const b=rows[H-1-k]||0,tk=t[k]||0;rem.push(tk&~b);free.push(FULL&~tk&~(e[k]||0)&~b)}
+      const n=Math.ceil(rem.reduce((a,m)=>a+popc(m),0)/4)+2,avail={};
+      for(const x of left)avail[x]=(avail[x]||0)+1;if(hold)avail[hold]=(avail[hold]||0)+1;
+      const gl=D0+seq.length-1,B=Math.floor(gl/7),inB=new Set();for(let j=0;j<seq.length;j++)if(Math.floor((D0+j)/7)===B)inB.add(seq[j]);
+      const restN=6-gl%7;if(restN>0)for(const x of PIECES)if(!inB.has(x))avail[x]=(avail[x]||0)+1;
+      const bags=Math.max(0,Math.ceil((n-left.length-(hold?1:0)-restN)/7));if(bags)for(const x of PIECES)avail[x]=(avail[x]||0)+bags;
+      avail.t=0;w=tilings(rem,free,avail,4,400);tmemo.set(key,w)}
+     return {ok:w>0?1:0,g:0,ways:w}};
+    // the T stays in hold for the T-spins; only placed when it cannot be held (hold is a T already)
+    const tKeep=!(rootNode.hold==='t'&&seq[0]==='t');
+    // free cells only up to one row above the setup (the free side is not stacked up)
+    const tall=rows=>{for(let k=L+1;k<H;k++)if(rows[H-1-k])return true;return false};
+    const okMove=(rows,type,p)=>{const r=lock(rows,type,p,0);if(r.lines||bad(r.rows)||tall(r.rows))return null;
+     if(type==='t'&&tKeep)return null;if(blocked(r.rows)>blocked(rows))return null;return r};
+    const dfs=(rows,hold,qi)=>{const cur=qi<P.openDepth?seq[qi]:null;if(!cur||budget--<=0)return leaf(rows,hold,qi);
+     const key=rows.join(',')+'|'+hold+'|'+qi;if(memo.has(key))return memo.get(key);
+     let out=leaf(rows,hold,qi);const opts=[[cur,hold,qi+1]];
+     if(holdOk){if(hold&&hold!==cur)opts.push([hold,cur,qi+1]);else if(!hold&&seq[qi+1])opts.push([seq[qi+1],cur,qi+2])}
+     const n0=need(rows);
+     for(const [type,h2,q2] of opts)for(const p of SP.placements(rows,type,4,19,P.maxTail)){
+      const r=okMove(rows,type,p);if(!r)continue;const sub=dfs(r.rows,h2,q2),v={ok:sub.ok,g:sub.g+n0-need(r.rows),ways:sub.ways};
+      if(better(v,out))out=v}
+     memo.set(key,out);return out};
+    // the root moves the tree found, in its order
+    const n0=need(rows0);
+    for(const c of list){if(c.dead)continue;const m=c.move;const r=okMove(rows0,m.type,m);if(!r)continue;
+     const h2=m.hold?(rootNode.hold?seq[0]:seq[0]):rootNode.hold,q2=m.hold&&!rootNode.hold?2:1;
+     const sub=dfs(r.rows,h2,q2),v={ok:sub.ok,g:sub.g+n0-need(r.rows),ways:sub.ways,c};
+     if(v.ok&&(!best||better(v,best)))best=v}
+   }
+   if(root.__openDbg)root.__openDbg(best&&{g:best.g,ways:best.ways,type:best.c.move.type},rootCells);
+   return best?best.c:null;
+  }
   function result(){
    const list=rootNode.children||[];if(!list.length)return null;
+   const op=openPlan(list);if(op)return out(op);
    // CC1 pick_move: skip lines that let the waiting garbage top out the middle columns
    const inc=Math.max(0,Number(P.incoming)||0);
    const pickList=[];

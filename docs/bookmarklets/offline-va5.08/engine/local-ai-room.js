@@ -78,7 +78,7 @@
   const roomOptions=window.LocalRoomUI?.read?.()?.options||{};
   const music=musicOn(),games=window.LocalNative.tlRound({names,left:asSide(leftValue),right:asSide(rightValue),seed:config.seed,mode:config.mode,options:roomOptions,keepBgm:music&&!!config._continuing}),state=session={games,cleanup:[],stopped:false,finished:false,config};
   // One TTRM per match: rounds are added as they finish (config._match survives auto-advance).
-  if(!config._continuing||!config._match)config._match={key:'m'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),mode:config.mode==='custom'?'custom':'league',names,ai:profiles.map(p=>p?.id||null),rounds:[],wins:[0,0],recordId:null};
+  if(!config._continuing||!config._match)config._match={key:'m'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),mode:config.mode==='custom'?'custom':'league',names,ai:profiles.map(p=>p?.id||null),engines:[...(config.engines||[])],rounds:[],wins:[0,0],recordId:null};
   state.match=config._match;
   // TL creates two independent game instances. Apply the selected clock speed
   // to BOTH boards, including BOT vs BOT and the non-keyboard side.
