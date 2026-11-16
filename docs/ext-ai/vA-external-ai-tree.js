@@ -1441,6 +1441,74 @@
             return s / 4294967296;
           };
         }
+        let ORI = null;
+        function oris() {
+          if (ORI) return ORI;
+          ORI = [];
+          const S = SP2.__shapes(), seen = /* @__PURE__ */ new Set();
+          for (const type of PIECES) for (const cells of S[type]) {
+            const c2 = cells.map(([cx, cy]) => [cx, -cy]).sort((a, b) => a[1] - b[1] || a[0] - b[0]), o = c2.map(([x, k]) => [x - c2[0][0], k - c2[0][1]]), key = type + o.join(";");
+            if (!seen.has(key)) {
+              seen.add(key);
+              ORI.push({ type, c: o });
+            }
+          }
+          return ORI;
+        }
+        function tilings(rem, avail, cap, budget) {
+          const n = rem.reduce((a, m) => a + popc(m), 0);
+          if (n % 4) return 0;
+          if (!n) return 1;
+          const O = oris(), cnt = {}, stack = [];
+          let found = 0, left = budget;
+          const order = () => {
+            const n2 = stack.length, after = stack.map(() => []);
+            for (let a = 0; a < n2; a++) for (let b = 0; b < n2; b++) if (a !== b && stack[a].some(([x, k]) => stack[b].some(([X, K]) => X === x && K > k))) after[a].push(b);
+            const st = new Int8Array(n2);
+            const loop = (v) => {
+              st[v] = 1;
+              for (const w of after[v]) {
+                if (st[w] === 1 || st[w] === 0 && loop(w)) return true;
+              }
+              st[v] = 2;
+              return false;
+            };
+            for (let v = 0; v < n2; v++) if (!st[v] && loop(v)) return false;
+            return true;
+          };
+          const rec = () => {
+            if (found >= cap || left-- <= 0) return;
+            let k = 0;
+            while (k < rem.length && !rem[k]) k++;
+            if (k >= rem.length) {
+              if (order()) found++;
+              return;
+            }
+            const x = 31 - Math.clz32(rem[k] & -rem[k]);
+            for (const o of O) {
+              if ((cnt[o.type] | 0) >= (avail[o.type] | 0)) continue;
+              let ok = true;
+              for (const [dx, dk] of o.c) {
+                const X = x + dx, K = k + dk;
+                if (X < 0 || X >= W2 || K < 0 || K >= rem.length || !(rem[K] >> X & 1)) {
+                  ok = false;
+                  break;
+                }
+              }
+              if (!ok) continue;
+              for (const [dx, dk] of o.c) rem[k + dk] &= ~(1 << x + dx);
+              cnt[o.type] = (cnt[o.type] | 0) + 1;
+              stack.push(o.c.map(([dx, dk]) => [x + dx, k + dk]));
+              rec();
+              stack.pop();
+              cnt[o.type]--;
+              for (const [dx, dk] of o.c) rem[k + dk] |= 1 << x + dx;
+              if (found >= cap) return;
+            }
+          };
+          rec();
+          return found;
+        }
         function create(engine, state, options = {}) {
           const P = { ...DEFAULTS, ...root.__treePlannerParams || {}, ...options };
           if (!SP2.load(engine, String(P.kickset || "SRS+"))) return null;
@@ -1710,18 +1778,63 @@
               }
               return c2;
             };
+            const blocked = (rows, t) => {
+              const top = new Int8Array(W2).fill(-1);
+              for (let x = 0; x < W2; x++) for (let k = H2 - 1; k >= 0; k--) if (rows[H2 - 1 - k] >> x & 1) {
+                top[x] = k;
+                break;
+              }
+              let c2 = 0;
+              for (let k = 0; k < t.length; k++) {
+                const row = rows[H2 - 1 - k];
+                for (let x = 0; x < W2; x++) {
+                  if (!(t[k] >> x & 1) || row >> x & 1 || top[x] < k) continue;
+                  let ok = false;
+                  for (const dir of [-1, 1]) for (let s = 1, X = x + dir; s <= 3 && X >= 0 && X < W2 && !(row >> X & 1); s++, X += dir) if (top[X] < k) {
+                    ok = true;
+                    break;
+                  }
+                  if (!ok) c2++;
+                }
+              }
+              return c2;
+            };
+            const better = (a, b) => a.ok !== b.ok ? a.ok > b.ok : a.d !== b.d ? a.d > b.d : a.ways !== b.ways ? a.ways > b.ways : a.cv < b.cv;
+            const D0 = rootCells / 4 + (rootNode.hold ? 1 : 0);
             let best2 = null;
             for (let ti = 0; ti < opens.length; ti++) {
               const t = opens[ti];
               if (!inT(rows0, t)) continue;
-              const memo = /* @__PURE__ */ new Map();
+              const memo = /* @__PURE__ */ new Map(), tmemo = /* @__PURE__ */ new Map();
               let budget = P.openBudget;
+              const leaf = (rows, hold, qi) => {
+                const left = seq.slice(qi), key = rows.join(",") + "|" + hold + "|" + left.join("");
+                let w = tmemo.get(key);
+                if (w === void 0) {
+                  const rem = t.map((m, k) => m & ~rows[H2 - 1 - k]), n = rem.reduce((a, m) => a + popc(m), 0) / 4, avail = {};
+                  for (const x of left) avail[x] = (avail[x] || 0) + 1;
+                  if (hold) avail[hold] = (avail[hold] || 0) + 1;
+                  const gl = D0 + seq.length - 1, B = Math.floor(gl / 7), inB = /* @__PURE__ */ new Set();
+                  for (let j = 0; j < seq.length; j++) if (Math.floor((D0 + j) / 7) === B) inB.add(seq[j]);
+                  const restN = 6 - gl % 7, unknownB = Math.max(0, D0 - B * 7);
+                  let more = n - left.length - (hold ? 1 : 0);
+                  if (restN > 0) {
+                    for (const x of PIECES) if (!inB.has(x)) avail[x] = (avail[x] || 0) + (unknownB ? 1 : 1);
+                  }
+                  more -= restN;
+                  const bags = Math.max(0, Math.ceil(more / 7));
+                  if (bags) for (const x of PIECES) avail[x] = (avail[x] || 0) + bags;
+                  w = tilings(rem, avail, 16, 3e3);
+                  tmemo.set(key, w);
+                }
+                return { d: 0, ok: w > 0 ? 1 : 0, ways: w, cv: covered(rows, t) };
+              };
               const dfs = (rows, hold, qi) => {
                 const cur = qi < P.openDepth ? seq[qi] : null;
-                if (!cur || budget-- <= 0) return { d: 0, cv: covered(rows, t) };
+                if (!cur || budget-- <= 0) return leaf(rows, hold, qi);
                 const key = rows.join(",") + "|" + hold + "|" + qi;
                 if (memo.has(key)) return memo.get(key);
-                let out2 = { d: 0, cv: covered(rows, t) };
+                let out2 = leaf(rows, hold, qi);
                 const opts = [[cur, hold, qi + 1, false]];
                 if (holdOk) {
                   if (hold && hold !== cur) opts.push([hold, cur, qi + 1, true]);
@@ -1729,16 +1842,18 @@
                 }
                 for (const [type, h2, q2, held] of opts) for (const p of SP2.placements(rows, type, 4, 19, P.maxTail)) {
                   const r2 = lock(rows, type, p, 0);
-                  if (r2.lines || !inT(r2.rows, t)) continue;
-                  const sub = dfs(r2.rows, h2, q2), v = { d: sub.d + 1, cv: sub.cv, type, p, held };
-                  if (v.d > out2.d || v.d === out2.d && v.cv < out2.cv) out2 = v;
+                  if (r2.lines || !inT(r2.rows, t) || blocked(r2.rows, t) > blocked(rows, t)) continue;
+                  const sub = dfs(r2.rows, h2, q2), v = { d: sub.d + 1, ok: sub.ok, ways: sub.ways, cv: sub.cv, type, p, held };
+                  if (better(v, out2)) out2 = v;
                 }
                 memo.set(key, out2);
                 return out2;
               };
               const r = dfs(rows0, rootNode.hold, 0);
-              if (r.d > 0 && (!best2 || r.d > best2.d || r.d === best2.d && r.cv < best2.cv)) best2 = r;
+              r.t = t;
+              if (r.d > 0 && r.ok && (!best2 || better(r, best2))) best2 = r;
             }
+            if (root.__openDbg) root.__openDbg(best2 && { t: opens.indexOf(best2.t), d: best2.d, ok: best2.ok, ways: best2.ways, type: best2.type }, rootCells);
             if (!best2) return null;
             return list.find((c2) => !c2.dead && c2.move.type === best2.type && c2.move.x === best2.p.x && c2.move.y === best2.p.y && c2.move.r === best2.p.r && !!c2.move.hold === best2.held) || null;
           }

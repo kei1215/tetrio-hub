@@ -191,6 +191,29 @@
  }
  function rng(seed){let s=seed>>>0||1;return()=>{s^=s<<13;s>>>=0;s^=s>>>17;s^=s<<5;s>>>=0;return s/4294967296}}
 
+ // can the rest of an opener still be filled with pieces? (user: どこに置いたら形が作れるか / どこまで組めば
+ // あとは確定できるか) Exact cover of the opener's empty cells by tetrominoes, lowest-leftmost cell first, each kind
+ // at most as many times as it can still come (avail, from the 7-bag). Returns how many ways (up to cap); 0 = this setup is lost.
+ let ORI=null;
+ function oris(){if(ORI)return ORI;ORI=[];const S=SP.__shapes(),seen=new Set();
+  for(const type of PIECES)for(const cells of S[type]){const c=cells.map(([cx,cy])=>[cx,-cy]).sort((a,b)=>a[1]-b[1]||a[0]-b[0]),o=c.map(([x,k])=>[x-c[0][0],k-c[0][1]]),key=type+o.join(';');if(!seen.has(key)){seen.add(key);ORI.push({type,c:o})}}
+  return ORI}
+ function tilings(rem,avail,cap,budget){
+  const n=rem.reduce((a,m)=>a+popc(m),0);if(n%4)return 0;if(!n)return 1;
+  const O=oris(),cnt={},stack=[];let found=0,left=budget;
+  // a way only counts if the pieces can go in from below to above: a piece that has another one's cell under it in
+  // the same column comes after it; a loop means it cannot be built
+  const order=()=>{const n=stack.length,after=stack.map(()=>[]);
+   for(let a=0;a<n;a++)for(let b=0;b<n;b++)if(a!==b&&stack[a].some(([x,k])=>stack[b].some(([X,K])=>X===x&&K>k)))after[a].push(b);
+   const st=new Int8Array(n);const loop=v=>{st[v]=1;for(const w of after[v]){if(st[w]===1||st[w]===0&&loop(w))return true}st[v]=2;return false};
+   for(let v=0;v<n;v++)if(!st[v]&&loop(v))return false;return true};
+  const rec=()=>{if(found>=cap||left--<=0)return;let k=0;while(k<rem.length&&!rem[k])k++;if(k>=rem.length){if(order())found++;return}
+   const x=31-Math.clz32(rem[k]&-rem[k]);
+   for(const o of O){if((cnt[o.type]|0)>=(avail[o.type]|0))continue;let ok=true;
+    for(const [dx,dk] of o.c){const X=x+dx,K=k+dk;if(X<0||X>=W||K<0||K>=rem.length||!(rem[K]>>X&1)){ok=false;break}}
+    if(!ok)continue;for(const [dx,dk] of o.c)rem[k+dk]&=~(1<<(x+dx));cnt[o.type]=(cnt[o.type]|0)+1;stack.push(o.c.map(([dx,dk])=>[x+dx,k+dk]));
+    rec();stack.pop();cnt[o.type]--;for(const [dx,dk] of o.c)rem[k+dk]|=1<<(x+dx);if(found>=cap)return}};
+  rec();return found}
  function create(engine,state,options={}){
   const P={...DEFAULTS,...(root.__treePlannerParams||{}),...options};
   if(!SP.load(engine,String(P.kickset||'SRS+')))return null;
@@ -315,21 +338,41 @@
    if(!openOn)return null;const H=rows0.length;
    const inT=(rows,t)=>{for(let k=0;k<H;k++){const m=rows[H-1-k];if(m&&(m&~(t[k]||0)))return false}return true};
    const covered=(rows,t)=>{let c=0;for(let x=0;x<W;x++){let top=false;for(let k=H-1;k>=0;k--){const f=rows[H-1-k]>>x&1;if(f)top=true;else if(top&&k<t.length&&(t[k]>>x&1))c++}}return c};
-   let best=null;
+   // opener cells still to fill that a piece now covers and that cannot be reached by sliding in from the side
+   // (a tuck / spin up to 3 columns away under an open sky); a move must not add any (user: どこに置いたら形が作れるか)
+   const blocked=(rows,t)=>{const top=new Int8Array(W).fill(-1);for(let x=0;x<W;x++)for(let k=H-1;k>=0;k--)if(rows[H-1-k]>>x&1){top[x]=k;break}
+    let c=0;for(let k=0;k<t.length;k++){const row=rows[H-1-k];for(let x=0;x<W;x++){if(!(t[k]>>x&1)||row>>x&1||top[x]<k)continue;
+     let ok=false;for(const dir of [-1,1])for(let s=1,X=x+dir;s<=3&&X>=0&&X<W&&!(row>>X&1);s++,X+=dir)if(top[X]<k){ok=true;break}
+     if(!ok)c++}}return c};
+   // a line ends with how many ways the rest of the opener can still be filled (0 = it cannot be finished)
+   const better=(a,b)=>(a.ok!==b.ok?a.ok>b.ok:a.d!==b.d?a.d>b.d:a.ways!==b.ways?a.ways>b.ways:a.cv<b.cv);
+   const D0=rootCells/4+(rootNode.hold?1:0);let best=null;
    for(let ti=0;ti<opens.length;ti++){const t=opens[ti];if(!inT(rows0,t))continue;
-    const memo=new Map();let budget=P.openBudget;
-    const dfs=(rows,hold,qi)=>{const cur=qi<P.openDepth?seq[qi]:null;if(!cur||budget--<=0)return {d:0,cv:covered(rows,t)};
+    const memo=new Map(),tmemo=new Map();let budget=P.openBudget;
+    // pieces still to come (user: どこまで組めばあとは確定できるか): the known ones left, the hold, the rest of the
+    // 7-bag the last known piece is in (pieces drawn so far = opener pieces on the board + hold), then whole bags
+    const leaf=(rows,hold,qi)=>{const left=seq.slice(qi),key=rows.join(',')+'|'+hold+'|'+left.join('');let w=tmemo.get(key);
+     if(w===undefined){const rem=t.map((m,k)=>m&~rows[H-1-k]),n=rem.reduce((a,m)=>a+popc(m),0)/4,avail={};
+      for(const x of left)avail[x]=(avail[x]||0)+1;if(hold)avail[hold]=(avail[hold]||0)+1;
+      const gl=D0+seq.length-1,B=Math.floor(gl/7),inB=new Set();for(let j=0;j<seq.length;j++)if(Math.floor((D0+j)/7)===B)inB.add(seq[j]);
+      const restN=6-gl%7,unknownB=Math.max(0,D0-B*7);let more=n-left.length-(hold?1:0);
+      if(restN>0)for(const x of PIECES)if(!inB.has(x))avail[x]=(avail[x]||0)+(unknownB?1:1);
+      more-=restN;const bags=Math.max(0,Math.ceil(more/7));if(bags)for(const x of PIECES)avail[x]=(avail[x]||0)+bags;
+      w=tilings(rem,avail,16,3000);tmemo.set(key,w)}
+     return {d:0,ok:w>0?1:0,ways:w,cv:covered(rows,t)}};
+    const dfs=(rows,hold,qi)=>{const cur=qi<P.openDepth?seq[qi]:null;if(!cur||budget--<=0)return leaf(rows,hold,qi);
      const key=rows.join(',')+'|'+hold+'|'+qi;if(memo.has(key))return memo.get(key);
-     let out={d:0,cv:covered(rows,t)};const opts=[[cur,hold,qi+1,false]];
+     let out=leaf(rows,hold,qi);const opts=[[cur,hold,qi+1,false]];
      if(holdOk){if(hold&&hold!==cur)opts.push([hold,cur,qi+1,true]);else if(!hold&&seq[qi+1])opts.push([seq[qi+1],cur,qi+2,true])}
      for(const [type,h2,q2,held] of opts)for(const p of SP.placements(rows,type,4,19,P.maxTail)){
-      const r=lock(rows,type,p,0);if(r.lines||!inT(r.rows,t))continue;
-      const sub=dfs(r.rows,h2,q2),v={d:sub.d+1,cv:sub.cv,type,p,held};
-      if(v.d>out.d||v.d===out.d&&v.cv<out.cv)out=v}
+      const r=lock(rows,type,p,0);if(r.lines||!inT(r.rows,t)||blocked(r.rows,t)>blocked(rows,t))continue;
+      const sub=dfs(r.rows,h2,q2),v={d:sub.d+1,ok:sub.ok,ways:sub.ways,cv:sub.cv,type,p,held};
+      if(better(v,out))out=v}
      memo.set(key,out);return out};
     const r=dfs(rows0,rootNode.hold,0);
-    if(r.d>0&&(!best||r.d>best.d||r.d===best.d&&r.cv<best.cv))best=r;
+    r.t=t;if(r.d>0&&r.ok&&(!best||better(r,best)))best=r;
    }
+   if(root.__openDbg)root.__openDbg(best&&{t:opens.indexOf(best.t),d:best.d,ok:best.ok,ways:best.ways,type:best.type},rootCells);
    if(!best)return null;
    return list.find(c=>!c.dead&&c.move.type===best.type&&c.move.x===best.p.x&&c.move.y===best.p.y&&c.move.r===best.p.r&&!!c.move.hold===best.held)||null;
   }
