@@ -348,7 +348,7 @@
    const better=(a,b)=>(a.ok!==b.ok?a.ok>b.ok:a.g!==b.g?a.g>b.g:a.ways>b.ways);
    let best=null;
    for(const o of opens){const t=o.rows,e=o.empty,L=t.length;
-    const bad=rows=>{for(let k=0;k<L;k++)if(rows[H-1-k]&e[k])return true;return false};
+    const bad=rows=>{for(let k=0;k<e.length;k++)if(rows[H-1-k]&e[k])return true;return false};
     const need=rows=>{let c=0;for(let k=0;k<L;k++)c+=popc(t[k]&~rows[H-1-k]);return c};
     if(bad(rows0)||!need(rows0))continue;
     const blocked=rows=>{const top=new Int8Array(W).fill(-1);for(let x=0;x<W;x++)for(let k=H-1;k>=0;k--)if(rows[H-1-k]>>x&1){top[x]=k;break}

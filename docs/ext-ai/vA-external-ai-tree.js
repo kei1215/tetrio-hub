@@ -1776,7 +1776,7 @@
             for (const o of opens) {
               const t = o.rows, e = o.empty, L = t.length;
               const bad = (rows) => {
-                for (let k = 0; k < L; k++) if (rows[H2 - 1 - k] & e[k]) return true;
+                for (let k = 0; k < e.length; k++) if (rows[H2 - 1 - k] & e[k]) return true;
                 return false;
               };
               const need = (rows) => {

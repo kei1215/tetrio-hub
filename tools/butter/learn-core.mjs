@@ -185,7 +185,19 @@ export async function learn(files, playerArg, opt = {}) {
         // rows a T-spin clears (user: 右端は自由になっちゃダメ): a row with a slot that was full except the slot in at
         // least a third of them is a setup row all the way across, so the right end is not free there
         for (let k = 0; k < L; k++) if (empty[k]) { const fullRow = full.reduce((t, b) => t + (((b.rows[k] || 0) | empty[k]) === 1023 ? b.n : 0), 0); if (fullRow * 3 >= tot) must[k] = 1023 & ~empty[k]; }
-        while (must.length && !must[must.length - 1]) { must.pop(); empty.pop(); }
+        // above the rows a T-spin clears only the roofs are needed (user: 屋根以外の二行目の必須系はなくてもいける): a
+        // cell there stays setup only if a slot is under it in its column. Left of a roof and above it stay empty
+        // until the T is in (user: 屋根の左側や上も打ち終わるまで開けてなきゃいけない), where none of them had a block.
+        { let top = -1; for (let k = 0; k < L; k++) if (empty[k] && must[k] === (1023 & ~empty[k])) top = k;
+          const slotUnder = (x, k) => { for (let j = 0; j < k; j++) if (empty[j] >> x & 1) return true; return false };
+          const never = (x, k) => full.every((b) => !((b.rows[k] || 0) >> x & 1));
+          if (top >= 0) for (let k = top + 1; k < L; k++) for (let x = 0; x < 10; x++) if (must[k] >> x & 1 && !slotUnder(x, k)) must[k] &= ~(1 << x);
+          while (empty.length < L + 1) { empty.push(0); must.push(0); }
+          for (let k = top + 1; k < L; k++) for (let x = 0; x < 10; x++) if (must[k] >> x & 1 && slotUnder(x, k)) {
+            for (let j = k + 1; j <= L; j++) if (never(x, j)) empty[j] |= 1 << x; else break;          // above the roof
+            for (let X = x - 1; X >= 0 && !(must[k] >> X & 1); X--) if (never(X, k)) empty[k] |= 1 << X; else break;   // left of it
+          } }
+        while (must.length && !must[must.length - 1]) must.pop();
         if (must.length) out.push({ rows: must, empty, n: a.sup, seen: full.length });
         if (out.length >= 4) break;
       }
