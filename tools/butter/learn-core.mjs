@@ -56,7 +56,8 @@ export async function learn(files, playerArg, opt = {}) {
   const data = []; let games = 0, skipped = 0, realName = null;
   // opening shapes (user: 開幕テンプレが全く違う): the board before the player's first line clear (no garbage yet),
   // counted by shape; the most common ones become this player's openers (one-off shapes only if none repeat).
-  const openings = new Map(), follows = new Map();   // follows: setup key -> how the next two clears went
+  const openings = new Map(), follows = new Map(), openPieces = new Map();   // openPieces: setup key -> the pieces of each board [{t, c: [[x, k]]}] (k = row from the bottom)
+     // follows: setup key -> how the next two clears went
   // B2B charging (user: B2Bを火力を出る数ためたのが1回だけ): peaks of the player's B2B chains that reached 4+
   const peaks = []; let b2bPieces = 0;
   for (let fi = 0; fi < files.length && data.length < MAXP; fi++) {
@@ -67,7 +68,7 @@ export async function learn(files, playerArg, opt = {}) {
       SP.setTables({ shapes, kicks: ks.kicks, ikicks: ks.i_kicks || ks.kicks, corner: [c4, c4, c4, c4] });
       SP.useRules({ allow180: o.allow180 !== false });
       let sim; try { sim = new PlayerSim(p.replay, { ts: p.ts }); } catch { continue; }
-      games++; realName ??= p.username; let placed = 0, prevB = 0, openSt = 0, openPrev = null, lastKind = null, follow = null; const openIdx = new Map();
+      games++; realName ??= p.username; let placed = 0, prevB = 0, openSt = 0, openPrev = null, lastKind = null, follow = null; const openIdx = new Map(), openTypes = {};
       for (let guard = 0; guard < 300000 && !sim.finished; guard++) {
         const e = sim.engine, pre = rowsOf(e.board.state), b2b = Math.max(0, e.stats?.b2b ?? 0), combo = Math.max(0, e.stats?.combo ?? 0);
         const hold = e.held ? String(e.held).toLowerCase() : null, queue = (e.queue || []).slice(0, 5).map((q) => String(q).toLowerCase());
@@ -75,7 +76,7 @@ export async function learn(files, playerArg, opt = {}) {
         const preOwn = g ? rowsOf(e.board.state.filter((row) => !row.some((c) => c && c.mino === "gb"))) : pre;
         if (sim.step() === null) break;
         for (const lk of sim.frameLocks) {
-          placed++; b2bPieces++;
+          placed++; b2bPieces++; openTypes[placed] = String(lk.res.mino).toLowerCase();
           // what this lock cleared, for "how the player attacks from a setup" (user: どういう打ちをするか理解して)
           const lkLines = Math.max(0, lk.res.lines | 0), lkT = String(lk.res.mino).toLowerCase(), lkSp = lk.res.spin;
           const lkKind = !lkLines ? null : lkT === "t" && lkSp === "normal" ? "tspin" + lkLines : lkT === "t" && lkSp === "mini" ? "tmini" : lkLines === 4 ? "quad" : lkSp && lkSp !== "none" ? "allSpin" : "clear" + lkLines;
@@ -86,10 +87,14 @@ export async function learn(files, playerArg, opt = {}) {
           //待ち、3巡目のTまで要る): so a DT cannon / PC setup is kept whole, and the planner fills it in piece order
           // garbage that came in meanwhile is taken off (the setup is what the player built on top of it)
           if (openSt === 0) { const own = preOwn, cells = own.reduce((a, m) => a + popc(m), 0);
-            if (cells !== (placed - 1) * 4) { openSt = 1; if (openPrev && placed - 2 >= 4 && placed - 2 <= 22) { const sh = setupOf(openPrev, openIdx); if (sh) { openings.set(sh, (openings.get(sh) || 0) + 1); follow = { key: sh, seq: kindPrev ? [kindPrev] : [] }; }  } }
+            if (cells !== (placed - 1) * 4) { openSt = 1; if (openPrev && placed - 2 >= 4 && placed - 2 <= 22) { const sh = setupOf(openPrev, openIdx); if (sh) { openings.set(sh, (openings.get(sh) || 0) + 1);
+                { const by = new Map(), top = openPrev.length; for (const [c, pi] of openIdx) { const [k, x] = c.split(",").map(Number); if (!(openPrev[top - 1 - k] >> x & 1)) continue; if (!by.has(pi)) by.set(pi, []); by.get(pi).push([x, k]); }
+                  const ps = [...by.entries()].sort((a, b) => a[0] - b[0]).filter(([pi, c]) => c.length === 4 && openTypes[pi]).map(([pi, c], i) => ({ t: openTypes[pi], c, i }));
+                  if (!openPieces.has(sh)) openPieces.set(sh, []); openPieces.get(sh).push(ps); } follow = { key: sh, seq: kindPrev ? [kindPrev] : [] }; }  } }
             else if (placed > 23) openSt = 1;
             else { // which piece (1, 2, ...) filled each cell: the new cells since the last lock (no clears yet)
-              const H = own.length; for (let y = 0; y < H; y++) { const nw = own[y] & ~((openPrev && openPrev[y]) || 0); for (let x = 0; x < 10; x++) if (nw >> x & 1) openIdx.set((H - 1 - y) + "," + x, placed - 1); } }
+              // (rows are compared from the bottom: garbage rows are taken off, so the two boards can differ in length)
+              const H = own.length, Hp = openPrev ? openPrev.length : 0; for (let k = 0; k < H; k++) { const nw = own[H - 1 - k] & ~((k < Hp && openPrev[Hp - 1 - k]) || 0); for (let x = 0; x < 10; x++) if (nw >> x & 1) openIdx.set(k + "," + x, placed - 1); } }
             openPrev = own; }
           const type = String(lk.res.mino).toLowerCase(), h = pre.length;
           if (!shapes[type]) continue;
@@ -214,7 +219,20 @@ export async function learn(files, playerArg, opt = {}) {
         // how the player attacked from it: the most common first two clears (e.g. tspin2>tspin3 = DT砲)
         const fm = new Map(); for (const b of g) for (const [q, c] of follows.get((b.src || b).key) || []) fm.set(q, (fm.get(q) || 0) + c);
         const then = fm.size ? [...fm.entries()].sort((p, q) => q[1] - p[1])[0][0].split(">") : [];
-        if (must.length) out.push({ rows: must, empty, n: a.sup, seen: full.length, then, mirror: g.some((b) => b.flipped) });
+        // the book (user: y_kei1215 の DT砲を組めていない): the pieces themselves. A piece (kind + cells) that is in 90% or
+        // more of these boards is a book piece (the right side of a DT cannon's second bag differs from game to game: free), in the order the player placed it; the planner puts book pieces where
+        // the player did (the first bag's T too), keeps the other pieces off them, and the rest stays free.
+        const PM = { l: "j", j: "l", s: "z", z: "s" }, bk = new Map(); let boards = 0;
+        for (const b of g) for (const ps of openPieces.get((b.src || b).key) || []) { boards++;
+          for (const q of ps) { const c = (b.flipped ? q.c.map(([x, k]) => [9 - x, k]) : q.c).slice().sort((u, v) => u[1] - v[1] || u[0] - v[0]), t = b.flipped ? PM[q.t] || q.t : q.t, key = t + c.join(";");
+            const e = bk.get(key) || { t, c, n: 0, at: 0 }; e.n++; e.at += q.i; bk.set(key, e); } }
+        const fullN = full.reduce((t, b) => t + (openPieces.get((b.src || b).key) || []).length, 0) || boards;
+        if (globalThis.__bookDbg) console.error('book', boards, fullN, g.length, [...bk.values()].map((e) => e.t + e.n + '@' + e.c.join(';')).join('  '));
+        const book = [...bk.values()].filter((e) => e.n >= 2 && e.n >= 0.9 * boards).sort((u, v) => u.at / u.n - v.at / v.n).map((e) => ({ t: e.t, c: e.c }));
+        // with a book, the setup cells are the book's cells (the setup is done when every book piece is in)
+        if (book.length >= 4) { for (const q of book) for (const [x, k] of q.c) { while (must.length <= k) must.push(0); must[k] |= 1 << x; } while (empty.length < must.length) empty.push(0);
+          for (let k = 0; k < must.length; k++) empty[k] &= ~must[k]; }
+        if (must.length) out.push({ rows: must, empty, n: a.sup, seen: full.length, then, mirror: g.some((b) => b.flipped), ...(book.length >= 4 ? { book } : {}) });
         if (out.length >= 4) break;
       }
       return out;

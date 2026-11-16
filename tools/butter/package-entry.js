@@ -34,7 +34,8 @@ LocalExternalAI.register({
     // Misdrops are not copied (user: ミスに関してはオフ状態だからいい).
     // a setup the player built both ways is offered mirrored too (user: PCOみたいに左右反転あり)
     const rev = (m) => { let r = 0; for (let x = 0; x < W; x++) if (m >> x & 1) r |= 1 << (W - 1 - x); return r; };
-    const openers = data && data.openers ? data.openers.flatMap((o) => (o.mirror ? [o, { ...o, rows: o.rows.map(rev), empty: (o.empty || []).map(rev) }] : [o])) : null;
+    const PM = { l: "j", j: "l", s: "z", z: "s" }, revBook = (b) => b && b.map((q) => ({ t: PM[q.t] || q.t, c: q.c.map(([x, k]) => [W - 1 - x, k]) }));
+    const openers = data && data.openers ? data.openers.flatMap((o) => (o.mirror ? [o, { ...o, rows: o.rows.map(rev), empty: (o.empty || []).map(rev), book: revBook(o.book) }] : [o])) : null;
     const like = data ? { openers, pickBeta: data.beta || 0, misdrop: 0 } : {};
     // opener only from an empty board until the first line clear or garbage (cells drop, or jump by more than a piece);
     // the 9-cell rows of a DT cannon must not be taken for garbage here

@@ -1553,7 +1553,7 @@
           for (const m of rows0) if (m) rootCells += popc(m);
           const opens = (P.openers || []).map((o) => {
             const rows = o.rows || o;
-            return { rows, empty: o.empty || rows.map(() => 0) };
+            return { rows, empty: o.empty || rows.map(() => 0), book: o.book || null, n: o.n || 1 };
           }).filter(() => P.openLive !== void 0 ? !!P.openLive : !g0), openOn = opens.length > 0;
           const seen = /* @__PURE__ */ new Map();
           let nodes = 0, done = false, spent = 0, best = null, maxDepth = 0, iters = 0;
@@ -1895,10 +1895,204 @@
             if (root.__openDbg) root.__openDbg(best2 && { g: best2.g, ways: best2.ways, type: best2.c.move.type }, rootCells);
             return best2 ? best2.c : null;
           }
+          function bookPlan(list) {
+            if (!openOn) return null;
+            const H2 = rows0.length, S = SP2.__shapes();
+            let doneAny = false;
+            const picks = [];
+            const sq = seq.slice();
+            {
+              const D0 = Math.round(rootCells / 4) + (rootNode.hold ? 1 : 0), at = (D0 + sq.length) % 7;
+              if (at === 6) {
+                const inB = new Set(sq.slice(sq.length - 6));
+                const left = PIECES.filter((t) => !inB.has(t));
+                if (left.length === 1) sq.push(left[0]);
+              }
+            }
+            for (const o of opens) {
+              const B = o.book;
+              if (!B || !B.length) continue;
+              const e = o.empty, L = o.rows.length;
+              const rb = new Array(L + 6);
+              for (let k = 0; k < L + 6; k++) rb[k] = rows0[H2 - 1 - k] || 0;
+              let bad = false;
+              for (let k = 0; k < e.length; k++) if (rb[k] & e[k]) {
+                bad = true;
+                break;
+              }
+              if (bad) continue;
+              let done2 = 0;
+              for (let i = 0; i < B.length && !bad; i++) {
+                let f = 0;
+                for (const [x, k] of B[i].c) if (rb[k] >> x & 1) f++;
+                if (f === 4) done2 |= 1 << i;
+                else if (f) bad = true;
+              }
+              if (bad) continue;
+              if (done2 === (1 << B.length) - 1) {
+                doneAny = true;
+                continue;
+              }
+              const dep = B.map((q, i) => {
+                let m = 0;
+                B.forEach((r, j) => {
+                  if (j !== i && q.c.some(([x, k]) => r.c.some(([X, K]) => X === x && K < k))) m |= 1 << j;
+                });
+                return m;
+              });
+              const rmemo = /* @__PURE__ */ new Map();
+              const reach = (rows, i) => {
+                const key = i + "|" + rows.join(",");
+                let v = rmemo.get(key);
+                if (v !== void 0) return v;
+                const full = new Array(H2).fill(0);
+                for (let k = 0; k < rows.length; k++) full[H2 - 1 - k] = rows[k];
+                v = false;
+                for (const q of SP2.placements(full, B[i].t, 4, 19, P.maxTail)) {
+                  const cs = S[B[i].t][q.r];
+                  if (B[i].c.every(([x, k]) => cs.some(([cx, cy]) => q.x + cx === x && H2 - 1 - (q.y + cy) === k))) {
+                    v = true;
+                    break;
+                  }
+                }
+                rmemo.set(key, v);
+                return v;
+              };
+              const fits2 = (rows, i) => {
+                let sup = false, drop = true;
+                for (const [x, k] of B[i].c) {
+                  if (rows[k] >> x & 1) return 0;
+                  if (k === 0 || rows[k - 1] >> x & 1) sup = true;
+                  if (drop) {
+                    for (let K = k + 1; K < rows.length; K++) if (rows[K] >> x & 1) {
+                      drop = false;
+                      break;
+                    }
+                  }
+                }
+                return !sup ? 0 : drop ? 2 : 1;
+              };
+              const can = (rows, dn, i) => {
+                if (dn >> i & 1) return false;
+                const f = fits2(rows, i);
+                if (!f || f === 1 && !reach(rows, i)) return false;
+                if ((dep[i] & ~dn) !== 0) {
+                  const n = put(rows, i);
+                  for (let j = 0; j < B.length; j++) if (dep[i] >> j & 1 && !(dn >> j & 1)) {
+                    const g = fits2(n, j);
+                    if (g === 1 && !reach(n, j)) return false;
+                  }
+                }
+                return true;
+              };
+              const put = (rows, i) => {
+                const n = rows.slice();
+                for (const [x, k] of B[i].c) n[k] |= 1 << x;
+                return n;
+              };
+              const memo = /* @__PURE__ */ new Map();
+              const dfs = (rows, dn, hold, qi) => {
+                const cur = sq[qi];
+                if (!cur) return 0;
+                const key = dn + "|" + hold + "|" + qi;
+                if (memo.has(key)) return memo.get(key);
+                let best3 = 0;
+                const opts = [[cur, hold, qi + 1]];
+                if (holdOk) {
+                  if (hold && hold !== cur) opts.push([hold, cur, qi + 1]);
+                  else if (!hold && sq[qi + 1]) opts.push([sq[qi + 1], cur, qi + 2]);
+                }
+                for (const [type, h2, q2] of opts) {
+                  let placed = false;
+                  for (let i = 0; i < B.length; i++) if (B[i].t === type && can(rows, dn, i)) {
+                    placed = true;
+                    const v = 1 + dfs(put(rows, i), dn | 1 << i, h2, q2);
+                    if (v > best3) best3 = v;
+                  }
+                  if (!placed && (type !== "t" || h2 === "t")) {
+                    const v = dfs(rows, dn, h2, q2) - 0.01;
+                    if (v > best3) best3 = v;
+                  }
+                }
+                memo.set(key, best3);
+                return best3;
+              };
+              const rem = new Array(L + 6).fill(0);
+              for (let i = 0; i < B.length; i++) if (!(done2 >> i & 1)) for (const [x, k] of B[i].c) rem[k] |= 1 << x;
+              const tKeep = !(rootNode.hold === "t" && seq[0] === "t");
+              let best2 = null;
+              const DBG = root.__bookDbg ? { cover: 0, slot: 0, tall: 0, over: 0, tk: 0, dep: 0, lines: 0, free: 0 } : null;
+              for (const c2 of list) {
+                if (c2.dead) continue;
+                const m = c2.move, cells = S[m.type][m.r].map(([cx, cy]) => [m.x + cx, H2 - 1 - (m.y + cy)]);
+                if (cells.some(([x, k]) => k < 0 || k >= L + 6)) continue;
+                const r = lock(rows0, m.type, m, 0);
+                if (r.lines) continue;
+                const h2 = m.hold ? seq[0] : rootNode.hold, q2 = m.hold && !rootNode.hold ? 2 : 1;
+                let bi = -1;
+                for (let i = 0; i < B.length; i++) if (!(done2 >> i & 1) && B[i].t === m.type && B[i].c.every(([x, k]) => cells.some(([X, K]) => X === x && K === k))) {
+                  bi = i;
+                  break;
+                }
+                let v;
+                if (bi >= 0) {
+                  if (!can(rb, done2, bi)) continue;
+                  v = 1 + dfs(put(rb, bi), done2 | 1 << bi, h2, q2) + (m.type === "t" ? 5e-3 : 0) + (m.hold ? 0 : 1e-3);
+                } else {
+                  if (m.type === "t" && tKeep) {
+                    if (DBG) DBG.tk++;
+                    continue;
+                  }
+                  let ok = true;
+                  for (const [x, k] of cells) {
+                    if (rem[k] >> x & 1 || (e[k] || 0) >> x & 1 || k > L + 3) {
+                      ok = false;
+                      if (DBG) DBG[rem[k] >> x & 1 ? "cover" : (e[k] || 0) >> x & 1 ? "slot" : "tall"]++;
+                      break;
+                    }
+                    for (let K = 0; K < k; K++) if (rem[K] >> x & 1) {
+                      ok = false;
+                      if (DBG) DBG.over++;
+                      break;
+                    }
+                    if (!ok) break;
+                  }
+                  if (!ok) continue;
+                  const n = rb.slice();
+                  for (const [x, k] of cells) n[k] |= 1 << x;
+                  v = dfs(n, done2, h2, q2) - 0.01;
+                  if (DBG) {
+                    DBG.free++;
+                    DBG.fv = v;
+                  }
+                }
+                if (!best2 || v > best2.v + 1e-9) best2 = { v, c: c2, book: bi >= 0 };
+              }
+              if (root.__bookDbg) root.__bookDbg({ done: done2.toString(2), best: best2 && { v: best2.v, book: best2.book, t: best2.c.move.type }, why: DBG, list: list.length, seq: seq.join(""), hold: rootNode.hold });
+              if (best2 && best2.v > 0) picks.push({ ...best2, o });
+            }
+            if (!picks.length) return doneAny ? { done: true } : null;
+            const top = Math.max(...picks.map((p) => p.v)), near = picks.filter((p) => p.v >= top - 0.5);
+            let pick2 = near[0];
+            if (near.length > 1) {
+              let tot = near.reduce((a, p) => a + p.o.n, 0), r = Math.random() * tot;
+              for (const p of near) {
+                r -= p.o.n;
+                if (r <= 0) {
+                  pick2 = p;
+                  break;
+                }
+              }
+            }
+            if (root.__openDbg) root.__openDbg({ book: pick2.book, v: pick2.v, type: pick2.c.move.type }, rootCells);
+            return { c: pick2.c };
+          }
           function result() {
             const list = rootNode.children || [];
             if (!list.length) return null;
-            const op = openPlan(list);
+            const bp = bookPlan(list);
+            if (bp && bp.c) return out(bp.c);
+            const op = bp && bp.done ? null : openPlan(list);
             if (op) return out(op);
             const inc = Math.max(0, Number(P.incoming) || 0);
             const pickList = [];
@@ -2038,7 +2232,8 @@
         for (let x = 0; x < W; x++) if (m >> x & 1) r |= 1 << W - 1 - x;
         return r;
       };
-      const openers = data && data.openers ? data.openers.flatMap((o) => o.mirror ? [o, { ...o, rows: o.rows.map(rev), empty: (o.empty || []).map(rev) }] : [o]) : null;
+      const PM = { l: "j", j: "l", s: "z", z: "s" }, revBook = (b) => b && b.map((q) => ({ t: PM[q.t] || q.t, c: q.c.map(([x, k]) => [W - 1 - x, k]) }));
+      const openers = data && data.openers ? data.openers.flatMap((o) => o.mirror ? [o, { ...o, rows: o.rows.map(rev), empty: (o.empty || []).map(rev), book: revBook(o.book) }] : [o]) : null;
       const like = data ? { openers, pickBeta: data.beta || 0, misdrop: 0 } : {};
       let live = false, lastCells = -1, ready = null, follow = null;
       return {
