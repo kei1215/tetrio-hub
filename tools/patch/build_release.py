@@ -105,10 +105,24 @@ CLIENT_RENAMES_2026_11_10 = {'Ko': 'Vo', 'kc': 'Bc', 'Bs': 'Ls', 'Ml': 'Dl', '_c
 # a v4.8247+ transform.js (which already carries CLIENT_RENAMES_2026_11_10).
 CLIENT_RENAMES_2026_11_10B = {'Bc': 'Lc', 'Gc': 'Xc', 'Kc': 'Qc', 'Ls': 'Bs', 'Vo': 'Ko', 'Yl': 'Jl'}
 
+# TETR.IO client of 2026-11-15 (commit 75ce2f9f5, build 20261115T210526). Found with the anchor -> regex
+# method (old anchor with short names captured, unique match in the new client), applied all at once to the
+# v5.09 transform.js. Two anchors need literal edits (a one-letter local function and the PIXI namespace):
+# PORT_LITERALS_2026_11_16. Symptom before the port: OFFLINE showed "EXIT TETR.IO?".
+CLIENT_RENAMES_2026_11_16 = {'xa': 'Aa', 'ki': 'wi', 'ca': 'pa', '$i': 'Gi', 'xt': 'At', 'Qc': 'Jc', 'Xc': 'qc', 'ot': 'at',
+                             'Jl': 'ec', 'Bs': 'Ss', 'Ko': 'Yo', 'ta': 'na', 'oa': 'aa', 'ea': 'ta', 'ia': 'oa', 'Al': 'vl',
+                             'wl': 'Bl', 'Ht': 'Nt', 'Qs': 'Js', 'ka': 'wa', 'Dl': 'Ol', 'la': 'ca', 'yn': 'xn', 'gc': 'fc',
+                             'Yo': 'Qo', 'Jo': 'ea'}
+PORT_LITERALS_2026_11_16 = [('function x(e,n,i){', 'function y(e,n,i){'), ('new _.Text(', 'new m.Text(')]
+
 
 def rename_client_ids(src, names):
-    pat = re.compile(r'(?<![\w$.])(' + '|'.join(map(re.escape, names)) + r')(?![\w$])')
-    return pat.sub(lambda m: names[m.group(1)], src)
+    pat = re.compile(r'(?<![\w$.])(' + '|'.join(map(re.escape, sorted(names, key=len, reverse=True))) + r')(?![\w$])')
+    src = pat.sub(lambda m: names[m.group(1)], src)
+    if names is CLIENT_RENAMES_2026_11_16:
+        for a, b in PORT_LITERALS_2026_11_16:
+            src = src.replace(a, b)
+    return src
 
 
 def port_client(src):
@@ -790,6 +804,7 @@ def main():
     ap.add_argument('--hub', required=True, type=Path, help='tetrio-hub/docs')
     ap.add_argument('--port-2026-11-09', dest='port', action='store_true', help='adapt anchors to the TETR.IO client of 2026-11-09')
     ap.add_argument('--port-2026-11-10', dest='port1110', action='store_true', help='with --incremental: rename the client ids in transform.js for the TETR.IO client of 2026-11-10')
+    ap.add_argument('--port-2026-11-16', dest='port1116', action='store_true', help='with --incremental: rename the client ids for the TETR.IO client of 2026-11-15 (build 20261115T210526)')
     ap.add_argument('--port-2026-11-10b', dest='port1110b', action='store_true', help='with --incremental: rename the client ids for the rebuilt 2026-11-10 client (build 20261109T191625)')
     ap.add_argument('--offline-src', type=Path, help='folder with changed O/offline/* files (tools/patch/offline-src)')
     ap.add_argument('--incremental', action='store_true', help='OLD is already a build of this script (v4.8239+): only re-overlay O/offline, keep transform.js and client.js')
@@ -812,7 +827,7 @@ def main():
         old_zip = a.old_dir / f'QP-Patch-v{kind}{OV}-Source.zip'
         new_zip = a.new_dir / f'QP-Patch-v{kind}{NV}-Source.zip'
         old_sha = sha256(old_zip.read_bytes())
-        payload = build_zip(old_zip, new_zip, kind, a.old, a.new, edit_src, counter_src, a.port, offline, a.incremental, a.notes, ai if kind == 'A' else None, CLIENT_RENAMES_2026_11_10 if a.port1110 else CLIENT_RENAMES_2026_11_10B if a.port1110b else None, duo_src)
+        payload = build_zip(old_zip, new_zip, kind, a.old, a.new, edit_src, counter_src, a.port, offline, a.incremental, a.notes, ai if kind == 'A' else None, CLIENT_RENAMES_2026_11_10 if a.port1110 else CLIENT_RENAMES_2026_11_10B if a.port1110b else CLIENT_RENAMES_2026_11_16 if getattr(a, 'port1116', False) else None, duo_src)
         sums[new_zip.name] = sha256(payload)
         for osname, ext, flavor in OS_FILES:
             old_file = a.old_dir / f'tetrio-patch-{osname}-v{kind}{OV}{ext}'

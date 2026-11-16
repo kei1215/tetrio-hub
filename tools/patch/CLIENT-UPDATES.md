@@ -50,3 +50,4 @@
 | 2026-11-09 | (前回) | `CLIENT_RENAMES_2026_11_09`(Bc→Sc, El→Ml, Ht→Rt, Js→Zs, Mc→Ec, Ql→Yl, Qs→Ys, Ss→Bs, Yo→Qo, Zo→Jo)、Zenith の基底名を動的に読む | v4.8239〜 |
 | 2026-11-10 | commit e84ebccd2 / build 20261109T164827 | `CLIENT_RENAMES_2026_11_10`(Ko→Vo, kc→Bc, Bs→Ls, Ml→Dl, _c→gc, yl→Al, vl→wl, Rt→Ht, Ys→Qs, Qo→Yo) | v4.8247 |
 | 2026-11-10b | commit e84ebccd2 / build 20261109T191625(同じ commit の作り直し) | `CLIENT_RENAMES_2026_11_10B`(Bc→Lc, Gc→Xc, Kc→Qc, Ls→Bs, Vo→Ko, Yl→Jl)。症状: QP TOOLS の停止と PATCH DELETE が消えた、`Unsupported client version` | v4.8255 |
+| 2026-11-16 | commit 75ce2f9f5 / build 20261115T210526 | `CLIENT_RENAMES_2026_11_16`(26 個、`--port-2026-11-16`)+ 文字の置き換え 2 つ(`function x(e,n,i){`→`y`、`new _.Text(`→`m.Text(`)。旧本体が手元になかったので、transform.js の旧アンカーを新本体に当て、String の split/includes/match を見張って外れたものを順に直した。症状: OFFLINE で EXIT TETR.IO? | v5.10 |
