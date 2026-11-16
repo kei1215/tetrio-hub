@@ -188,6 +188,7 @@
 - (同日) GAS は秘密を持たない受付窓口に変更: TTR をドライブ、記録をスクリプト プロパティに3日間置き、pb-collect.yml が10分ごとに取り込んで Discord に投稿する。BOT・外部AIの記録は送信ボタンを出さず、GAS とイングェストでも断る(user: botの記録は残さない)。ページの BOT チェック欄も削除。Secret PB_DISCORD_WEBHOOK は設定済み。
 - 2026-11-16: v5.07 PUBLISHED (release patch-v5.07, target 0098de5). Browser: offline-va5.07 (va5.05/5.06 mirror it), offline-v4.8255 render-diagnostics from the vO zip, old v4.82xx re-mirrored. add-web-external.sh was not run (5.06 had no preinstalled external AIs either).
 
+- v5.12(2026-11-16):v5.11 は起動時に「Cannot find module './auto-port'」で落ちた(インストーラ patch_asar.py が transform/standalone しかコピーしていなかった)。O/R のインストーラに auto-port.js を追加、standalone は auto-port が無くても落ちない。再発チェック:O/ に新しいファイルを足したら patch_asar.py(O と R)にも足し、本物の app.asar で組み立てて中身を確認すること。
 - v5.11(2026-11-16):TETR.IO 更新での名前の付け替えにアプリ内で自動対応(O/auto-port.js、CLIENT-UPDATES.md)。v5.09 の書き換え位置を新しい本体に当てると手作業の v5.10 と同じ結果になることを確認。Butter はレベル設定なし(常に最大)。「Butter 名前」は本人の開幕形(7・14手目の盤面)に寄せ、B2B を本人くらい(peak の p75 まで)ためてから打ち、上位6手から少しばらつかせる(pickBeta)。置きミスは真似しない。学習メッセージの「undefined 試合」を修正。既存の「Butter 名前」は学習し直しが必要。再発チェック:埋め込みバンドル(QP_*_SRC)を自動ポートで書き換えないこと。
 - v5.10(2026-11-16):TETR.IO 本体の更新(build 20261115T210526)で OFFLINE が「EXIT TETR.IO?」になったのを直した(--port-2026-11-16、tools/patch/CLIENT-UPDATES.md)。
 - v5.09(2026-11-16):「Butter 名前」は本人の真似をする(重みは本人に全部寄せる MIX 1、本人がしない手の種類は禁止 ban、受けてからまとめ打ちはしない)。Butter 本体(データなし)は真似しない。再発チェック:本体に本人の癖が入らないこと。

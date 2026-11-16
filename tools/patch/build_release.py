@@ -639,7 +639,14 @@ MIGRATE_NEW = "return previous == self.version or (self.version == 2 and previou
 
 
 AUTO_PORT_OLD = "const patch=require('./transform');"
-AUTO_PORT_NEW = "const patch=require('./auto-port')(require('./transform'),require('path').join(__dirname,'transform.js'),app.getPath('userData'));"
+AUTO_PORT_511 = "const patch=require('./auto-port')(require('./transform'),require('path').join(__dirname,'transform.js'),app.getPath('userData'));"
+# v5.12: never crash the app when auto-port.js is missing (v5.11 installer did not copy it)
+AUTO_PORT_NEW = "let patch=require('./transform');try{patch=require('./auto-port')(patch,require('path').join(__dirname,'transform.js'),app.getPath('userData'))}catch(error){console.error('[QP auto-port]',error)}"
+
+AP_O_OLD = "for name in ['transform.js','standalone.js']:"
+AP_O_NEW = "for name in ['transform.js','standalone.js','auto-port.js']:"
+AP_R_OLD = "        replacements['qp-replay-patch/standalone.js'] = (OFFLINE / 'standalone.js').read_bytes()\n"
+AP_R_NEW = AP_R_OLD + "        replacements['qp-replay-patch/auto-port.js'] = (OFFLINE / 'auto-port.js').read_bytes()\n"
 
 
 def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=False, offline=None, incremental=False, notes='', ai=None, port_ids=None, duo_src=None):
@@ -712,10 +719,16 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                     text = add_cc_fix(text)
                 text = fix_replay_c_key(text, 'O/transform.js')
                 data = text.encode('utf-8')
+            elif name == 'O/patch_asar.py':
+                # v5.12: v5.11 added O/auto-port.js but the installer only copied transform/standalone (crash at start)
+                text = data.decode('utf-8')
+                if AP_O_NEW not in text:
+                    text = replace_once(text, AP_O_OLD, AP_O_NEW, name)
+                data = text.encode('utf-8')
             elif name == 'O/standalone.js':
                 text = data.decode('utf-8')
                 if AUTO_PORT_NEW not in text:
-                    text = replace_once(text, AUTO_PORT_OLD, AUTO_PORT_NEW, name)
+                    text = replace_once(text, AUTO_PORT_511 if AUTO_PORT_511 in text else AUTO_PORT_OLD, AUTO_PORT_NEW, name)
                 data = text.encode('utf-8')
             elif offline and name == 'O/music-main.js':
                 data = add_updater(data.decode('utf-8')).encode('utf-8')
@@ -738,6 +751,8 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                 text = data.decode('utf-8')
                 if R_ANCHOR_NEW not in text:
                     text = replace_once(text, R_ANCHOR_OLD, R_ANCHOR_NEW, name)
+                if AP_R_NEW not in text:
+                    text = replace_once(text, AP_R_OLD, AP_R_NEW, name)
                 data = text.encode('utf-8')
             elif name == 'shared/release.py':
                 text = data.decode('utf-8')
