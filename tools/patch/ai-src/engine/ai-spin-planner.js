@@ -501,6 +501,6 @@
    get stopped(){return stoppedEarly},stop(){if(fallback)return fallback.stop();if(!done){done=true;stoppedEarly=true;result=job.best;if(jobs.delete(id))w.load=Math.max(0,w.load-1);try{w.postMessage({cancel:id})}catch{}}return result},
   };
  }
- const api={attackOf,setTables,create,createAsync,plan,placements,place,boardValue,load,matchCells,tShapeKeys,tShapeValue,predictHoles,predictAttack,DEFAULTS};
+ const api={attackOf,setTables,create,createAsync,plan,placements,place,boardValue,load,matchCells,tShapeKeys,tShapeValue,predictHoles,predictAttack,DEFAULTS,__shapes:()=>tables.shapes,useRules:(r)=>{mode={allow180:r.allow180!==false,slam:!!r.slam}}};
  if(typeof module!=='undefined')module.exports=api;else root.LocalSpinPlanner=api;
 })(typeof window==='undefined'?globalThis:window);
