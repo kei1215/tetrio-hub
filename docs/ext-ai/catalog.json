@@ -1,5 +1,5 @@
 [
- {"label":"vA Tree(新しい探索・CC1 に勝ち越し)","files":["vA-external-ai-tree.js"]},
+ {"label":"Butter(バター・vA の新しい AI、CC1 に勝ち越し)","files":["vA-external-ai-tree.js"]},
  {"label":"Cold Clear 2 S2(いちばん強い)","files":["vA-external-ai-cc2.js","cold_clear_2_s2.wasm"]},
  {"label":"Cold Clear 1","files":["vA-external-ai-cc1.js","cold_clear_1.wasm"]},
  {"label":"MisaMino","files":["vA-external-ai-misamino.js","misamino.wasm"]}

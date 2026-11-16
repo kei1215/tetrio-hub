@@ -25,7 +25,7 @@ const rowsOf = (st) => { const h = st.length, rows = []; for (let y = 0; y < h; 
 const K = TP.FIT_KEYS, NK = K.length, idx = Object.fromEntries(K.map((k, i) => [k, i]));
 
 // ---- positions ----
-const data = []; let games = 0, skipped = 0;
+const data = []; let games = 0, skipped = 0, realName = null;
 for (const file of files) {
   let rep; try { rep = parseReplayFile(fs.readFileSync(file, "utf8"), file); } catch (e) { console.error("読めません: " + file); continue; }
   rep.rounds.forEach((round) => {
@@ -34,7 +34,7 @@ for (const file of files) {
       const opt = p.replay.options || {}, ks = KD[opt.kickset || "SRS+"] || KD["SRS+"];
       SP.setTables({ shapes, kicks: ks.kicks, ikicks: ks.i_kicks || ks.kicks, corner: [c4, c4, c4, c4] });
       SP.useRules({ allow180: opt.allow180 !== false });
-      const sim = new PlayerSim(p.replay, { ts: p.ts }); games++;
+      const sim = new PlayerSim(p.replay, { ts: p.ts }); games++; realName ??= p.username;
       for (let guard = 0; guard < 300000 && !sim.finished; guard++) {
         const e = sim.engine, pre = rowsOf(e.board.state), b2b = Math.max(0, e.stats?.b2b ?? 0), combo = Math.max(0, e.stats?.combo ?? 0);
         const hold = e.held ? String(e.held).toLowerCase() : null, queue = (e.queue || []).slice(0, 5).map((q) => String(q).toLowerCase());
@@ -99,7 +99,7 @@ const MIX = Number(process.env.MIX || 0.5), fitted = {}, raw = {};
 K.forEach((k, i) => { raw[k] = Math.round(w[i] * 10) / 10; fitted[k] = Math.round((base[i] + MIX * (w[i] - base[i])) * 10) / 10; });
 fitted.tMiniSolo = Math.min(fitted.tMiniSolo, -60);
 const out = {
-  kind: "va-tree-player", v: 1, player: playerArg, made: new Date().toISOString(), games, pieces: data.length, skipped,
+  kind: "va-tree-player", v: 1, player: realName || playerArg, made: new Date().toISOString(), games, pieces: data.length, skipped,
   agree: { default: +beforeClean.top.toFixed(3), fitted: +after.top.toFixed(3) },
   misdrop: { rate: +(mis.size / data.length).toFixed(4), count: mis.size, byPiece, dir },
   mix: MIX, options: TP.optionsOf(fitted), raw,

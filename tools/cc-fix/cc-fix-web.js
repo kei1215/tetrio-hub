@@ -8,7 +8,9 @@ const CAT = "https://kei1215.github.io/tetrio-hub/ext-ai/";
 // (input.human: at most two keys after landing). When a per-player vA Tree for the chosen player is
 // installed (vA-tree-player → id va-tree-<name>), that one is used.
 const ENGINES = {
-  "va-tree": { label: "vA Tree(無理のない最適解・置きミスの直し)", js: "vA-external-ai-tree.js" },
+  // Butter (= vA Tree; typing "vATree" turned into "butter" by auto-conversion, so the user named it Butter)
+  "va-tree-auto": { label: "Butter(直すプレイヤーの Butter があれば使う)", js: "vA-external-ai-tree.js", pkg: "va-tree" },
+  "va-tree": { label: "Butter(データなし)", js: "vA-external-ai-tree.js" },
   cc2: { label: "Cold Clear 2 S2", js: "vA-external-ai-cc2.js" },
   cc1: { label: "Cold Clear 1(オールスピンを知らない)", js: "vA-external-ai-cc1.js" },
 };
@@ -48,7 +50,20 @@ async function playerTree(user) {
   if (X && typeof X.engines === "function") return X.engines().includes(want) ? want : null;
   try { const all = await tx("readonly", (s) => s.getAll()); return all.some((p) => (p.ids || []).includes(want)) ? want : null; } catch { return null; }
 }
+// every per-player Butter installed (any player): [{id, label}]
+async function installedTrees() {
+  const X = window.LocalExternalAI, out = [];
+  if (X && typeof X.engines === "function") { for (const id of X.engines()) if (/^va-tree-/.test(id)) out.push({ id, label: X.label ? X.label(id) : id }); return out; }
+  try {
+    for (const p of await tx("readonly", (s) => s.getAll())) for (const id of p.ids || []) if (/^va-tree-/.test(id)) {
+      let label = id; try { label = JSON.parse(/^var __VA_TREE_EMBED__=(\{.*?\});\n/s.exec(p.script)[1]).label || id; } catch {}
+      out.push({ id, label });
+    }
+  } catch {}
+  return out;
+}
 async function loadBot(id, say) {
+  if (ENGINES[id] && ENGINES[id].pkg) id = ENGINES[id].pkg;
   if (bots[id]) return bots[id];
   if (!ENGINES[id]) {
     // an installed package that is not in the list (per-player vA Tree)
@@ -97,7 +112,7 @@ function open() {
 <label>1手の考える時間(ミリ秒)</label><input data-k="ms" type="number" min="20" max="3000" value="150">
 <div class="row"><button data-a="go" disabled>作る</button><button data-a="close">閉じる</button></div>
 <div class="s"></div>
-<div class="n">vA Tree:プレイヤーが入力できる置き方(接地してから 2 キーまで)の中で一番よい手を選びます。そのプレイヤーのデータ入り vA Tree(vA-tree-player で作ったもの)が入っていれば、それを使います。
+<div class="n">Butter:プレイヤーが入力できる置き方(接地してから 2 キーまで)の中で一番よい手を選びます。「直すプレイヤーの Butter があれば使う」は、そのプレイヤーのデータ入り Butter(vA-tree-player で作ったもの)が入っていればそれを使います。「データなし」は元の Butter。入っている他のプレイヤーの Butter も選べます。
 置きミスの所:置いた手がとても選ばれにくく、1列・1回転ずらした所がずっと良い手を置きミスとみて、そのミノから 8 手を置き直し、火力が増えたか地形がきれいになった(穴が減った)ときに修正にします。
 弱い所だけ:プレイヤーの置き方はそのままで、10手ずつ見て、火力が平均より出ていない所や REN・QUAD の所を AI が同じミノで置き直し、火力が 2 以上増えた所だけを修正にします。再生ではその所に来ると修正を見せ(相手は止まる)、終わると元のプレイに戻ります。
 全部:最初から最後まで AI が置き直します(相手は動き、AI の火力が届きます)。
@@ -105,6 +120,9 @@ function open() {
 開くには CONFIG の REPLAY BOARD EDIT を ON にして、パネルの「埋め込みの再生」で 修正後 / 元の版 を切り替えます(マネ練習はどちらでも使えます)。</div>`;
   document.body.appendChild(root);
   const $ = (q) => root.querySelector(q), status = (t) => { $(".s").textContent = t; };
+  // installed per-player Butter (any player, not only the one being fixed)
+  installedTrees().then((list) => { const sel = $('[data-k="engine"]'), after = sel.querySelector('option[value="va-tree"]');
+    for (const t of list) { const o = document.createElement("option"); o.value = t.id; o.textContent = t.label; after.after(o); } });
   // stop TETR.IO's hotkeys while typing here
   for (const t of ["keydown", "keyup", "keypress"]) root.addEventListener(t, (e) => e.stopPropagation());
   let text = null, name = "replay.ttrm", busy = false;
@@ -123,15 +141,16 @@ function open() {
     if (!text || busy) return;
     busy = true; $('[data-a="go"]').disabled = true;
     const pick = $('[data-k="engine"]').value, user = $('[data-k="user"]').value;
-    const id = pick === "va-tree" ? (await playerTree(user)) || "va-tree" : pick;
+    const id = pick === "va-tree-auto" ? (await playerTree(user)) || "va-tree" : pick;
+    const isTree = /^va-tree/.test(pick);
     try {
-      status((ENGINES[id] ? ENGINES[id].label : "vA Tree: " + user + "(このプレイヤーのデータ)") + " を読み込み中…");
+      status((ENGINES[id] ? ENGINES[id].label : $('[data-k="engine"]').selectedOptions[0]?.textContent || id) + " を読み込み中…");
       const bot = await loadBot(id, status);
       const t0 = performance.now();
       const ms = Math.max(20, Math.min(3000, Number($('[data-k="ms"]').value) || 150));
       const idle = () => new Promise((r) => setTimeout(r, 0));
       const { json, report } = await ccFix(text, user, bot, {
-        thinkMs: ms, engineId: id, idle, human: pick === "va-tree", mode: $('[data-k="mode"]').value,
+        thinkMs: ms, engineId: id, idle, human: isTree, mode: $('[data-k="mode"]').value,
         onProgress: (p) => status(`ラウンド ${p.round + 1}/${p.rounds}  ` + (p.back ? `${p.back} 手前から試し中  ` : "") + (p.spots ? `候補 ${p.spot}/${p.spots}  ` : "") + `${p.pieces} 手目`),
       });
       const m = /^(.*?)(\.ttrm|\.ttr|\.json)?$/i.exec(name);

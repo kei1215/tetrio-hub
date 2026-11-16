@@ -1735,7 +1735,7 @@
   };
   LocalExternalAI.register({
     id: EMBED ? EMBED.id : "va-tree",
-    label: EMBED ? EMBED.label : "vA Tree (\u65B0\u3057\u3044\u63A2\u7D22)",
+    label: EMBED ? EMBED.label : "Butter",
     async create(files, { strength } = {}) {
       const iters = Math.max(20, Math.min(2e3, Number(strength) || 200));
       const data = dataOf(files), opts = data ? data.options : {};

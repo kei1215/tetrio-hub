@@ -1,4 +1,6 @@
-/* vA tree planner (2026-11-16 rebuild, user: CCとCC2の思考回路を参考に作り直せない?).
+/* Butter = vA tree planner (2026-11-16 rebuild, user: CCとCC2の思考回路を参考に作り直せない?).
+   Name: the user typed "vATree", the IME auto-converted it to "butter", and the user chose to
+   name the AI Butter (バター). Per-player builds show as "Butter <player>" (e.g. Butter Y_Kei1215).
    Search: a Cold Clear 1 style tree. The root is the board now; a node is one more piece
    placed (or held). Leaves are picked by walking down from the root and choosing children
    by rank (mostly the best, sometimes the next ones), so the good lines get deep and the

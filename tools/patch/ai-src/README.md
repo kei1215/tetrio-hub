@@ -37,3 +37,9 @@ v4.8246 Spin B2B mode (vA option "BOT: Spin B2B モード", localStorage
   パッケージの約束はファイル先頭のコメント。bot-ai.js は game._aiEngine の外部AIに配置を聞き、ネイティブのサンドボックスで確かめて同じキーで置く。
 - ai-spin-planner.js matchCells:外部AIのマス目から、到達できる配置(planner 座標)を探す。
 - local-ai-room.js:config.labels で対戦の表示名(TTRM の名前)を上書きできる。
+
+## Butter(バター)= vA Tree(2026-11-16)
+- 名前の由来:「vATree」と打ったら自動変換で「butter」になったので、ユーザーが AI の名前を Butter(バター)にした。
+- 中身: `engine/ai-tree-planner.js`(CC1 型の木探索 + CC1 の盤面評価 + B2B・掘り・TSM・相殺の調整)。外部AIのパッケージとして配る(`docs/ext-ai/vA-external-ai-tree.js`、パッケージ id は `va-tree` のまま)。
+- プレーヤーのデータ入り: `tools/ai-sim/tree-player-data.mjs` でリプレイから重みを合わせ、「Butter <プレーヤー名>」(例: Butter Y_Kei1215、id `va-tree-<名前>`)として何人ぶんでも入れられる。
+- CC 盤面修正では、接地後 2 キーまでの置き方だけで一番よい手を選び、置きミスの所を「火力になる / 地形がきれいになる」置き方で見せる。

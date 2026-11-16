@@ -187,3 +187,5 @@
 - 設定がまだ: Secret PB_DISCORD_WEBHOOK、GAS のデプロイ、api.json の url。手順は tools/ranking/README.md。
 - (同日) GAS は秘密を持たない受付窓口に変更: TTR をドライブ、記録をスクリプト プロパティに3日間置き、pb-collect.yml が10分ごとに取り込んで Discord に投稿する。BOT・外部AIの記録は送信ボタンを出さず、GAS とイングェストでも断る(user: botの記録は残さない)。ページの BOT チェック欄も削除。Secret PB_DISCORD_WEBHOOK は設定済み。
 - 2026-11-16: v5.07 PUBLISHED (release patch-v5.07, target 0098de5). Browser: offline-va5.07 (va5.05/5.06 mirror it), offline-v4.8255 render-diagnostics from the vO zip, old v4.82xx re-mirrored. add-web-external.sh was not run (5.06 had no preinstalled external AIs either).
+
+- 2026-11-16(パッチ更新なし・Pages):新しい AI「Butter(バター)」= vA Tree(ai-src/engine/ai-tree-planner.js)を外部AIとして公開(かんたんインストール・リンク限定ページ)。名前の由来:「vATree」と打ったら自動変換で「butter」になったので、ユーザーが Butter と名付けた。プレーヤーのリプレイから「Butter <名前>」(例: Butter Y_Kei1215)を作れる(tools/ai-sim/tree-player-data.mjs、何人ぶんでも入る)。CC 盤面修正の AI に Butter(直すプレイヤーの Butter があれば使う / データなし / 入っている他のプレイヤーの Butter)を追加。人が入力できる置き方(接地後 2 キーまで)だけで選び、置きミスの所を「こう置けば火力 / 地形がきれい」で見せる。今までの AI は残す。外部AIは対戦中に学習しない。
