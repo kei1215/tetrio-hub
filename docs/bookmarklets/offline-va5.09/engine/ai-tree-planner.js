@@ -230,7 +230,7 @@
    pend:Math.max(0,Number(P.incoming)||0),g:g0,gi:0,acc:0,eval:0,children:null,spec:null,depth:0};
   // opening shapes in play only when the search starts from an opening (no garbage, no more cells than the shape)
   let rootCells=0;for(const m of rows0)if(m)rootCells+=popc(m);
-  const opens=(P.openers||[]).map(o=>{const rows=o.rows||o;return {rows,empty:o.empty||rows.map(()=>0)}}).filter(()=>P.openLive!==undefined?!!P.openLive:!g0),openOn=opens.length>0;
+  const opens=(P.openers||[]).map(o=>{const rows=o.rows||o;return {rows,empty:o.empty||rows.map(()=>0),book:o.book||null,n:o.n||1}}).filter(()=>P.openLive!==undefined?!!P.openLive:!g0),openOn=opens.length>0;
   const seen=new Map();let nodes=0,done=false,spent=0,best=null,maxDepth=0,iters=0;
   const pieceAt=(i,extra)=>i<seq.length?seq[i]:extra;
   // children of a node for one known current piece (and the hold swap)
@@ -395,9 +395,78 @@
    if(root.__openDbg)root.__openDbg(best&&{g:best.g,ways:best.ways,type:best.c.move.type},rootCells);
    return best?best.c:null;
   }
+  // the player's setup from its book (user: y_kei1215 の DT砲を組めていない; 2026-11-16). A book = the pieces of the setup
+  // where the player put them (kind + cells, rows from the bottom). A book piece goes in when its cells are empty and
+  // every book piece that has a cell under one of its cells is in. Over the known pieces (hold too) the line that
+  // puts in the most book pieces wins; a piece with no place yet is held, or goes where it covers no book cell, no
+  // slot cell and no column above a book cell that is still open. The T is not put outside the book (kept for the T-spin).
+  // Returns {c} (the root move), {done:true} (book complete: the tree plays, the package sets the follow-up) or null.
+  function bookPlan(list){
+   if(!openOn)return null;const H=rows0.length,S=SP.__shapes();let doneAny=false;const picks=[];
+   // the known pieces, plus the last piece of the bag when only one is left (7-bag: it is certain)
+   const sq=seq.slice();{const D0=Math.round(rootCells/4)+(rootNode.hold?1:0),at=(D0+sq.length)%7;
+    if(at===6){const inB=new Set(sq.slice(sq.length-6));const left=PIECES.filter(t=>!inB.has(t));if(left.length===1)sq.push(left[0])}}
+   for(const o of opens){const B=o.book;if(!B||!B.length)continue;const e=o.empty,L=o.rows.length;
+    const rb=new Array(L+6);for(let k=0;k<L+6;k++)rb[k]=rows0[H-1-k]||0;
+    let bad=false;for(let k=0;k<e.length;k++)if(rb[k]&e[k]){bad=true;break}if(bad)continue;
+    let done=0;for(let i=0;i<B.length&&!bad;i++){let f=0;for(const [x,k] of B[i].c)if(rb[k]>>x&1)f++;if(f===4)done|=1<<i;else if(f)bad=true}
+    if(bad)continue;
+    if(done===(1<<B.length)-1){doneAny=true;continue}
+    // dep[i]: book pieces with a cell under a cell of piece i (same column)
+    const dep=B.map((q,i)=>{let m=0;B.forEach((r,j)=>{if(j!==i&&q.c.some(([x,k])=>r.c.some(([X,K])=>X===x&&K<k)))m|=1<<j});return m});
+    // can book piece i go in now: its cells are empty, it rests on something, and it can get there (a straight drop,
+    // or a slide / spin the placement search finds: a J can still be slid under the Z that was put in first)
+    const rmemo=new Map();
+    const reach=(rows,i)=>{const key=i+'|'+rows.join(',');let v=rmemo.get(key);if(v!==undefined)return v;
+     const full=new Array(H).fill(0);for(let k=0;k<rows.length;k++)full[H-1-k]=rows[k];v=false;
+     for(const q of SP.placements(full,B[i].t,4,19,P.maxTail)){const cs=S[B[i].t][q.r];
+      if(B[i].c.every(([x,k])=>cs.some(([cx,cy])=>q.x+cx===x&&H-1-(q.y+cy)===k))){v=true;break}}
+     rmemo.set(key,v);return v};
+    const fits=(rows,i)=>{let sup=false,drop=true;for(const [x,k] of B[i].c){if(rows[k]>>x&1)return 0;if(k===0||rows[k-1]>>x&1)sup=true;
+      if(drop)for(let K=k+1;K<rows.length;K++)if(rows[K]>>x&1){drop=false;break}}return !sup?0:drop?2:1};
+    const can=(rows,dn,i)=>{if(dn>>i&1)return false;const f=fits(rows,i);if(!f||(f===1&&!reach(rows,i)))return false;
+     // it must not shut out a book piece under it that is still to come
+     if((dep[i]&~dn)!==0){const n=put(rows,i);for(let j=0;j<B.length;j++)if(dep[i]>>j&1&&!(dn>>j&1)){const g=fits(n,j);if(g===1&&!reach(n,j))return false}}
+     return true};
+    const put=(rows,i)=>{const n=rows.slice();for(const [x,k] of B[i].c)n[k]|=1<<x;return n};
+    const memo=new Map();
+    // most book pieces that can still go in with the known pieces from qi on
+    const dfs=(rows,dn,hold,qi)=>{const cur=sq[qi];if(!cur)return 0;const key=dn+'|'+hold+'|'+qi;if(memo.has(key))return memo.get(key);
+     let best=0;const opts=[[cur,hold,qi+1]];
+     if(holdOk){if(hold&&hold!==cur)opts.push([hold,cur,qi+1]);else if(!hold&&sq[qi+1])opts.push([sq[qi+1],cur,qi+2])}
+     for(const [type,h2,q2] of opts){let placed=false;
+      for(let i=0;i<B.length;i++)if(B[i].t===type&&can(rows,dn,i)){placed=true;const v=1+dfs(put(rows,i),dn|1<<i,h2,q2);if(v>best)best=v}
+      if(!placed&&(type!=='t'||h2==='t')){const v=dfs(rows,dn,h2,q2)-0.01;if(v>best)best=v}}
+     memo.set(key,best);return best};
+    // remaining book cells, and the columns above them
+    const rem=new Array(L+6).fill(0);for(let i=0;i<B.length;i++)if(!(done>>i&1))for(const [x,k] of B[i].c)rem[k]|=1<<x;
+    const tKeep=!(rootNode.hold==='t'&&seq[0]==='t');let best=null;const DBG=root.__bookDbg?{cover:0,slot:0,tall:0,over:0,tk:0,dep:0,lines:0,free:0}:null;
+    for(const c of list){if(c.dead)continue;const m=c.move,cells=S[m.type][m.r].map(([cx,cy])=>[m.x+cx,H-1-(m.y+cy)]);
+     if(cells.some(([x,k])=>k<0||k>=L+6))continue;const r=lock(rows0,m.type,m,0);if(r.lines)continue;
+     const h2=m.hold?seq[0]:rootNode.hold,q2=m.hold&&!rootNode.hold?2:1;
+     let bi=-1;for(let i=0;i<B.length;i++)if(!(done>>i&1)&&B[i].t===m.type&&B[i].c.every(([x,k])=>cells.some(([X,K])=>X===x&&K===k))){bi=i;break}
+     let v;
+     // equal lines: the book's T goes in first (a T left in hold is in the way when the next T comes), then moves without hold
+     if(bi>=0){if(!can(rb,done,bi))continue;v=1+dfs(put(rb,bi),done|1<<bi,h2,q2)+(m.type==='t'?0.005:0)+(m.hold?0:0.001)}
+     else{if(m.type==='t'&&tKeep){if(DBG)DBG.tk++;continue}
+      // a free piece: off the book cells and the slots, not over an open book cell, not stacked high
+      let ok=true;for(const [x,k] of cells){if(rem[k]>>x&1||(e[k]||0)>>x&1||k>L+3){ok=false;if(DBG)DBG[rem[k]>>x&1?'cover':(e[k]||0)>>x&1?'slot':'tall']++;break}for(let K=0;K<k;K++)if(rem[K]>>x&1){ok=false;if(DBG)DBG.over++;break}if(!ok)break}
+      if(!ok)continue;const n=rb.slice();for(const [x,k] of cells)n[k]|=1<<x;v=dfs(n,done,h2,q2)-0.01;if(DBG){DBG.free++;DBG.fv=v}}
+     if(!best||v>best.v+1e-9)best={v,c,book:bi>=0}}
+    if(root.__bookDbg)root.__bookDbg({done:done.toString(2),best:best&&{v:best.v,book:best.book,t:best.c.move.type},why:DBG,list:list.length,seq:seq.join(''),hold:rootNode.hold});
+    if(best&&best.v>0)picks.push({...best,o})}
+   if(!picks.length)return doneAny?{done:true}:null;
+   // which setup: the one that gets the most pieces in with the pieces in sight (a DT cannon cannot be built from
+   // every order; the player then builds the other one); ties by how often the player built it
+   const top=Math.max(...picks.map(p=>p.v)),near=picks.filter(p=>p.v>=top-0.5);
+   let pick=near[0];if(near.length>1){let tot=near.reduce((a,p)=>a+p.o.n,0),r=Math.random()*tot;for(const p of near){r-=p.o.n;if(r<=0){pick=p;break}}}
+   if(root.__openDbg)root.__openDbg({book:pick.book,v:pick.v,type:pick.c.move.type},rootCells);
+   return {c:pick.c};
+  }
   function result(){
    const list=rootNode.children||[];if(!list.length)return null;
-   const op=openPlan(list);if(op)return out(op);
+   const bp=bookPlan(list);if(bp&&bp.c)return out(bp.c);
+   const op=bp&&bp.done?null:openPlan(list);if(op)return out(op);
    // CC1 pick_move: skip lines that let the waiting garbage top out the middle columns
    const inc=Math.max(0,Number(P.incoming)||0);
    const pickList=[];
