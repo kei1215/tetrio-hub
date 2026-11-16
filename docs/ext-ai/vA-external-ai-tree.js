@@ -1051,6 +1051,12 @@
           chargeBase: 3,
           simGarbage: true,
           garbageCap: 8,
+          // take, then send (user: 火力があっても受けて死なないなら受けてからまとめ打ち): attack that would only cancel
+          // garbage the board can take (stack + waiting garbage <= tankSafe rows) costs tankW per line, so the search
+          // lets it in and sends the attack after (digging it with spins / REN pays digW).
+          tank: true,
+          tankW: 120,
+          tankSafe: 14,
           // search
           ms: 45,
           maxNodes: 1e7,
@@ -1491,6 +1497,12 @@
               }
               if (r.lines === 4 && combo >= 2 && node.g > 0) rew += P.renQuad;
               rew += P.digW * r.dug;
+              if (P.tank && pend > 0 && atk > 0) {
+                const h = heightsOf(rows);
+                let top = 0;
+                for (let x = 0; x < W2; x++) if (h[x] > top) top = h[x];
+                if (top + pend <= P.tankSafe) rew -= P.tankW * Math.min(pend, atk);
+              }
               pend = Math.max(0, pend - atk);
             } else {
               combo = 0;

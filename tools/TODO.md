@@ -100,6 +100,8 @@
 - [x] CC 盤面修正に Butter(人が入力できる置き方だけ、置きミスの所を「火力 / 地形がきれい」で見せる)
 - [x] Butter を vA に最初から入れる(v5.08 予定、engine/butter-preinstalled.js。外部AIと同じく Worker で動く)
 - [x] Butter だけアプリ内で学習(外部AI対戦の「Butter に学習させる」:選んだ .ttr/.ttrm と、この端末のオフライン記録のうち BOT・外部AIでないもの。engine/butter-learn.js、tools/butter/build.sh)
+- [x] Butter:受けてからまとめ打ち(tank、同じデータの Butter に 6割強)
+- [ ] Butter:同格の本人に「必ず」勝つ(今は 6割強。相手の盤面を見て殺しに行く・時間切れ試合の決め手)
 - [ ] Butter:ゲーム内の確認(外部AI対戦・かんたんインストール・盤面修正・「Butter 名前」の表示)
 - [ ] Butter:速さ(1手 約80ms → 7 PPS でも余裕を)と 7 PPS での CC1 対戦
 - [ ] Butter:B2B を溜めるモードの切り替え(通常 / 溜め)
