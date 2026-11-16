@@ -39,6 +39,9 @@
   // garbage the board can take (stack + waiting garbage <= tankSafe rows) costs tankW per line, so the search
   // lets it in and sends the attack after (digging it with spins / REN pays digW).
   tank:true,tankW:120,tankSafe:14,
+  // moves the player never makes (user: プレーヤーがしない動きは取り入れない、掘りクアッドが見えてない等): kinds from
+  // kindOf() listed in ban are never chosen (player data sets it, see learn-core.mjs)
+  ban:null,banW:5000,
   // search
   ms:45,maxNodes:1e7,maxIters:1e9,maxTail:3,merge:true,speculate:true,seed:1,
  };
@@ -143,6 +146,11 @@
   boardValue(r.rows,{b2b,hold:ctx.hold||null,tAhead:!!ctx.tAhead,pend:0},P,F);
   return {F,lines:r.lines,rows:r.rows};
  }
+ // move kind of a clear (for player data: kinds the player never makes are banned)
+ function kindOf(type,spin,lines,dug,combo,g){if(!lines)return null;
+  if(type==='t'&&spin===2)return 'tspin'+Math.min(3,lines);if(type==='t'&&spin===1)return 'tmini';if(spin)return 'allSpin';
+  if(lines===4)return dug>0?(combo>=2&&g>0?'renQuad':'digQuad'):'quad';return null}
+ const KINDS=['tspin1','tspin2','tspin3','tmini','allSpin','quad','digQuad','renQuad'];
  // weight vector <-> options
  const FIT_KEYS=['backToBack','b2bStep','bump','bumpSq','rowTrans','height','topHalf','topQuarter','cavity','cavitySq','overhang','overhangSq','covered','coveredSq',
   'tslot0','tslot1','tslot2','tslot3','wellDepth','wc0','wc1','wc2','wc3','wc4','wc5','wc6','wc7','wc8','wc9',
@@ -227,6 +235,7 @@
     }
     if(r.lines===4&&combo>=2&&node.g>0)rew+=P.renQuad;
     rew+=P.digW*r.dug;
+    if(P.ban&&P.ban.length){const k=kindOf(type,p.spin,r.lines,r.dug,combo,node.g);if(k&&P.ban.includes(k))rew-=P.banW}
     if(P.tank&&pend>0&&atk>0){const h=heightsOf(rows);let top=0;for(let x=0;x<W;x++)if(h[x]>top)top=h[x];if(top+pend<=P.tankSafe)rew-=P.tankW*Math.min(pend,atk)}
     pend=Math.max(0,pend-atk);
    }else{
@@ -306,6 +315,6 @@
   };
  }
  function plan(engine,state,options={}){const p=create(engine,state,options);if(!p)return null;while(!p.step(50));return p.result()}
- const api={create,plan,boardValue,findTslot,nextPossible,moveFeatures,weightsOf,optionsOf,FIT_KEYS,DEFAULTS};
+ const api={create,plan,boardValue,findTslot,nextPossible,moveFeatures,weightsOf,optionsOf,kindOf,KINDS,FIT_KEYS,DEFAULTS};
  if(typeof module!=='undefined')module.exports=api;else root.LocalTreePlanner=api;
 })(typeof window==='undefined'?globalThis:window);
