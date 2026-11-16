@@ -56,7 +56,7 @@ export async function learn(files, playerArg, opt = {}) {
   const data = []; let games = 0, skipped = 0, realName = null;
   // opening shapes (user: 開幕テンプレが全く違う): the board before the player's first line clear (no garbage yet),
   // counted by shape; the most common ones become this player's openers (one-off shapes only if none repeat).
-  const openings = new Map();
+  const openings = new Map(), follows = new Map();   // follows: setup key -> how the next two clears went
   // B2B charging (user: B2Bを火力を出る数ためたのが1回だけ): peaks of the player's B2B chains that reached 4+
   const peaks = []; let b2bPieces = 0;
   for (let fi = 0; fi < files.length && data.length < MAXP; fi++) {
@@ -67,7 +67,7 @@ export async function learn(files, playerArg, opt = {}) {
       SP.setTables({ shapes, kicks: ks.kicks, ikicks: ks.i_kicks || ks.kicks, corner: [c4, c4, c4, c4] });
       SP.useRules({ allow180: o.allow180 !== false });
       let sim; try { sim = new PlayerSim(p.replay, { ts: p.ts }); } catch { continue; }
-      games++; realName ??= p.username; let placed = 0, prevB = 0, openSt = 0, openPrev = null; const openIdx = new Map();
+      games++; realName ??= p.username; let placed = 0, prevB = 0, openSt = 0, openPrev = null, lastKind = null, follow = null; const openIdx = new Map();
       for (let guard = 0; guard < 300000 && !sim.finished; guard++) {
         const e = sim.engine, pre = rowsOf(e.board.state), b2b = Math.max(0, e.stats?.b2b ?? 0), combo = Math.max(0, e.stats?.combo ?? 0);
         const hold = e.held ? String(e.held).toLowerCase() : null, queue = (e.queue || []).slice(0, 5).map((q) => String(q).toLowerCase());
@@ -76,12 +76,17 @@ export async function learn(files, playerArg, opt = {}) {
         if (sim.step() === null) break;
         for (const lk of sim.frameLocks) {
           placed++; b2bPieces++;
+          // what this lock cleared, for "how the player attacks from a setup" (user: どういう打ちをするか理解して)
+          const lkLines = Math.max(0, lk.res.lines | 0), lkT = String(lk.res.mino).toLowerCase(), lkSp = lk.res.spin;
+          const lkKind = !lkLines ? null : lkT === "t" && lkSp === "normal" ? "tspin" + lkLines : lkT === "t" && lkSp === "mini" ? "tmini" : lkLines === 4 ? "quad" : lkSp && lkSp !== "none" ? "allSpin" : "clear" + lkLines;
+          const kindPrev = lastKind; lastKind = lkKind;
+          if (follow && lkKind && follow.seq.length < 2) { follow.seq.push(lkKind); if (follow.seq.length === 2) { const m = follows.get(follow.key) || new Map(); m.set(follow.seq.join(">"), (m.get(follow.seq.join(">")) || 0) + 1); follows.set(follow.key, m); } }
           { const b = Math.max(0, lk.res.stats?.b2b ?? 0); if (prevB >= 4 && b < prevB) peaks.push(prevB); prevB = b; }
           // the opener = the board just before the first line clear, within the first 3 bags (user: DT砲などは2巡目まで
           //待ち、3巡目のTまで要る): so a DT cannon / PC setup is kept whole, and the planner fills it in piece order
           // garbage that came in meanwhile is taken off (the setup is what the player built on top of it)
           if (openSt === 0) { const own = preOwn, cells = own.reduce((a, m) => a + popc(m), 0);
-            if (cells !== (placed - 1) * 4) { openSt = 1; if (openPrev && placed - 2 >= 4 && placed - 2 <= 22) { const sh = setupOf(openPrev, openIdx); if (sh) openings.set(sh, (openings.get(sh) || 0) + 1); } }
+            if (cells !== (placed - 1) * 4) { openSt = 1; if (openPrev && placed - 2 >= 4 && placed - 2 <= 22) { const sh = setupOf(openPrev, openIdx); if (sh) { openings.set(sh, (openings.get(sh) || 0) + 1); follow = { key: sh, seq: kindPrev ? [kindPrev] : [] }; }  } }
             else if (placed > 23) openSt = 1;
             else { // which piece (1, 2, ...) filled each cell: the new cells since the last lock (no clears yet)
               const H = own.length; for (let y = 0; y < H; y++) { const nw = own[y] & ~((openPrev && openPrev[y]) || 0); for (let x = 0; x < 10; x++) if (nw >> x & 1) openIdx.set((H - 1 - y) + "," + x, placed - 1); } }
@@ -165,7 +170,7 @@ export async function learn(files, playerArg, opt = {}) {
       // slots kept empty are the ones every board has. A smaller board inside a bigger one (a clear came early) adds
       // to the count but does not cut the setup. Up to 4.
       const pc = (m) => { let c = 0; while (m) { m &= m - 1; c++; } return c; };
-      const all = [...openings.entries()].map(([k, n]) => { const [m, e] = k.split("|"); const rows = m.split(",").map(Number); return { rows, empty: e.split(",").map(Number), n, cells: rows.reduce((a, r) => a + pc(r), 0) }; });
+      const all = [...openings.entries()].map(([k, n]) => { const [m, e] = k.split("|"); const rows = m.split(",").map(Number); return { key: k, rows, empty: e.split(",").map(Number), n, cells: rows.reduce((a, r) => a + pc(r), 0) }; });
       const inside = (a, b) => a.rows.length <= b.rows.length && a.rows.every((m, i) => (m & ~b.rows[i]) === 0);
       const sim = (a, b) => { let i = 0, u = 0; for (let k = 0; k < Math.max(a.rows.length, b.rows.length); k++) { const x = a.rows[k] || 0, y = b.rows[k] || 0; i += pc(x & y); u += pc(x | y); } return u ? i / u : 0; };
       const groupOf = (a) => all.filter((b) => b === a || sim(a, b) >= 0.6 || inside(b, a) || inside(a, b));
@@ -198,7 +203,10 @@ export async function learn(files, playerArg, opt = {}) {
             for (let X = x - 1; X >= 0 && !(must[k] >> X & 1); X--) if (never(X, k)) empty[k] |= 1 << X; else break;   // left of it
           } }
         while (must.length && !must[must.length - 1]) must.pop();
-        if (must.length) out.push({ rows: must, empty, n: a.sup, seen: full.length });
+        // how the player attacked from it: the most common first two clears (e.g. tspin2>tspin3 = DT砲)
+        const fm = new Map(); for (const b of g) for (const [q, c] of follows.get(b.key) || []) fm.set(q, (fm.get(q) || 0) + c);
+        const then = fm.size ? [...fm.entries()].sort((p, q) => q[1] - p[1])[0][0].split(">") : [];
+        if (must.length) out.push({ rows: must, empty, n: a.sup, seen: full.length, then });
         if (out.length >= 4) break;
       }
       return out;

@@ -35,7 +35,7 @@ LocalExternalAI.register({
     const like = data ? { openers: data.openers || null, pickBeta: data.beta || 0, misdrop: 0 } : {};
     // opener only from an empty board until the first line clear or garbage (cells drop, or jump by more than a piece);
     // the 9-cell rows of a DT cannon must not be taken for garbage here
-    let live = false, lastCells = -1;
+    let live = false, lastCells = -1, ready = null, follow = null;
     return {
       begin(input) {
         SP.setTables(TABLES);
@@ -44,9 +44,23 @@ LocalExternalAI.register({
         // ゴミ行の目安: 下から続く「1マスだけ空き」の行
         let g = 0; for (let y = H - 1; y >= 0; y--) { const n = board[y].filter(Boolean).length; if (n === W - 1) g++; else break; }
         const inc = (input.incoming || []).reduce((a, n) => a + (Number(n) || 0), 0);
-        { const cells = board.reduce((a, r) => a + r.filter(Boolean).length, 0); if (!cells) live = true; else if (lastCells < 0 || cells < lastCells || cells - lastCells > 4) live = false; lastCells = cells; }
+        // after a setup (user: 2回以上組んでる場合はどういう打ちをするか理解して塞いでいいとこを考えて): when the board
+        // has one of the player's setups complete and the first clear comes, Butter goes on the way the player did
+        // (opener.then, e.g. TSD then TST) and does not cover the setup's slots until those clears are done.
+        { const cells = board.reduce((a, r) => a + r.filter(Boolean).length, 0), rowsB = board.map((r) => r.reduce((m, c, x) => (c ? m | 1 << x : m), 0)).reverse();
+          if (!cells) { live = true; follow = null; ready = null; }
+          else if (lastCells < 0 || cells - lastCells > 4) { live = false; follow = null; }
+          else if (cells < lastCells) { const lines = Math.max(1, Math.round((lastCells + 4 - cells) / 10));
+            if (live && ready && ready.then && ready.then.length) follow = { then: ready.then.slice(1), protect: (ready.empty || []).slice(lines) };
+            else if (follow) { follow.then = follow.then.slice(1); follow.protect = follow.protect.slice(lines); if (!follow.then.length) follow = null; }
+            live = false; }
+          if (live && like.openers) ready = like.openers.find((o) => o.rows.every((m, k) => (m & ~(rowsB[k] || 0)) === 0) && (o.empty || []).every((m, k) => (m & (rowsB[k] || 0)) === 0)) || ready;
+          lastCells = cells; }
+        const fol = follow && follow.then.length ? { followKind: follow.then[0], protect: follow.protect } : {};
+        // the T-spins of a setup like a DT cannon need several turns after the drop (maxTail 5 while they are due)
+        const fol0 = live && ready && ready.then && ready.then.length ? { followKind: ready.then[0] } : {};
         const job = TP.create(null, { board, falling: input.current, hold: input.hold || null, queue: (input.queue || []).slice(0, 5), holdAllowed: true, b2b: Math.max(0, input.b2b | 0), combo: Math.max(0, input.combo | 0) },
-          { ...opts, ...like, openLive: live && !!like.openers, ...(input.human ? { maxTail: 2, pickBeta: 0 } : {}), ms: 1e9, maxIters: iters, incoming: inc, gRows: g, seed: (Date.now() & 0xffff) + 1 });
+          { ...opts, ...like, ...fol0, ...fol, ...(fol0.followKind || fol.followKind ? { maxTail: 5 } : {}), openLive: live && !!like.openers, ...(input.human ? { maxTail: 2, pickBeta: 0 } : {}), ms: 1e9, maxIters: iters, incoming: inc, gRows: g, seed: (Date.now() & 0xffff) + 1 });
         const conv = (p) => {
           if (!p) return null;
           const cells = TABLES.shapes[p.type][p.r].map(([cx, cy]) => [p.x + cx, H - 1 - (p.y + cy)]);

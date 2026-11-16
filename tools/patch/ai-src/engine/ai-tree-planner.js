@@ -48,7 +48,7 @@
   //  openW (no reward for matching: a reward that stops when the shape is done made the search avoid finishing).
   //  pickBeta: the move is drawn from the top lines with weight exp(pickBeta x (value - best)) like the
   //  player's own spread; misdrop: that share of moves lands one column off (the player's misdrop rate).
-  openers:null,openW:45,openBudget:250,openDepth:4,pickBeta:0,misdrop:0,
+  openers:null,openW:45,followKind:null,followW:300,protect:null,protectW:600,openBudget:250,openDepth:4,pickBeta:0,misdrop:0,
   // search
   ms:45,maxNodes:1e7,maxIters:1e9,maxTail:3,merge:true,speculate:true,seed:1,
  };
@@ -246,7 +246,10 @@
    return out;
   }
   function child(node,type,p,r,hold,adv,held){
-   let rew=0,b2b=node.b2b,combo=node.combo,pend=node.pend,g=node.g-r.dug,rows=r.rows,gi=node.gi;
+   let rew=0;
+   // the setup's slots stay open until its T-spins are done (protect: rows from the bottom)
+   if(P.protect&&!r.lines){const H=r.rows.length;for(let k=0;k<P.protect.length;k++)if(r.rows[H-1-k]&P.protect[k]){rew-=P.protectW;break}}
+   let b2b=node.b2b,combo=node.combo,pend=node.pend,g=node.g-r.dug,rows=r.rows,gi=node.gi;
    const fullT=type==='t'&&p.spin===2;
    if(r.lines){
     combo++;
@@ -272,6 +275,8 @@
     }
     if(r.lines===4&&combo>=2&&node.g>0)rew+=P.renQuad;
     rew+=P.digW*r.dug;
+    // after a setup: the player's next attack from it (followKind, e.g. tspin2 then tspin3)
+    if(P.followKind&&kindOf(type,p.spin,r.lines,r.dug,combo,node.g)===P.followKind)rew+=P.followW;
     if((P.ban&&P.ban.length)||P.kindBias){const k=kindOf(type,p.spin,r.lines,r.dug,combo,node.g);if(k){if(P.ban&&P.ban.includes(k))rew-=P.banW;
      // the player's mix of attacks (user: 攻撃の種類の割合も合わせる、ただし高さや地形で変える): a soft bonus/penalty per
      // kind, added to the search value, so the board (height, shape, a TSM combo coming) still decides

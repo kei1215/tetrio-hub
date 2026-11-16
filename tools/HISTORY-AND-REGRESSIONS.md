@@ -188,6 +188,7 @@
 - (同日) GAS は秘密を持たない受付窓口に変更: TTR をドライブ、記録をスクリプト プロパティに3日間置き、pb-collect.yml が10分ごとに取り込んで Discord に投稿する。BOT・外部AIの記録は送信ボタンを出さず、GAS とイングェストでも断る(user: botの記録は残さない)。ページの BOT チェック欄も削除。Secret PB_DISCORD_WEBHOOK は設定済み。
 - 2026-11-16: v5.07 PUBLISHED (release patch-v5.07, target 0098de5). Browser: offline-va5.07 (va5.05/5.06 mirror it), offline-v4.8255 render-diagnostics from the vO zip, old v4.82xx re-mirrored. add-web-external.sh was not run (5.06 had no preinstalled external AIs either).
 
+- (未リリース) 形ごとに本人のその後の打ち方(最初の2回の消去、DT砲 = TSD>TST 8回)を覚え、形が完成したらその順に狙う(followKind +300)。打ち終わるまで形の穴を塞がない(protect -600)。狙っている間は回転を多めに探す(maxTail 5、DT砲の TSD は 3 では見つからない)。消去の行数は lk.res.lines を使う(lk.cleared はずれる)。Node:DT砲完成3回中2回 TSD>TST。
 - (未リリース) 消す段より上は屋根(下に穴がある列のマス)だけ形、屋根の左と上は T を入れ終わるまで空ける(一度も埋められていなかったマス)(user: 屋根以外の二行目の必須系はなくてもいける / 屋根の左側や上も打ち終わるまで開けてなきゃいけない)。Node 24試合:18手以内に完成 8回(DT砲 2・PCO 6)。
 - (未リリース) T-Spin で消す段(穴のある段で、3回に1回以上穴以外が全部埋まっていた段)は段全体を形にする(user: 右端は自由になっちゃダメ)。Node 12試合:18手以内に完成 7回(PCO 6・DT砲 1)。
 - (未リリース) 2回以上見た形を比べ、毎回同じマスだけ形・違うマスは自由(user: 2回見たテンプレはどこを自由に組んでいいかわかる)。形のマスの下は自由にしない(穴になる)。自由側は形の高さ+1段まで。表示名:AI選択画面は「Butter 名前」、プレイ中・リプレイは「Butter」(自動学習はパッケージ id va-tree-<名前> で判定、match.engines を保存)。

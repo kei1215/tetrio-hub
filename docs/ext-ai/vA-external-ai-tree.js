@@ -1069,6 +1069,10 @@
           //  player's own spread; misdrop: that share of moves lands one column off (the player's misdrop rate).
           openers: null,
           openW: 45,
+          followKind: null,
+          followW: 300,
+          protect: null,
+          protectW: 600,
           openBudget: 250,
           openDepth: 4,
           pickBeta: 0,
@@ -1572,7 +1576,15 @@
             return out2;
           }
           function child(node, type, p, r, hold, adv, held) {
-            let rew = 0, b2b = node.b2b, combo = node.combo, pend = node.pend, g = node.g - r.dug, rows = r.rows, gi = node.gi;
+            let rew = 0;
+            if (P.protect && !r.lines) {
+              const H2 = r.rows.length;
+              for (let k = 0; k < P.protect.length; k++) if (r.rows[H2 - 1 - k] & P.protect[k]) {
+                rew -= P.protectW;
+                break;
+              }
+            }
+            let b2b = node.b2b, combo = node.combo, pend = node.pend, g = node.g - r.dug, rows = r.rows, gi = node.gi;
             const fullT = type === "t" && p.spin === 2;
             if (r.lines) {
               combo++;
@@ -1612,6 +1624,7 @@
               }
               if (r.lines === 4 && combo >= 2 && node.g > 0) rew += P.renQuad;
               rew += P.digW * r.dug;
+              if (P.followKind && kindOf(type, p.spin, r.lines, r.dug, combo, node.g) === P.followKind) rew += P.followW;
               if (P.ban && P.ban.length || P.kindBias) {
                 const k = kindOf(type, p.spin, r.lines, r.dug, combo, node.g);
                 if (k) {
@@ -2021,7 +2034,7 @@
       const iters = 200;
       const data = dataOf(files), opts = data ? data.options : {};
       const like = data ? { openers: data.openers || null, pickBeta: data.beta || 0, misdrop: 0 } : {};
-      let live = false, lastCells = -1;
+      let live = false, lastCells = -1, ready = null, follow = null;
       return {
         begin(input) {
           import_ai_spin_planner.default.setTables(TABLES);
@@ -2039,15 +2052,33 @@
           }
           const inc = (input.incoming || []).reduce((a, n) => a + (Number(n) || 0), 0);
           {
-            const cells = board.reduce((a, r) => a + r.filter(Boolean).length, 0);
-            if (!cells) live = true;
-            else if (lastCells < 0 || cells < lastCells || cells - lastCells > 4) live = false;
+            const cells = board.reduce((a, r) => a + r.filter(Boolean).length, 0), rowsB = board.map((r) => r.reduce((m, c2, x) => c2 ? m | 1 << x : m, 0)).reverse();
+            if (!cells) {
+              live = true;
+              follow = null;
+              ready = null;
+            } else if (lastCells < 0 || cells - lastCells > 4) {
+              live = false;
+              follow = null;
+            } else if (cells < lastCells) {
+              const lines = Math.max(1, Math.round((lastCells + 4 - cells) / 10));
+              if (live && ready && ready.then && ready.then.length) follow = { then: ready.then.slice(1), protect: (ready.empty || []).slice(lines) };
+              else if (follow) {
+                follow.then = follow.then.slice(1);
+                follow.protect = follow.protect.slice(lines);
+                if (!follow.then.length) follow = null;
+              }
+              live = false;
+            }
+            if (live && like.openers) ready = like.openers.find((o) => o.rows.every((m, k) => (m & ~(rowsB[k] || 0)) === 0) && (o.empty || []).every((m, k) => (m & (rowsB[k] || 0)) === 0)) || ready;
             lastCells = cells;
           }
+          const fol = follow && follow.then.length ? { followKind: follow.then[0], protect: follow.protect } : {};
+          const fol0 = live && ready && ready.then && ready.then.length ? { followKind: ready.then[0] } : {};
           const job = import_ai_tree_planner.default.create(
             null,
             { board, falling: input.current, hold: input.hold || null, queue: (input.queue || []).slice(0, 5), holdAllowed: true, b2b: Math.max(0, input.b2b | 0), combo: Math.max(0, input.combo | 0) },
-            { ...opts, ...like, openLive: live && !!like.openers, ...input.human ? { maxTail: 2, pickBeta: 0 } : {}, ms: 1e9, maxIters: iters, incoming: inc, gRows: g, seed: (Date.now() & 65535) + 1 }
+            { ...opts, ...like, ...fol0, ...fol, ...fol0.followKind || fol.followKind ? { maxTail: 5 } : {}, openLive: live && !!like.openers, ...input.human ? { maxTail: 2, pickBeta: 0 } : {}, ms: 1e9, maxIters: iters, incoming: inc, gRows: g, seed: (Date.now() & 65535) + 1 }
           );
           const conv = (p) => {
             if (!p) return null;
