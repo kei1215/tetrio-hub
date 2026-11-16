@@ -4,7 +4,7 @@
 // that piece on the board just before the lock gets the tree planner's counts (moveFeatures).
 // A softmax ranking fit then moves the weights from the defaults toward the player's choices.
 // It is a pull toward the player, not a copy: an L2 prior keeps each weight near its default, and the AI
-// uses the halfway point (MIX 0.5).
+// uses the fitted weights fully (MIX 1, 2026-11-16: 本人版は真似をする; Butter without data does not imitate).
 // Misdrops (user: 置きミス再現はそもそも置きミスかを予測): a piece the fitted model finds very unlikely
 // while the same piece one column / one rotation away is much better counts as a misdrop. It is left
 // out of the fit (not learned as good terrain) and its rate / kind is kept.
@@ -33,7 +33,7 @@ export function playersIn(file) { try { const p = parseReplayFile(typeof file ==
  * files: replay files (string or object, .ttr / .ttrm). Throws when too few of the player's pieces are found.
  */
 export async function learn(files, playerArg, opt = {}) {
-  const player = String(playerArg).toLowerCase(), MIX = opt.mix ?? 0.5, MAXP = opt.maxPositions ?? 20000;
+  const player = String(playerArg).toLowerCase(), MIX = opt.mix ?? 1, MAXP = opt.maxPositions ?? 20000; // MIX 1 (user: Butter 本体は真似しない、本人版は真似をする)
   const say = opt.onProgress || (() => {}), tick = opt.tick || (async () => {});
   const data = []; let games = 0, skipped = 0, realName = null;
   for (let fi = 0; fi < files.length && data.length < MAXP; fi++) {
@@ -59,7 +59,9 @@ export async function learn(files, playerArg, opt = {}) {
           if (ci < 0 || cands.length < 2) { skipped++; continue; }
           const sp = lk.res.spin === "normal" ? 2 : lk.res.spin === "mini" ? 1 : 0; cands[ci] = { ...cands[ci], spin: sp };
           const ctx = { b2b, combo, g, hold, tAhead: queue.includes("t") };
-          data.push({ type, cands: cands.map((q) => ({ x: q.x, r: q.r })), feats: cands.map((q) => sparse(TP.moveFeatures(pre, type, q, ctx).F)), ci });
+          const mf = cands.map((q, j) => TP.moveFeatures(pre, type, j === ci ? cands[ci] : q, ctx));
+          const kinds = cands.map((q, j) => TP.kindOf(type, (j === ci ? cands[ci] : q).spin | 0, mf[j].lines, mf[j].F.digW | 0, combo + 1, g));
+          data.push({ type, cands: cands.map((q) => ({ x: q.x, r: q.r })), feats: mf.map((m) => sparse(m.F)), kinds, ci });
         }
         if (sim.frame > sim.endFrame + 5) break;
       }
@@ -95,14 +97,23 @@ export async function learn(files, playerArg, opt = {}) {
   }
   w = await fit((d) => !mis.has(d), "fit2");
   const after = stats(w, beta, (d) => !mis.has(d)), beforeClean = stats(base, beta, (d) => !mis.has(d));
+  // Moves the player does not make (user: プレーヤーがしない動きは取り入れない、掘りクアッドが見えてない等).
+  // For each kind (T-spin, dig Quad ...): spots where it was possible, how often the default Butter's first
+  // pick there is that kind, and how often the player made it. Player < 30% of the default's rate -> banned.
+  const avail = {}, defK = {}, took = {};
+  for (const d of data) { let bj = 0, bs = -Infinity; d.feats.forEach((f, j) => { const s = dot(base, f); if (s > bs) { bs = s; bj = j; } });
+    for (const k of new Set(d.kinds.filter(Boolean))) { avail[k] = (avail[k] || 0) + 1; if (d.kinds[bj] === k) defK[k] = (defK[k] || 0) + 1; if (d.kinds[d.ci] === k) took[k] = (took[k] || 0) + 1; } }
+  const never = {}, ban = [];
+  for (const k of TP.KINDS) { const a = avail[k] || 0, df = defK[k] || 0, t = took[k] || 0; never[k] = { possible: a, butter: df, player: t };
+    if (a >= 10 && df >= 5 && t < 0.3 * df) ban.push(k); }
   const fitted = {}, raw = {};
   K.forEach((k, i) => { raw[k] = Math.round(w[i] * 10) / 10; fitted[k] = Math.round((base[i] + MIX * (w[i] - base[i])) * 10) / 10; });
   fitted.tMiniSolo = Math.min(fitted.tMiniSolo, -60); // user rule: no T-Spin Mini outside a REN for B2B
   return {
-    kind: "va-tree-player", v: 1, player: realName || playerArg, made: new Date().toISOString(), games, pieces: data.length, skipped,
+    kind: "va-tree-player", v: 1, player: String(playerArg).trim() || realName, // as typed (Butter Y_Kei1215); replays keep names lowercase made: new Date().toISOString(), games, pieces: data.length, skipped,
     agree: { default: +beforeClean.top.toFixed(3), fitted: +after.top.toFixed(3) },
     misdrop: { rate: +(mis.size / data.length).toFixed(4), count: mis.size, byPiece, dir },
-    mix: MIX, options: TP.optionsOf(fitted), raw,
+    mix: MIX, options: { ...TP.optionsOf(fitted), ban, tank: false }, // the player's own version plays like the player (no tank) raw, kinds: never,
   };
 }
 

@@ -1057,6 +1057,10 @@
           tank: true,
           tankW: 120,
           tankSafe: 14,
+          // moves the player never makes (user: プレーヤーがしない動きは取り入れない、掘りクアッドが見えてない等): kinds from
+          // kindOf() listed in ban are never chosen (player data sets it, see learn-core.mjs)
+          ban: null,
+          banW: 5e3,
           // search
           ms: 45,
           maxNodes: 1e7,
@@ -1281,6 +1285,15 @@
           boardValue(r.rows, { b2b, hold: ctx.hold || null, tAhead: !!ctx.tAhead, pend: 0 }, P, F);
           return { F, lines: r.lines, rows: r.rows };
         }
+        function kindOf(type, spin, lines, dug, combo, g) {
+          if (!lines) return null;
+          if (type === "t" && spin === 2) return "tspin" + Math.min(3, lines);
+          if (type === "t" && spin === 1) return "tmini";
+          if (spin) return "allSpin";
+          if (lines === 4) return dug > 0 ? combo >= 2 && g > 0 ? "renQuad" : "digQuad" : "quad";
+          return null;
+        }
+        const KINDS = ["tspin1", "tspin2", "tspin3", "tmini", "allSpin", "quad", "digQuad", "renQuad"];
         const FIT_KEYS = [
           "backToBack",
           "b2bStep",
@@ -1497,6 +1510,10 @@
               }
               if (r.lines === 4 && combo >= 2 && node.g > 0) rew += P.renQuad;
               rew += P.digW * r.dug;
+              if (P.ban && P.ban.length) {
+                const k = kindOf(type, p.spin, r.lines, r.dug, combo, node.g);
+                if (k && P.ban.includes(k)) rew -= P.banW;
+              }
               if (P.tank && pend > 0 && atk > 0) {
                 const h = heightsOf(rows);
                 let top = 0;
@@ -1710,7 +1727,7 @@
           while (!p.step(50)) ;
           return p.result();
         }
-        const api = { create, plan, boardValue, findTslot, nextPossible, moveFeatures, weightsOf, optionsOf, FIT_KEYS, DEFAULTS };
+        const api = { create, plan, boardValue, findTslot, nextPossible, moveFeatures, weightsOf, optionsOf, kindOf, KINDS, FIT_KEYS, DEFAULTS };
         if (typeof module !== "undefined") module.exports = api;
         else root.LocalTreePlanner = api;
       })(typeof window === "undefined" ? globalThis : window);
