@@ -2,7 +2,7 @@
 //  ・Issue「QP PB 登録」(issues イベント): 本文の JSON と、添付された .ttr.json
 //  ・GAS 中継(repository_dispatch "pb"): ゲーム内の「ランキングに送る」から。TTR は GAS が Discord に投稿済み
 // TTR はリポジトリに置かない。Discord(webhook)に投稿し、そのメッセージ番号と CDN の URL を記録に持たせる
-// (CDN の URL は約1日で切れるので pb-refresh.js が定期的に新しくする)。
+// (CDN の URL は約1日で切れる。ページの「↓ TTR」は GAS の ?ttr= が押されたときだけメッセージから今の URL を取り直す。URL は6時間キャッシュ)。
 // 送られてくる値は誰でも書けるので、決めた項目・型・範囲だけを取り出す(それ以外は捨てる)。
 const fs = require('fs');
 const FILE = 'docs/ranking/data/records.json';

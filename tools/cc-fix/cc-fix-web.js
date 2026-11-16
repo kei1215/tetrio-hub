@@ -3,7 +3,8 @@
 import { ccFix, ccImprove, playersOf } from "./cc-fix-core.mjs";
 
 const CAT = "https://kei1215.github.io/tetrio-hub/ext-ai/";
-// Choices: Cold Clear 2 S2 (default) / Cold Clear 1. The package file names match ext-ai/catalog.json.
+// Choices (2026-11-16): Butter (= vA Tree, default: the fixed player's own Butter when installed), Butter without data,
+// any installed per-player Butter, Cold Clear 2 S2, Cold Clear 1. The package file names match ext-ai/catalog.json.
 // vA Tree (default, 2026-11-16, user: プレーヤーがしそうな手で一番いいもの・無理のない最適解): moves a player makes
 // (input.human: at most two keys after landing). When a per-player vA Tree for the chosen player is
 // installed (vA-tree-player → id va-tree-<name>), that one is used.
