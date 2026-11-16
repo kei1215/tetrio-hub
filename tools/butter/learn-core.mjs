@@ -1,0 +1,114 @@
+// Butter (= vA Tree) player data: learn(replays, player) -> data for "Butter <player>".
+// Shared by the Node tool (tools/ai-sim/tree-player-data.mjs) and the app (butter-learn.js, in a Worker).
+// Replays the player's rounds with the MP4 tool's engine. For each placed piece, every placement of
+// that piece on the board just before the lock gets the tree planner's counts (moveFeatures).
+// A softmax ranking fit then moves the weights from the defaults toward the player's choices.
+// It is a pull toward the player, not a copy: an L2 prior keeps each weight near its default, and the AI
+// uses the halfway point (MIX 0.5).
+// Misdrops (user: 置きミス再現はそもそも置きミスかを予測): a piece the fitted model finds very unlikely
+// while the same piece one column / one rotation away is much better counts as a misdrop. It is left
+// out of the fit (not learned as good terrain) and its rate / kind is kept.
+// Only the player's own rounds are used (user: AI のプレイからは学習しない): rounds of BOT / outside AI
+// players never match a human player's name, and records flagged bot / engine are skipped by the caller.
+import { parseReplayFile, PlayerSim } from "../../../tetrio-replay-video/src/replay.js";
+import { tetrominoes } from "../../../tetrio-replay-video/vendor/triangle/engine/utils/tetromino/data.ts";
+import { kicks as KD } from "../../../tetrio-replay-video/vendor/triangle/engine/utils/kicks/data.ts";
+import SP from "../patch/ai-src/engine/ai-spin-planner.js";
+import TP from "../patch/ai-src/engine/ai-tree-planner.js";
+
+const shapes = {}; for (const t of ["t", "s", "z", "l", "j", "i", "o"]) shapes[t] = tetrominoes[t].matrix.data.map((r) => r.map(([x, y]) => [x, y]));
+const c4 = [[0, 0, 0, 3], [2, 0, 0, 1], [2, 2, 1, 2], [0, 2, 2, 3]];
+const key = (cells) => cells.map(([x, y]) => x + "," + y).sort().join(";");
+const rowsOf = (st) => { const h = st.length, rows = []; for (let y = 0; y < h; y++) { let m = 0; const row = st[h - 1 - y]; for (let x = 0; x < 10; x++) if (row[x]) m |= 1 << x; rows.push(m); } return rows; };
+const K = TP.FIT_KEYS, NK = K.length, idx = Object.fromEntries(K.map((k, i) => [k, i]));
+// sparse feature vector: {i: Uint8Array, v: Float32Array}
+const sparse = (f) => { const ks = Object.keys(f).filter((k) => k in idx && f[k]); return { i: Uint8Array.from(ks.map((k) => idx[k])), v: Float32Array.from(ks.map((k) => f[k])) }; };
+const dot = (w, f) => { let s = 0; for (let j = 0; j < f.i.length; j++) s += w[f.i[j]] * f.v[j]; return s; };
+
+/** names of the players in a replay file (to pick from) */
+export function playersIn(file) { try { const p = parseReplayFile(typeof file === "string" ? file : JSON.stringify(file)); const s = new Set(); p.rounds.forEach((r) => r.forEach((x) => s.add(x.username))); return [...s]; } catch { return []; } }
+
+/**
+ * learn(files, playerName, {mix = 0.5, maxPositions = 20000, onProgress, tick}) -> data
+ * files: replay files (string or object, .ttr / .ttrm). Throws when too few of the player's pieces are found.
+ */
+export async function learn(files, playerArg, opt = {}) {
+  const player = String(playerArg).toLowerCase(), MIX = opt.mix ?? 0.5, MAXP = opt.maxPositions ?? 20000;
+  const say = opt.onProgress || (() => {}), tick = opt.tick || (async () => {});
+  const data = []; let games = 0, skipped = 0, realName = null;
+  for (let fi = 0; fi < files.length && data.length < MAXP; fi++) {
+    let rep; try { const f = files[fi]; rep = parseReplayFile(typeof f === "string" ? f : JSON.stringify(f)); } catch { continue; }
+    for (const round of rep.rounds) for (const p of round) {
+      if (String(p.username).toLowerCase() !== player || !p.replay?.events || data.length >= MAXP) continue;
+      const o = p.replay.options || {}, ks = KD[o.kickset || "SRS+"] || KD["SRS+"];
+      SP.setTables({ shapes, kicks: ks.kicks, ikicks: ks.i_kicks || ks.kicks, corner: [c4, c4, c4, c4] });
+      SP.useRules({ allow180: o.allow180 !== false });
+      let sim; try { sim = new PlayerSim(p.replay, { ts: p.ts }); } catch { continue; }
+      games++; realName ??= p.username;
+      for (let guard = 0; guard < 300000 && !sim.finished; guard++) {
+        const e = sim.engine, pre = rowsOf(e.board.state), b2b = Math.max(0, e.stats?.b2b ?? 0), combo = Math.max(0, e.stats?.combo ?? 0);
+        const hold = e.held ? String(e.held).toLowerCase() : null, queue = (e.queue || []).slice(0, 5).map((q) => String(q).toLowerCase());
+        const g = e.board.state.filter((row) => row.some((c) => c && c.mino === "gb")).length;
+        if (sim.step() === null) break;
+        for (const lk of sim.frameLocks) {
+          const type = String(lk.res.mino).toLowerCase(), h = pre.length;
+          if (!shapes[type]) continue;
+          const want = key((lk.cells || []).map(([x, y]) => [x, h - 1 - y]));
+          const cands = SP.placements(pre, type, 4, 19, 3);
+          const ci = cands.findIndex((q) => key(shapes[type][q.r].map(([cx, cy]) => [q.x + cx, q.y + cy])) === want);
+          if (ci < 0 || cands.length < 2) { skipped++; continue; }
+          const sp = lk.res.spin === "normal" ? 2 : lk.res.spin === "mini" ? 1 : 0; cands[ci] = { ...cands[ci], spin: sp };
+          const ctx = { b2b, combo, g, hold, tAhead: queue.includes("t") };
+          data.push({ type, cands: cands.map((q) => ({ x: q.x, r: q.r })), feats: cands.map((q) => sparse(TP.moveFeatures(pre, type, q, ctx).F)), ci });
+        }
+        if (sim.frame > sim.endFrame + 5) break;
+      }
+      say({ phase: "read", file: fi + 1, files: files.length, games, pieces: data.length }); await tick();
+    }
+  }
+  if (data.length < 50) throw new Error(`「${playerArg}」の手が少なすぎます (${data.length} 手)。名前とリプレイを確かめてください。`);
+
+  const w0 = TP.weightsOf(), base = Float64Array.from(K.map((k) => w0[k]));
+  const sd = new Float64Array(NK); { let n = 0; for (const d of data) for (const f of d.feats) { n++; for (let j = 0; j < f.i.length; j++) sd[f.i[j]] += f.v[j] * f.v[j]; } for (let i = 0; i < NK; i++) sd[i] = Math.sqrt(sd[i] / n) || 1; }
+  const stats = (w, beta, use) => { let ll = 0, top = 0, n = 0; for (const d of data) { if (use && !use(d)) continue; const s = d.feats.map((f) => beta * dot(w, f)), m = Math.max(...s); let z = 0; for (const v of s) z += Math.exp(v - m); ll += s[d.ci] - m - Math.log(z); if (s[d.ci] === m) top++; n++; } return { ll: ll / n, top: top / n }; };
+  let beta = 0.01; { let best = -Infinity; for (const b of [0.001, 0.002, 0.004, 0.007, 0.01, 0.015, 0.02, 0.03, 0.05]) { const r = stats(base, b).ll; if (r > best) { best = r; beta = b; } } }
+  async function fit(use, label, lambda = 2, epochs = 120) {
+    const delta = new Float64Array(NK), m = new Float64Array(NK), v = new Float64Array(NK), set = data.filter(use), N = set.length, w = Float64Array.from(base);
+    for (let ep = 1; ep <= epochs; ep++) {
+      const grad = new Float64Array(NK);
+      for (const d of set) { const s = d.feats.map((f) => beta * dot(w, f)), mx = Math.max(...s); let z = 0; const e = s.map((x) => { const t = Math.exp(x - mx); z += t; return t; });
+        for (let j = 0; j < d.feats.length; j++) { const c = (j === d.ci ? 1 : 0) - e[j] / z; if (!c) continue; const f = d.feats[j]; for (let q = 0; q < f.i.length; q++) grad[f.i[q]] += c * beta * f.v[q] / sd[f.i[q]]; } }
+      for (let i = 0; i < NK; i++) { const gi = grad[i] / N - (2 * lambda / N) * delta[i] / 100; m[i] = 0.9 * m[i] + 0.1 * gi; v[i] = 0.999 * v[i] + 0.001 * gi * gi;
+        delta[i] += 20 * (m[i] / (1 - 0.9 ** ep)) / (Math.sqrt(v[i] / (1 - 0.999 ** ep)) + 1e-8); w[i] = base[i] + delta[i] / sd[i]; }
+      if (ep % 10 === 0) { say({ phase: label, epoch: ep, epochs, pieces: data.length }); await tick(); }
+    }
+    return w;
+  }
+  let w = await fit(() => true, "fit1");
+  const mis = new Set(), byPiece = {}, dir = { left: 0, right: 0, rot: 0 };
+  for (const d of data) {
+    const s = d.feats.map((f) => dot(w, f)), mx = Math.max(...s); let z = 0; for (const x of s) z += Math.exp(beta * (x - mx));
+    if (Math.exp(beta * (s[d.ci] - mx)) / z > 0.02) continue;
+    const me = d.cands[d.ci];
+    for (let j = 0; j < d.cands.length; j++) { const q = d.cands[j];
+      if (((q.r === me.r && Math.abs(q.x - me.x) === 1) || (q.x === me.x && q.r !== me.r)) && s[j] - s[d.ci] > 3 / beta) { mis.add(d); byPiece[d.type] = (byPiece[d.type] || 0) + 1; if (q.r !== me.r) dir.rot++; else if (me.x < q.x) dir.left++; else dir.right++; break; } }
+  }
+  w = await fit((d) => !mis.has(d), "fit2");
+  const after = stats(w, beta, (d) => !mis.has(d)), beforeClean = stats(base, beta, (d) => !mis.has(d));
+  const fitted = {}, raw = {};
+  K.forEach((k, i) => { raw[k] = Math.round(w[i] * 10) / 10; fitted[k] = Math.round((base[i] + MIX * (w[i] - base[i])) * 10) / 10; });
+  fitted.tMiniSolo = Math.min(fitted.tMiniSolo, -60); // user rule: no T-Spin Mini outside a REN for B2B
+  return {
+    kind: "va-tree-player", v: 1, player: realName || playerArg, made: new Date().toISOString(), games, pieces: data.length, skipped,
+    agree: { default: +beforeClean.top.toFixed(3), fitted: +after.top.toFixed(3) },
+    misdrop: { rate: +(mis.size / data.length).toFixed(4), count: mis.size, byPiece, dir },
+    mix: MIX, options: TP.optionsOf(fitted), raw,
+  };
+}
+
+/** the id / label / package script of a per-player Butter (base = the Butter package script) */
+export function slugOf(name) { let s = String(name || "").toLowerCase().replace(/[^a-z0-9_-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 22); if (!s) { let h = 2166136261; for (const c of String(name)) h = Math.imul(h ^ c.codePointAt(0), 16777619); s = (h >>> 0).toString(16); } return s; }
+export function playerPackage(data, base) {
+  const slug = slugOf(data.player), id = ("va-tree-" + slug).slice(0, 32), label = "Butter " + data.player;
+  return { id, label, name: "Butter-" + slug + ".js", script: "var __VA_TREE_EMBED__=" + JSON.stringify({ id, label, data }) + ";\n" + base };
+}

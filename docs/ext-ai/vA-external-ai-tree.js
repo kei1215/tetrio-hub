@@ -31,9 +31,9 @@
     mod
   ));
 
-  // ../../tetrio-hub/tools/patch/ai-src/engine/ai-spin-planner.js
+  // ../tetrio-hub/tools/patch/ai-src/engine/ai-spin-planner.js
   var require_ai_spin_planner = __commonJS({
-    "../../tetrio-hub/tools/patch/ai-src/engine/ai-spin-planner.js"(exports, module) {
+    "../tetrio-hub/tools/patch/ai-src/engine/ai-spin-planner.js"(exports, module) {
       (function spinPlannerFactory(root) {
         "use strict";
         const W2 = 10, FULL = (1 << W2) - 1;
@@ -999,9 +999,9 @@
     }
   });
 
-  // ../../tetrio-hub/tools/patch/ai-src/engine/ai-tree-planner.js
+  // ../tetrio-hub/tools/patch/ai-src/engine/ai-tree-planner.js
   var require_ai_tree_planner = __commonJS({
-    "../../tetrio-hub/tools/patch/ai-src/engine/ai-tree-planner.js"(exports, module) {
+    "../tetrio-hub/tools/patch/ai-src/engine/ai-tree-planner.js"(exports, module) {
       (function treePlannerFactory(root) {
         "use strict";
         const SP2 = (typeof __require === "function" ? require_ai_spin_planner() : null) || root.LocalSpinPlanner;
@@ -1705,17 +1705,17 @@
     }
   });
 
-  // ext-ai-pages/pkg/tree/src/entry.js
+  // ../tetrio-hub/tools/butter/package-entry.js
   var import_ai_spin_planner = __toESM(require_ai_spin_planner());
   var import_ai_tree_planner = __toESM(require_ai_tree_planner());
 
-  // ext-ai-pages/pkg/tree/src/shapes.json
+  // ../tetrio-hub/tools/butter/shapes.json
   var shapes_default = { t: [[[1, 0, 241], [0, 1, 199], [1, 1, 164], [2, 1, 124]], [[2, 1, 124], [1, 0, 241], [1, 1, 41], [1, 2, 31]], [[1, 2, 31], [2, 1, 124], [1, 1, 74], [0, 1, 199]], [[0, 1, 199], [1, 2, 31], [1, 1, 146], [1, 0, 241]]], s: [[[1, 0, 201], [2, 0, 124], [0, 1, 199], [1, 1, 156]], [[2, 1, 114], [2, 2, 31], [1, 0, 241], [1, 1, 39]], [[1, 2, 156], [0, 2, 199], [2, 1, 124], [1, 1, 201]], [[0, 1, 39], [0, 0, 241], [1, 2, 31], [1, 1, 114]]], z: [[[0, 0, 199], [1, 0, 114], [1, 1, 39], [2, 1, 124]], [[2, 0, 241], [2, 1, 156], [1, 1, 201], [1, 2, 31]], [[2, 2, 124], [1, 2, 39], [1, 1, 114], [0, 1, 199]], [[0, 2, 31], [0, 1, 201], [1, 1, 156], [1, 0, 241]]], l: [[[2, 0, 241], [0, 1, 199], [1, 1, 68], [2, 1, 156]], [[2, 2, 124], [1, 0, 241], [1, 1, 17], [1, 2, 39]], [[0, 2, 31], [2, 1, 124], [1, 1, 68], [0, 1, 201]], [[0, 0, 199], [1, 2, 31], [1, 1, 17], [1, 0, 114]]], j: [[[0, 0, 241], [0, 1, 39], [1, 1, 68], [2, 1, 124]], [[2, 0, 124], [1, 0, 201], [1, 1, 17], [1, 2, 31]], [[2, 2, 31], [2, 1, 114], [1, 1, 68], [0, 1, 199]], [[0, 2, 199], [1, 2, 156], [1, 1, 17], [1, 0, 241]]], i: [[[0, 1, 199], [1, 1, 68], [2, 1, 68], [3, 1, 124]], [[2, 0, 241], [2, 1, 17], [2, 2, 17], [2, 3, 31]], [[3, 2, 124], [2, 2, 68], [1, 2, 68], [0, 2, 199]], [[1, 3, 31], [1, 2, 17], [1, 1, 17], [1, 0, 241]]], o: [[[0, 0, 193], [1, 0, 112], [0, 1, 7], [1, 1, 28]], [[1, 0, 112], [1, 1, 28], [0, 0, 193], [0, 1, 7]], [[1, 1, 28], [0, 1, 7], [1, 0, 112], [0, 0, 193]], [[0, 1, 7], [0, 0, 193], [1, 1, 28], [1, 0, 112]]] };
 
-  // ext-ai-pages/pkg/tree/src/kicks-srsplus.json
+  // ../tetrio-hub/tools/butter/kicks-srsplus.json
   var kicks_srsplus_default = { kicks: { "10": [[1, 0], [1, 1], [0, -2], [1, -2]], "12": [[1, 0], [1, 1], [0, -2], [1, -2]], "13": [[1, 0], [1, -2], [1, -1], [0, -2], [0, -1]], "20": [[0, 1], [-1, 1], [1, 1], [-1, 0], [1, 0]], "21": [[-1, 0], [-1, -1], [0, 2], [-1, 2]], "23": [[1, 0], [1, -1], [0, 2], [1, 2]], "30": [[-1, 0], [-1, 1], [0, -2], [-1, -2]], "31": [[-1, 0], [-1, -2], [-1, -1], [0, -2], [0, -1]], "32": [[-1, 0], [-1, 1], [0, -2], [-1, -2]], "01": [[-1, 0], [-1, -1], [0, 2], [-1, 2]], "03": [[1, 0], [1, -1], [0, 2], [1, 2]], "02": [[0, -1], [1, -1], [-1, -1], [1, 0], [-1, 0]] }, i_kicks: { "10": [[-1, 0], [2, 0], [-1, 2], [2, -1]], "12": [[-1, 0], [2, 0], [-1, -2], [2, 1]], "13": [[1, 0]], "20": [[0, 1]], "21": [[-2, 0], [1, 0], [-2, -1], [1, 2]], "23": [[2, 0], [-1, 0], [2, -1], [-1, 2]], "30": [[1, 0], [-2, 0], [1, 2], [-2, -1]], "31": [[-1, 0]], "32": [[1, 0], [-2, 0], [1, -2], [-2, 1]], "01": [[1, 0], [-2, 0], [-2, 1], [1, -2]], "03": [[-1, 0], [2, 0], [2, 1], [-1, -2]], "02": [[0, -1]] } };
 
-  // ext-ai-pages/pkg/tree/src/entry.js
+  // ../tetrio-hub/tools/butter/package-entry.js
   var shapes = {};
   for (const t of Object.keys(shapes_default)) shapes[t] = shapes_default[t].map((r) => r.map(([x, y]) => [x, y]));
   var c = [[0, 0, 0, 3], [2, 0, 0, 1], [2, 2, 1, 2], [0, 2, 2, 3]];

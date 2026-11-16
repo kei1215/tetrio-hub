@@ -39,6 +39,8 @@ v4.8246 Spin B2B mode (vA option "BOT: Spin B2B モード", localStorage
 - local-ai-room.js:config.labels で対戦の表示名(TTRM の名前)を上書きできる。
 
 ## Butter(バター)= vA Tree(2026-11-16)
+- v5.08 から vA に最初から入る(`engine/butter-preinstalled.js`)。外部AIの中で Butter だけ、アプリ内で学習できる(外部AI対戦の「Butter に学習させる」→「Butter <名前>」が増える)。学ぶのは人のプレイだけ(選んだリプレイと、BOT・外部AIでないオフライン記録)。他の外部AIは学習しない。
+- 作り直し: `tools/butter/build.sh`(外部AIパッケージ docs/ext-ai/vA-external-ai-tree.js・butter-preinstalled.js・butter-learn.js をまとめて作る)。学習の中身は `tools/butter/learn-core.mjs`(Node の tree-player-data.mjs と同じ)。
 - 名前の由来:「vATree」と打ったら自動変換で「butter」になったので、ユーザーが AI の名前を Butter(バター)にした。
 - 中身: `engine/ai-tree-planner.js`(CC1 型の木探索 + CC1 の盤面評価 + B2B・掘り・TSM・相殺の調整)。外部AIのパッケージとして配る(`docs/ext-ai/vA-external-ai-tree.js`、パッケージ id は `va-tree` のまま)。
 - プレーヤーのデータ入り: `tools/ai-sim/tree-player-data.mjs` でリプレイから重みを合わせ、「Butter <プレーヤー名>」(例: Butter Y_Kei1215、id `va-tree-<名前>`)として何人ぶんでも入れられる。

@@ -98,6 +98,8 @@
 - [x] 新しい AI「Butter」(= vA Tree、2026-11-16、外部AIとして公開):CC1 型の木探索 + CC1 の盤面評価 + B2B 上限・REN 外 TSM 減点・掘り REN-Quad・PC はルールの火力だけ・相殺。Node(4 PPS・NEXT 5 個)で CC1 に 12勝4敗(APP 0.96 対 0.94)。今までの vA は残す。
 - [x] Butter のプレーヤーデータ:リプレイから重みを合わせ「Butter <名前>」を何人ぶんでも入れられる(tools/ai-sim/tree-player-data.mjs、置きミスらしい手は学ばない)
 - [x] CC 盤面修正に Butter(人が入力できる置き方だけ、置きミスの所を「火力 / 地形がきれい」で見せる)
+- [x] Butter を vA に最初から入れる(v5.08 予定、engine/butter-preinstalled.js。外部AIと同じく Worker で動く)
+- [x] Butter だけアプリ内で学習(外部AI対戦の「Butter に学習させる」:選んだ .ttr/.ttrm と、この端末のオフライン記録のうち BOT・外部AIでないもの。engine/butter-learn.js、tools/butter/build.sh)
 - [ ] Butter:ゲーム内の確認(外部AI対戦・かんたんインストール・盤面修正・「Butter 名前」の表示)
 - [ ] Butter:速さ(1手 約80ms → 7 PPS でも余裕を)と 7 PPS での CC1 対戦
 - [ ] Butter:B2B を溜めるモードの切り替え(通常 / 溜め)
