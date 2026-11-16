@@ -38,9 +38,11 @@ def main():
                 text = data.decode('utf-8')
                 text = text.replace("script('/engine/' + name)", f"script('{base}engine/' + name)")
                 text = text.replace("fetch('/engine/", f"fetch('{base}engine/")
+                text = text.replace('fetch("/engine/', f'fetch("{base}engine/')  # butter-preinstalled.js (v5.08)
                 # The plan worker file path is desktop-only (cross-origin workers are refused on the
                 # blob page); the planner then builds its worker from a Blob, which works here.
                 text = text.replace('script[src*="/engine/ai-spin-planner.js"]', 'script[src*="qp-desktop-only-plan-worker"]')
+                text = text.replace('script[src*=\\"/engine/ai-spin-planner.js\\"]', 'script[src*=\\"qp-desktop-only-plan-worker\\"]')  # same, inside Butter's embedded package text
                 text = text.replace('OFFLINE vA-', 'OFFLINE BOOKMARKLET vA-')
                 # user 2026-11-14: ブラウザ版の自作AIは1体まで
                 text = text.replace("if(profiles.length>=64)throw Error('保存AIは64体までです')",

@@ -244,6 +244,7 @@ onmessage = async (e) => { const m = e.data;
    docked.addEventListener('toggle', async () => { if (!docked.open) return; fill(); try { await window.LocalAI?.load?.(); fill(); } catch {} });
    return true;
   };
+  window.addEventListener('qp-ext-ai-refresh', () => { try { fill(); } catch {} }); // Butter learned a player (butter-preinstalled.js)
   if (!dock()) { const mo = new MutationObserver(() => { if (dock()) mo.disconnect(); }); mo.observe(document.documentElement, { childList: true, subtree: true }); }
   $('button').onclick = async () => { if (docked) { docked.open = true; docked.scrollIntoView?.({ block: 'nearest' }); return; } root.classList.toggle('open'); if (root.classList.contains('open')) { fill(); try { await window.LocalAI?.load?.(); fill(); } catch {} } };
   $('[data-a="stop"]').onclick = () => { try { window.LocalAIRoom?.stop?.(); try { window.LocalNative?.resetResults?.(); window.LocalNative?.view?.('play1p'); } catch {} status('終了しました'); } catch (e) { status(e.message); } };

@@ -47,7 +47,7 @@
       if (!files.length) return say("リプレイがありません。.ttr / .ttrm を選ぶか、オフラインで遊んだ記録を使ってください");
       say(files.length + " 個のリプレイから「" + name + "」を学習します…");
       try {
-        const src = await (await fetch("/engine/butter-learn.js")).text();
+        const src = await (await fetch('/engine/butter-learn.js')).text();
         worker = new Worker(URL.createObjectURL(new Blob([src], { type: "text/javascript" })));
       } catch (e) { worker = null; return say("学習を始められません: " + e.message); }
       worker.onmessage = async (e) => {

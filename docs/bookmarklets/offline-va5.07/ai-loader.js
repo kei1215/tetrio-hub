@@ -2,17 +2,17 @@
 (() => {
   // This runs only in the vA overlay, so the title itself is a reliable way
   // to confirm that vA—not a previous vO build—was installed.
-  document.title = 'TETR.IO — OFFLINE BOOKMARKLET vA-5.07';
+  document.title = 'TETR.IO — OFFLINE BOOKMARKLET vA-5.08';
   document.documentElement.dataset.qpPatchKind = 'A';
   const ENGINE = [
     'ai-policy-model.js', 'reinforcement-core.js', 'ai-behavior.js', 'ai-spin-templates.js', 'ai-preview.js',
-    'ai-routing.js', 'ai-movegen.js', 'ai-tshape-table.js', 'ai-spin-planner.js', 'ai-templates.js', 'ai-information.js', 'ai-player-settings.js', 'ai-quick-planner.js', 'bot-ai.js', 'ai-external.js', 'local-ai-room.js', 'win-gauge.js', 'local-room-ui.js', 'live-bot-controller.js',
+    'ai-routing.js', 'ai-movegen.js', 'ai-tshape-table.js', 'ai-spin-planner.js', 'ai-templates.js', 'ai-information.js', 'ai-player-settings.js', 'ai-quick-planner.js', 'bot-ai.js', 'ai-external.js', 'butter-preinstalled.js', 'local-ai-room.js', 'win-gauge.js', 'local-room-ui.js', 'live-bot-controller.js',
     'bot-learning-core.js', 'bot-learning.js', 'rl-launcher.js', 'ttr-learning-format.js',
     'ai-ranking-training.js', 'ttr-learning.js', 'reinforcement-ui.js',
     'reinforcement-charts.js', 'ai-manager.js',
     'mode-capabilities.js', 'postgame-coach.js', 'qp-ai-options.js', 'ai-weight-tuner.js'
   ];
-  const state = { loaded: false, loading: null, enabled: false, model: null, engineVersion: 'vA-5.07' };
+  const state = { loaded: false, loading: null, enabled: false, model: null, engineVersion: 'vA-5.08' };
   const script = src => new Promise((resolve, reject) => {
     const tag = document.createElement('script'); tag.src = src; tag.async = false;
     tag.onload = resolve; tag.onerror = () => reject(Error('AIモジュールを読み込めません: ' + src));
@@ -24,10 +24,10 @@
     state.loading = (async () => {
       // vA is the AI edition: load the complete local engine here so that the
       // AI LAB card and Tab controls always address the same initialized API.
-      for (const name of ENGINE) await script('https://kei1215.github.io/tetrio-hub/bookmarklets/offline-va5.07/engine/' + name);
+      for (const name of ENGINE) await script('https://kei1215.github.io/tetrio-hub/bookmarklets/offline-va5.08/engine/' + name);
       state.model = window.LocalBotLearning?.modeLearner?.('qp')?.snapshot?.() || null;
       state.loaded = true;
-      document.title = 'TETR.IO — OFFLINE BOOKMARKLET vA-5.07';
+      document.title = 'TETR.IO — OFFLINE BOOKMARKLET vA-5.08';
       document.documentElement.dataset.qpPatchKind = 'A';
       return state;
     })();
