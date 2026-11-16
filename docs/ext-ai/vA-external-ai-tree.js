@@ -1069,6 +1069,8 @@
           //  player's own spread; misdrop: that share of moves lands one column off (the player's misdrop rate).
           openers: null,
           openW: 45,
+          openBudget: 1500,
+          openDepth: 5,
           pickBeta: 0,
           misdrop: 0,
           // search
@@ -1531,9 +1533,12 @@
               }
               if (r.lines === 4 && combo >= 2 && node.g > 0) rew += P.renQuad;
               rew += P.digW * r.dug;
-              if (P.ban && P.ban.length) {
+              if (P.ban && P.ban.length || P.kindBias) {
                 const k = kindOf(type, p.spin, r.lines, r.dug, combo, node.g);
-                if (k && P.ban.includes(k)) rew -= P.banW;
+                if (k) {
+                  if (P.ban && P.ban.includes(k)) rew -= P.banW;
+                  if (P.kindBias && P.kindBias[k]) rew += P.kindBias[k];
+                }
               }
               if (P.tank && pend > 0 && atk > 0) {
                 const h = heightsOf(rows);
@@ -1683,9 +1688,65 @@
             }
             return path.length === 1 && rootNode.children && !rootNode.children.length;
           }
+          function openPlan(list) {
+            if (!openOn) return null;
+            const H2 = rows0.length;
+            const inT = (rows, t) => {
+              for (let k = 0; k < H2; k++) {
+                const m = rows[H2 - 1 - k];
+                if (m && m & ~(t[k] || 0)) return false;
+              }
+              return true;
+            };
+            const covered = (rows, t) => {
+              let c2 = 0;
+              for (let x = 0; x < W2; x++) {
+                let top = false;
+                for (let k = H2 - 1; k >= 0; k--) {
+                  const f = rows[H2 - 1 - k] >> x & 1;
+                  if (f) top = true;
+                  else if (top && k < t.length && t[k] >> x & 1) c2++;
+                }
+              }
+              return c2;
+            };
+            let best2 = null;
+            for (let ti = 0; ti < opens.length; ti++) {
+              const t = opens[ti];
+              if (!inT(rows0, t)) continue;
+              const memo = /* @__PURE__ */ new Map();
+              let budget = P.openBudget;
+              const dfs = (rows, hold, qi) => {
+                const cur = qi < P.openDepth ? seq[qi] : null;
+                if (!cur || budget-- <= 0) return { d: 0, cv: covered(rows, t) };
+                const key = rows.join(",") + "|" + hold + "|" + qi;
+                if (memo.has(key)) return memo.get(key);
+                let out2 = { d: 0, cv: covered(rows, t) };
+                const opts = [[cur, hold, qi + 1, false]];
+                if (holdOk) {
+                  if (hold && hold !== cur) opts.push([hold, cur, qi + 1, true]);
+                  else if (!hold && seq[qi + 1]) opts.push([seq[qi + 1], cur, qi + 2, true]);
+                }
+                for (const [type, h2, q2, held] of opts) for (const p of SP2.placements(rows, type, 4, 19, P.maxTail)) {
+                  const r2 = lock(rows, type, p, 0);
+                  if (r2.lines || !inT(r2.rows, t)) continue;
+                  const sub = dfs(r2.rows, h2, q2), v = { d: sub.d + 1, cv: sub.cv, type, p, held };
+                  if (v.d > out2.d || v.d === out2.d && v.cv < out2.cv) out2 = v;
+                }
+                memo.set(key, out2);
+                return out2;
+              };
+              const r = dfs(rows0, rootNode.hold, 0);
+              if (r.d > 0 && (!best2 || r.d > best2.d || r.d === best2.d && r.cv < best2.cv)) best2 = r;
+            }
+            if (!best2) return null;
+            return list.find((c2) => !c2.dead && c2.move.type === best2.type && c2.move.x === best2.p.x && c2.move.y === best2.p.y && c2.move.r === best2.p.r && !!c2.move.hold === best2.held) || null;
+          }
           function result() {
             const list = rootNode.children || [];
             if (!list.length) return null;
+            const op = openPlan(list);
+            if (op) return out(op);
             const inc = Math.max(0, Number(P.incoming) || 0);
             const pickList = [];
             for (const c3 of list) {

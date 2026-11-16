@@ -21,6 +21,54 @@
     }
     return out;
   }
+  // replays the player picked, kept per name so the automatic re-learn after a match uses them too
+  const db = () => new Promise((ok, ng) => { const r = indexedDB.open("qp-butter", 1); r.onupgradeneeded = () => r.result.createObjectStore("picked"); r.onsuccess = () => ok(r.result); r.onerror = () => ng(r.error); });
+  async function pickedOf(name) { try { const d = await db(); return await new Promise((ok) => { const q = d.transaction("picked").objectStore("picked").get(String(name).toLowerCase()); q.onsuccess = () => ok(q.result || []); q.onerror = () => ok([]); }); } catch { return []; } }
+  async function keepPicked(name, texts) { if (!texts.length) return; try { const all = [...new Set([...(await pickedOf(name)), ...texts])].slice(-40); const d = await db(); d.transaction("picked", "readwrite").objectStore("picked").put(all, String(name).toLowerCase()); } catch {} }
+  // one learning run in a Worker; say(text) reports progress
+  async function learnRun(name, files, say) {
+    if (worker) return say("学習中です");
+    say(files.length + " 個のリプレイから「" + name + "」を学習します…");
+    try {
+      const src = await (await fetch('/engine/butter-learn.js')).text();
+      worker = new Worker(URL.createObjectURL(new Blob([src], { type: "text/javascript" })));
+    } catch (e) { worker = null; return say("学習を始められません: " + e.message); }
+    worker.onmessage = async (e) => {
+      const m = e.data;
+      if (m.t === "p") { const q = m.p; say(q.phase === "read" ? `リプレイを読んでいます ${q.file}/${q.files}(${q.games} 試合・${q.pieces} 手)` : `合わせています ${q.phase === "fit1" ? "1" : "2"}/2  ${q.epoch}/${q.epochs}(${q.pieces} 手)`); return; }
+      worker.terminate(); worker = null;
+      if (m.t === "err") return say("学習できませんでした: " + m.msg);
+      try {
+        const ids = await window.LocalExternalAI.addFiles([new File([m.pkg.script], m.pkg.name, { type: "text/javascript" })]);
+        window.dispatchEvent(new Event("qp-ext-ai-refresh"));
+        say(`できました: ${m.pkg.label}(${m.data.games} 試合・${m.data.pieces} 手、置きミスらしい手 ${(m.data.misdrop.rate * 100).toFixed(1)}%)\n外部AIの一覧から選べます(${ids.join(", ")})`);
+      } catch (err) { say("保存できませんでした: " + err.message); }
+    };
+    worker.onerror = (ev) => { try { worker.terminate(); } catch {} worker = null; say("学習でエラー: " + (ev.message || "worker")); };
+    worker.postMessage({ files, player: name, base: SCRIPT });
+  }
+  // automatic re-learn (user: 同じ名前の Butter と対戦したら試合のあとに自動で学習し直す): an AI room match of
+  // "Butter <name>" against <name> is saved after every round; 45 s after the last save, <name>'s own moves (the
+  // learner reads only that side, never Butter's) are learned again together with the replays picked before.
+  let autoT = 0;
+  function watchMatches() {
+    const L = window.LocalReplayLibrary; if (!L) return false; if (L.__butterAuto) return true; L.__butterAuto = true;
+    const real = L.saveMatch;
+    L.saveMatch = function (match) {
+      const r = real.apply(this, arguments);
+      try {
+        const names = (match.names || []).map(String), low = names.map((n) => n.toLowerCase());
+        const me = names.find((n, i) => low.includes("butter " + low[i]));
+        if (me) { clearTimeout(autoT); autoT = setTimeout(async () => {
+          const files = [...(await pickedOf(me)), ...localReplays(me)];
+          if (files.length) learnRun(me, files, (t) => console.log("[Butter 自動学習]", t));
+        }, 45000); }
+      } catch (e) { console.warn("[Butter 自動学習]", e); }
+      return r;
+    };
+    return true;
+  }
+  if (!watchMatches()) { const iv = setInterval(() => { if (watchMatches()) clearInterval(iv); }, 1000); }
   function mount(p) {
     if (!p || p.querySelector("[data-butter]")) return;
     const box = document.createElement("div"); box.dataset.butter = "1"; box.className = "butter";
@@ -42,27 +90,10 @@
     $('[data-b="go"]').onclick = async () => {
       const name = $('[data-b="name"]').value.trim();
       if (!name) return say("プレーヤー名(TETR.IO のユーザー名)を入れてください");
-      if (worker) return say("学習中です");
-      const files = [...picked, ...($('[data-b="local"]').checked ? localReplays(name) : [])];
+      await keepPicked(name, picked);
+      const files = [...(await pickedOf(name)), ...($('[data-b="local"]').checked ? localReplays(name) : [])];
       if (!files.length) return say("リプレイがありません。.ttr / .ttrm を選ぶか、オフラインで遊んだ記録を使ってください");
-      say(files.length + " 個のリプレイから「" + name + "」を学習します…");
-      try {
-        const src = await (await fetch('/engine/butter-learn.js')).text();
-        worker = new Worker(URL.createObjectURL(new Blob([src], { type: "text/javascript" })));
-      } catch (e) { worker = null; return say("学習を始められません: " + e.message); }
-      worker.onmessage = async (e) => {
-        const m = e.data;
-        if (m.t === "p") { const q = m.p; say(q.phase === "read" ? `リプレイを読んでいます ${q.file}/${q.files}(${q.games} 試合・${q.pieces} 手)` : `合わせています ${q.phase === "fit1" ? "1" : "2"}/2  ${q.epoch}/${q.epochs}(${q.pieces} 手)`); return; }
-        worker.terminate(); worker = null;
-        if (m.t === "err") return say("学習できませんでした: " + m.msg);
-        try {
-          const ids = await window.LocalExternalAI.addFiles([new File([m.pkg.script], m.pkg.name, { type: "text/javascript" })]);
-          window.dispatchEvent(new Event("qp-ext-ai-refresh"));
-          say(`できました: ${m.pkg.label}(${m.data.games} 試合・${m.data.pieces} 手、置きミスらしい手 ${(m.data.misdrop.rate * 100).toFixed(1)}%)\n外部AIの一覧から選べます(${ids.join(", ")})`);
-        } catch (err) { say("保存できませんでした: " + err.message); }
-      };
-      worker.onerror = (ev) => { try { worker.terminate(); } catch {} worker = null; say("学習でエラー: " + (ev.message || "worker")); };
-      worker.postMessage({ files, player: name, base: SCRIPT });
+      learnRun(name, files, say);
     };
   }
   const tryMount = () => { const p = document.querySelector("#qp-ext-ai .p"); if (p) { mount(p); return true; } return false; };

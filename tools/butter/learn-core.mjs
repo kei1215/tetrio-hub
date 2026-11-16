@@ -37,8 +37,8 @@ export async function learn(files, playerArg, opt = {}) {
   const player = String(playerArg).toLowerCase(), MIX = opt.mix ?? 1, MAXP = opt.maxPositions ?? 20000; // MIX 1 (user: Butter 本体は真似しない、本人版は真似をする)
   const say = opt.onProgress || (() => {}), tick = opt.tick || (async () => {});
   const data = []; let games = 0, skipped = 0, realName = null;
-  // opening shapes (user: 開幕テンプレが全く違う): the board after the player's 7th and 14th piece when nothing
-  // was cleared and no garbage came, counted by shape; the most common ones become this player's openers.
+  // opening shapes (user: 開幕テンプレが全く違う): the board before the player's first line clear (no garbage yet),
+  // counted by shape; the most common ones become this player's openers (one-off shapes only if none repeat).
   const openings = new Map();
   // B2B charging (user: B2Bを火力を出る数ためたのが1回だけ): peaks of the player's B2B chains that reached 4+
   const peaks = []; let b2bPieces = 0;
@@ -50,16 +50,23 @@ export async function learn(files, playerArg, opt = {}) {
       SP.setTables({ shapes, kicks: ks.kicks, ikicks: ks.i_kicks || ks.kicks, corner: [c4, c4, c4, c4] });
       SP.useRules({ allow180: o.allow180 !== false });
       let sim; try { sim = new PlayerSim(p.replay, { ts: p.ts }); } catch { continue; }
-      games++; realName ??= p.username; let placed = 0, prevB = 0;
+      games++; realName ??= p.username; let placed = 0, prevB = 0, openSt = 0, openPrev = null;
       for (let guard = 0; guard < 300000 && !sim.finished; guard++) {
         const e = sim.engine, pre = rowsOf(e.board.state), b2b = Math.max(0, e.stats?.b2b ?? 0), combo = Math.max(0, e.stats?.combo ?? 0);
         const hold = e.held ? String(e.held).toLowerCase() : null, queue = (e.queue || []).slice(0, 5).map((q) => String(q).toLowerCase());
         const g = e.board.state.filter((row) => row.some((c) => c && c.mino === "gb")).length;
+        const preOwn = g ? rowsOf(e.board.state.filter((row) => !row.some((c) => c && c.mino === "gb"))) : pre;
         if (sim.step() === null) break;
         for (const lk of sim.frameLocks) {
           placed++; b2bPieces++;
           { const b = Math.max(0, lk.res.stats?.b2b ?? 0); if (prevB >= 4 && b < prevB) peaks.push(prevB); prevB = b; }
-          if ((placed === 8 || placed === 15) && !g) { const cells = pre.reduce((a, m) => a + popc(m), 0); if (cells === (placed - 1) * 4) { const t = []; for (let y = pre.length - 1; y >= 0 && pre[y]; y--) t.push(pre[y]); const k = t.join(","); openings.set(k, (openings.get(k) || 0) + 1); } }
+          // the opener = the board just before the first line clear, within the first 3 bags (user: DT砲などは2巡目まで
+          //待ち、3巡目のTまで要る): so a DT cannon / PC setup is kept whole, and the planner fills it in piece order
+          // garbage that came in meanwhile is taken off (the setup is what the player built on top of it)
+          if (openSt === 0) { const own = preOwn, cells = own.reduce((a, m) => a + popc(m), 0);
+            if (cells !== (placed - 1) * 4) { openSt = 1; if (openPrev && placed - 2 >= 4 && placed - 2 <= 22) { const t = []; for (let y = openPrev.length - 1; y >= 0 && openPrev[y]; y--) t.push(openPrev[y]); const k = t.join(","); openings.set(k, (openings.get(k) || 0) + 1); } }
+            else if (placed > 23) openSt = 1;
+            openPrev = own; }
           const type = String(lk.res.mino).toLowerCase(), h = pre.length;
           if (!shapes[type]) continue;
           const want = key((lk.cells || []).map(([x, y]) => [x, h - 1 - y]));
@@ -116,6 +123,11 @@ export async function learn(files, playerArg, opt = {}) {
   const never = {}, ban = [];
   for (const k of TP.KINDS) { const a = avail[k] || 0, df = defK[k] || 0, t = took[k] || 0; never[k] = { possible: a, butter: df, player: t };
     if (a >= 10 && df >= 5 && t < 0.3 * df) ban.push(k); }
+  // mix of attacks (user: 攻撃の種類の割合(TSD/TST/クアッド)も合わせる、試合で同じ状態になる必要はない): the player's
+  // share of each kind against Butter's own share (measured from a Butter y_kei1215 match: TSD-heavy) -> a soft bias
+  const BUTTER_SHARE = { tspin1: 0.09, tspin2: 0.44, tspin3: 0, tmini: 0.05, allSpin: 0.19, quad: 0.01, digQuad: 0.19, renQuad: 0.04 };
+  const tookN = TP.KINDS.reduce((a, k) => a + (took[k] || 0), 0), kindBias = {};
+  if (tookN >= 20) for (const k of TP.KINDS) { if (ban.includes(k)) continue; const v = Math.round(Math.max(-120, Math.min(120, 50 * Math.log(((took[k] || 0) / tookN + 0.03) / (BUTTER_SHARE[k] + 0.03))))); if (Math.abs(v) >= 5) kindBias[k] = v; }
   const fitted = {}, raw = {};
   K.forEach((k, i) => { raw[k] = Math.round(w[i] * 10) / 10; fitted[k] = Math.round((base[i] + MIX * (w[i] - base[i])) * 10) / 10; });
   fitted.tMiniSolo = Math.min(fitted.tMiniSolo, -60);
@@ -128,8 +140,18 @@ export async function learn(files, playerArg, opt = {}) {
     kind: "va-tree-player", v: 1, player: String(playerArg).trim() || realName, made: new Date().toISOString(), games, pieces: data.length, skipped, // player as typed (Butter Y_Kei1215); replays keep names lowercase
     agree: { default: +beforeClean.top.toFixed(3), fitted: +after.top.toFixed(3) },
     misdrop: { rate: +(mis.size / data.length).toFixed(4), count: mis.size, byPiece, dir },
-    beta, openers: [...openings.entries()].filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, n]) => ({ rows: k.split(",").map(Number), n })),
-    b2b: b2bStyle, mix: MIX, options: { ...TP.optionsOf(fitted), ...b2bOpt, ban, tank: false }, raw, kinds: never, // own version plays like the player (no tank)
+    beta, openers: (() => {
+      // setups the player built the same way at least twice; a shorter board that fits inside one is the same setup
+      // cut short (a clear came early), so it counts for it; keep the best supported setups, not the ones inside an already kept one (any length up
+      // to 3 bags: DT cannon / PCO used for B2B / ...)
+      const all = [...openings.entries()].map(([k, n]) => ({ rows: k.split(",").map(Number), n }));
+      const inside = (a, b) => a.rows.length <= b.rows.length && a.rows.every((m, i) => (m & ~b.rows[i]) === 0);
+      for (const a of all) a.sup = all.reduce((t, b) => t + (inside(b, a) ? b.n : 0), 0);
+      all.sort((a, b) => b.sup - a.sup || b.rows.length - a.rows.length);
+      const keep = []; for (const a of all) { if (a.n < 2 || keep.some((k) => inside(a, k))) continue; keep.push(a); if (keep.length >= 4) break; }
+      return keep.map((a) => ({ rows: a.rows, n: a.sup }));
+    })(),
+    b2b: b2bStyle, mix: MIX, options: { ...TP.optionsOf(fitted), ...b2bOpt, ban, kindBias, tank: false }, raw, kinds: never, // own version plays like the player (no tank)
   };
 }
 

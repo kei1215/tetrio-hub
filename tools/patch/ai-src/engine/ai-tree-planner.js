@@ -48,7 +48,7 @@
   //  openW (no reward for matching: a reward that stops when the shape is done made the search avoid finishing).
   //  pickBeta: the move is drawn from the top lines with weight exp(pickBeta x (value - best)) like the
   //  player's own spread; misdrop: that share of moves lands one column off (the player's misdrop rate).
-  openers:null,openW:45,pickBeta:0,misdrop:0,
+  openers:null,openW:45,openBudget:1500,openDepth:5,pickBeta:0,misdrop:0,
   // search
   ms:45,maxNodes:1e7,maxIters:1e9,maxTail:3,merge:true,speculate:true,seed:1,
  };
@@ -246,7 +246,10 @@
     }
     if(r.lines===4&&combo>=2&&node.g>0)rew+=P.renQuad;
     rew+=P.digW*r.dug;
-    if(P.ban&&P.ban.length){const k=kindOf(type,p.spin,r.lines,r.dug,combo,node.g);if(k&&P.ban.includes(k))rew-=P.banW}
+    if((P.ban&&P.ban.length)||P.kindBias){const k=kindOf(type,p.spin,r.lines,r.dug,combo,node.g);if(k){if(P.ban&&P.ban.includes(k))rew-=P.banW;
+     // the player's mix of attacks (user: 攻撃の種類の割合も合わせる、ただし高さや地形で変える): a soft bonus/penalty per
+     // kind, added to the search value, so the board (height, shape, a TSM combo coming) still decides
+     if(P.kindBias&&P.kindBias[k])rew+=P.kindBias[k]}}
     if(P.tank&&pend>0&&atk>0){const h=heightsOf(rows);let top=0;for(let x=0;x<W;x++)if(h[x]>top)top=h[x];if(top+pend<=P.tankSafe)rew-=P.tankW*Math.min(pend,atk)}
     pend=Math.max(0,pend-atk);
    }else{
@@ -305,8 +308,34 @@
     n.eval=score(n)}}
    return path.length===1&&rootNode.children&&!rootNode.children.length;
   }
+  // opener in piece order (user: テンプレを組める順番を考えて組んでほしい): look through the known pieces (and hold)
+  // for the placements that only fill the opener's own cells, no line clear; take the first move of the line that
+  // places the most pieces into the opener (and covers the fewest of its empty cells). Most common opener first.
+  function openPlan(list){
+   if(!openOn)return null;const H=rows0.length;
+   const inT=(rows,t)=>{for(let k=0;k<H;k++){const m=rows[H-1-k];if(m&&(m&~(t[k]||0)))return false}return true};
+   const covered=(rows,t)=>{let c=0;for(let x=0;x<W;x++){let top=false;for(let k=H-1;k>=0;k--){const f=rows[H-1-k]>>x&1;if(f)top=true;else if(top&&k<t.length&&(t[k]>>x&1))c++}}return c};
+   let best=null;
+   for(let ti=0;ti<opens.length;ti++){const t=opens[ti];if(!inT(rows0,t))continue;
+    const memo=new Map();let budget=P.openBudget;
+    const dfs=(rows,hold,qi)=>{const cur=qi<P.openDepth?seq[qi]:null;if(!cur||budget--<=0)return {d:0,cv:covered(rows,t)};
+     const key=rows.join(',')+'|'+hold+'|'+qi;if(memo.has(key))return memo.get(key);
+     let out={d:0,cv:covered(rows,t)};const opts=[[cur,hold,qi+1,false]];
+     if(holdOk){if(hold&&hold!==cur)opts.push([hold,cur,qi+1,true]);else if(!hold&&seq[qi+1])opts.push([seq[qi+1],cur,qi+2,true])}
+     for(const [type,h2,q2,held] of opts)for(const p of SP.placements(rows,type,4,19,P.maxTail)){
+      const r=lock(rows,type,p,0);if(r.lines||!inT(r.rows,t))continue;
+      const sub=dfs(r.rows,h2,q2),v={d:sub.d+1,cv:sub.cv,type,p,held};
+      if(v.d>out.d||v.d===out.d&&v.cv<out.cv)out=v}
+     memo.set(key,out);return out};
+    const r=dfs(rows0,rootNode.hold,0);
+    if(r.d>0&&(!best||r.d>best.d||r.d===best.d&&r.cv<best.cv))best=r;
+   }
+   if(!best)return null;
+   return list.find(c=>!c.dead&&c.move.type===best.type&&c.move.x===best.p.x&&c.move.y===best.p.y&&c.move.r===best.p.r&&!!c.move.hold===best.held)||null;
+  }
   function result(){
    const list=rootNode.children||[];if(!list.length)return null;
+   const op=openPlan(list);if(op)return out(op);
    // CC1 pick_move: skip lines that let the waiting garbage top out the middle columns
    const inc=Math.max(0,Number(P.incoming)||0);
    const pickList=[];
