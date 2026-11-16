@@ -51,3 +51,12 @@
 | 2026-11-10 | commit e84ebccd2 / build 20261109T164827 | `CLIENT_RENAMES_2026_11_10`(Ko→Vo, kc→Bc, Bs→Ls, Ml→Dl, _c→gc, yl→Al, vl→wl, Rt→Ht, Ys→Qs, Qo→Yo) | v4.8247 |
 | 2026-11-10b | commit e84ebccd2 / build 20261109T191625(同じ commit の作り直し) | `CLIENT_RENAMES_2026_11_10B`(Bc→Lc, Gc→Xc, Kc→Qc, Ls→Bs, Vo→Ko, Yl→Jl)。症状: QP TOOLS の停止と PATCH DELETE が消えた、`Unsupported client version` | v4.8255 |
 | 2026-11-16 | commit 75ce2f9f5 / build 20261115T210526 | `CLIENT_RENAMES_2026_11_16`(26 個、`--port-2026-11-16`)+ 文字の置き換え 2 つ(`function x(e,n,i){`→`y`、`new _.Text(`→`m.Text(`)。旧本体が手元になかったので、transform.js の旧アンカーを新本体に当て、String の split/includes/match を見張って外れたものを順に直した。症状: OFFLINE で EXIT TETR.IO? | v5.10 |
+
+## v5.11: automatic port at runtime (tools/patch/auto-port.js)
+O/standalone.js wraps transform with `auto-port.js`. When the stock transform fails on the tetrio.js the app gets,
+it spies String/RegExp lookups to find the first broken anchor, fits its short names to the new client (unique
+fit only; collisions resolved in original-name space; one-letter names as short literal windows), renames them in
+the transform text (never inside the embedded `const QP_..._SRC="..."` bundles), reloads, and repeats. The names
+are cached in userData/qp-autoport.json per tetrio.js sha. Tested: v5.09 transforms on the 2026-11-15 client give
+byte-identical output to the hand port v5.10 (A/O/R, ~4.3 s first time). If it cannot adapt, the log says
+"[QP auto-port] could not adapt" and the manual procedure above is still needed.

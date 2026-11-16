@@ -42,9 +42,17 @@
   // moves the player never makes (user: プレーヤーがしない動きは取り入れない、掘りクアッドが見えてない等): kinds from
   // kindOf() listed in ban are never chosen (player data sets it, see learn-core.mjs)
   ban:null,banW:5000,
+  // a player's own Butter (user: 開幕テンプレが全く違う・動きが効率的すぎる、僕の動きに合ってない):
+  //  openers: board shapes the player builds first (bottom row first). When the search starts from an opening
+  //  (no garbage, no more cells than a shape), cells in the shape's rows but outside the best-fitting shape cost
+  //  openW (no reward for matching: a reward that stops when the shape is done made the search avoid finishing).
+  //  pickBeta: the move is drawn from the top lines with weight exp(pickBeta x (value - best)) like the
+  //  player's own spread; misdrop: that share of moves lands one column off (the player's misdrop rate).
+  openers:null,openW:45,pickBeta:0,misdrop:0,
   // search
   ms:45,maxNodes:1e7,maxIters:1e9,maxTail:3,merge:true,speculate:true,seed:1,
  };
+ function popc(n){let c=0;while(n){n&=n-1;c++}return c}
  function heightsOf(rows){const H=rows.length,h=new Int8Array(W);let seen=0;for(let y=0;y<H&&seen!==FULL;y++){let nb=rows[y]&~seen;if(!nb)continue;seen|=nb;while(nb){const b=nb&-nb;h[31-Math.clz32(b)]=H-y;nb^=b}}return h}
  function filled(rows,x,y){return x<0||x>=W||y>=rows.length||(y>=0&&(rows[y]>>x&1)===1)}
  /* T-slots as CC1 finds them (sky slot left/right, TST twist -> cave slot or a 3-corner
@@ -194,6 +202,9 @@
   const g0=Math.max(0,Number(P.gRows)||0);
   const rootNode={rows:rows0,hold:state.hold?String(state.hold).toLowerCase():null,qi:0,b2b:Math.max(0,state.b2b|0),combo:Math.max(0,state.combo|0),
    pend:Math.max(0,Number(P.incoming)||0),g:g0,gi:0,acc:0,eval:0,children:null,spec:null,depth:0};
+  // opening shapes in play only when the search starts from an opening (no garbage, no more cells than the shape)
+  let rootCells=0;for(const m of rows0)if(m)rootCells+=popc(m);
+  const opens=(P.openers||[]).map(o=>o.rows||o).filter(t=>!g0&&t.reduce((a,m)=>a+popc(m),0)>=rootCells),openOn=opens.length>0;
   const seen=new Map();let nodes=0,done=false,spent=0,best=null,maxDepth=0,iters=0;
   const pieceAt=(i,extra)=>i<seq.length?seq[i]:extra;
   // children of a node for one known current piece (and the hold swap)
@@ -251,9 +262,12 @@
    if(P.merge){let h1=2166136261,h2=qi*31+b2b*7+combo*3+pend*131+(hold?hold.charCodeAt(0):0);for(let y=0;y<rows.length;y++){const v=rows[y];if(!v)continue;h1=Math.imul(h1^v^(y<<10),16777619);h2=(h2*33+v+y)|0}
     const k=h1+':'+h2,prev=seen.get(k);if(prev!==undefined&&prev>=n.acc)return null;seen.set(k,n.acc)}
    n.tAhead=seq.indexOf('t',qi)>=0;
-   n.eval=n.dead?-1e9:n.acc+boardValue(rows,n,P);
+   n.eval=n.dead?-1e9:n.acc+boardValue(rows,n,P)+(openOn&&!g?openBonus(rows):0);
    return n;
   }
+  function openBonus(rows){let best=Infinity;const H=rows.length;
+   for(const t of opens){let s=0;for(let k=0;k<t.length&&k<H;k++)s+=popc(rows[H-1-k]&~t[k]);if(s<best)best=s}
+   return -P.openW*best}
   function wellOf(rows){const h=heightsOf(rows);let w=0;for(let x=1;x<W;x++)if(h[x]<=h[w])w=x;return w}
   function expand(node){
    const cur=pieceAt(node.qi,null);
@@ -295,8 +309,13 @@
    const list=rootNode.children||[];if(!list.length)return null;
    // CC1 pick_move: skip lines that let the waiting garbage top out the middle columns
    const inc=Math.max(0,Number(P.incoming)||0);
-   for(const c of list){if(c.dead)continue;if(!inc)return out(c);const h=heightsOf(c.rows);if(h[3]+c.pend<=20&&h[4]+c.pend<=20&&h[5]+c.pend<=20)return out(c)}
-   return out(list[0]);
+   const pickList=[];
+   for(const c of list){if(c.dead)continue;if(inc){const h=heightsOf(c.rows);if(!(h[3]+c.pend<=20&&h[4]+c.pend<=20&&h[5]+c.pend<=20))continue}pickList.push(c)}
+   if(!pickList.length)return out(list[0]);
+   let c=pickList[0];
+   if(P.pickBeta>0){const top=pickList.slice(0,6),w=top.map(x=>Math.exp(P.pickBeta*(x.eval-c.eval)));let s=w.reduce((a,b)=>a+b,0)*Math.random();for(let i=0;i<top.length;i++){s-=w[i];if(s<=0){c=top[i];break}}}
+   if(P.misdrop>0&&Math.random()<P.misdrop){const m=c.move,near=list.filter(x=>!x.dead&&x.move.type===m.type&&x.move.hold===m.hold&&x.move.r===m.r&&Math.abs(x.move.x-m.x)===1);if(near.length)c=near[(Math.random()*near.length)|0]}
+   return out(c);
   }
   function dbg(c){if(!root.__treeDebug)return;const r=lock(rootNode.rows,c.move.type,c.move,rootNode.g);if(!r.lines||c.move.spin||r.lines===4)return;
    const show=rows=>rows.slice(-12).map(m=>Array.from({length:W},(_,x)=>m>>x&1?'#':'.').join('')).join('\n');

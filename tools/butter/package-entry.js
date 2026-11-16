@@ -25,9 +25,14 @@ const dataOf = (files) => {
 };
 LocalExternalAI.register({
   id: EMBED ? EMBED.id : "va-tree", label: EMBED ? EMBED.label : "Butter",
-  async create(files, { strength } = {}) {
-    const iters = Math.max(20, Math.min(2000, Number(strength) || 200));
+  async create(files) {
+    // no level (user: butterにレベル設定はなくしてほしい)
+    const iters = 200;
     const data = dataOf(files), opts = data ? data.options : {};
+    // the player's own Butter plays like the player (user: 開幕テンプレが全く違う・動きが効率的すぎる): their opening
+    // shapes and their spread of choices (not in CC 盤面修正, which wants the best plausible move).
+    // Misdrops are not copied (user: ミスに関してはオフ状態だからいい).
+    const like = data ? { openers: data.openers || null, pickBeta: data.beta || 0, misdrop: 0 } : {};
     return {
       begin(input) {
         SP.setTables(TABLES);
@@ -37,7 +42,7 @@ LocalExternalAI.register({
         let g = 0; for (let y = H - 1; y >= 0; y--) { const n = board[y].filter(Boolean).length; if (n === W - 1) g++; else break; }
         const inc = (input.incoming || []).reduce((a, n) => a + (Number(n) || 0), 0);
         const job = TP.create(null, { board, falling: input.current, hold: input.hold || null, queue: (input.queue || []).slice(0, 5), holdAllowed: true, b2b: Math.max(0, input.b2b | 0), combo: Math.max(0, input.combo | 0) },
-          { ...opts, ...(input.human ? { maxTail: 2 } : {}), ms: 1e9, maxIters: iters, incoming: inc, gRows: g, seed: (Date.now() & 0xffff) + 1 });
+          { ...opts, ...like, ...(input.human ? { maxTail: 2, pickBeta: 0 } : {}), ms: 1e9, maxIters: iters, incoming: inc, gRows: g, seed: (Date.now() & 0xffff) + 1 });
         const conv = (p) => {
           if (!p) return null;
           const cells = TABLES.shapes[p.type][p.r].map(([cx, cy]) => [p.x + cx, H - 1 - (p.y + cy)]);

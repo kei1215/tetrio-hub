@@ -1061,6 +1061,16 @@
           // kindOf() listed in ban are never chosen (player data sets it, see learn-core.mjs)
           ban: null,
           banW: 5e3,
+          // a player's own Butter (user: 開幕テンプレが全く違う・動きが効率的すぎる、僕の動きに合ってない):
+          //  openers: board shapes the player builds first (bottom row first). When the search starts from an opening
+          //  (no garbage, no more cells than a shape), cells in the shape's rows but outside the best-fitting shape cost
+          //  openW (no reward for matching: a reward that stops when the shape is done made the search avoid finishing).
+          //  pickBeta: the move is drawn from the top lines with weight exp(pickBeta x (value - best)) like the
+          //  player's own spread; misdrop: that share of moves lands one column off (the player's misdrop rate).
+          openers: null,
+          openW: 45,
+          pickBeta: 0,
+          misdrop: 0,
           // search
           ms: 45,
           maxNodes: 1e7,
@@ -1070,6 +1080,14 @@
           speculate: true,
           seed: 1
         };
+        function popc(n) {
+          let c2 = 0;
+          while (n) {
+            n &= n - 1;
+            c2++;
+          }
+          return c2;
+        }
         function heightsOf(rows) {
           const H = rows.length, h = new Int8Array(W2);
           let seen = 0;
@@ -1449,6 +1467,9 @@
             spec: null,
             depth: 0
           };
+          let rootCells = 0;
+          for (const m of rows0) if (m) rootCells += popc(m);
+          const opens = (P.openers || []).map((o) => o.rows || o).filter((t) => !g0 && t.reduce((a, m) => a + popc(m), 0) >= rootCells), openOn = opens.length > 0;
           const seen = /* @__PURE__ */ new Map();
           let nodes = 0, done = false, spent = 0, best = null, maxDepth = 0, iters = 0;
           const pieceAt = (i, extra) => i < seq.length ? seq[i] : extra;
@@ -1567,8 +1588,18 @@
               seen.set(k, n.acc);
             }
             n.tAhead = seq.indexOf("t", qi) >= 0;
-            n.eval = n.dead ? -1e9 : n.acc + boardValue(rows, n, P);
+            n.eval = n.dead ? -1e9 : n.acc + boardValue(rows, n, P) + (openOn && !g ? openBonus(rows) : 0);
             return n;
+          }
+          function openBonus(rows) {
+            let best2 = Infinity;
+            const H2 = rows.length;
+            for (const t of opens) {
+              let s = 0;
+              for (let k = 0; k < t.length && k < H2; k++) s += popc(rows[H2 - 1 - k] & ~t[k]);
+              if (s < best2) best2 = s;
+            }
+            return -P.openW * best2;
           }
           function wellOf(rows) {
             const h = heightsOf(rows);
@@ -1656,13 +1687,33 @@
             const list = rootNode.children || [];
             if (!list.length) return null;
             const inc = Math.max(0, Number(P.incoming) || 0);
-            for (const c2 of list) {
-              if (c2.dead) continue;
-              if (!inc) return out(c2);
-              const h = heightsOf(c2.rows);
-              if (h[3] + c2.pend <= 20 && h[4] + c2.pend <= 20 && h[5] + c2.pend <= 20) return out(c2);
+            const pickList = [];
+            for (const c3 of list) {
+              if (c3.dead) continue;
+              if (inc) {
+                const h = heightsOf(c3.rows);
+                if (!(h[3] + c3.pend <= 20 && h[4] + c3.pend <= 20 && h[5] + c3.pend <= 20)) continue;
+              }
+              pickList.push(c3);
             }
-            return out(list[0]);
+            if (!pickList.length) return out(list[0]);
+            let c2 = pickList[0];
+            if (P.pickBeta > 0) {
+              const top = pickList.slice(0, 6), w = top.map((x) => Math.exp(P.pickBeta * (x.eval - c2.eval)));
+              let s = w.reduce((a, b) => a + b, 0) * Math.random();
+              for (let i = 0; i < top.length; i++) {
+                s -= w[i];
+                if (s <= 0) {
+                  c2 = top[i];
+                  break;
+                }
+              }
+            }
+            if (P.misdrop > 0 && Math.random() < P.misdrop) {
+              const m = c2.move, near = list.filter((x) => !x.dead && x.move.type === m.type && x.move.hold === m.hold && x.move.r === m.r && Math.abs(x.move.x - m.x) === 1);
+              if (near.length) c2 = near[Math.random() * near.length | 0];
+            }
+            return out(c2);
           }
           function dbg(c2) {
             if (!root.__treeDebug) return;
@@ -1765,9 +1816,10 @@
   LocalExternalAI.register({
     id: EMBED ? EMBED.id : "va-tree",
     label: EMBED ? EMBED.label : "Butter",
-    async create(files, { strength } = {}) {
-      const iters = Math.max(20, Math.min(2e3, Number(strength) || 200));
+    async create(files) {
+      const iters = 200;
       const data = dataOf(files), opts = data ? data.options : {};
+      const like = data ? { openers: data.openers || null, pickBeta: data.beta || 0, misdrop: 0 } : {};
       return {
         begin(input) {
           import_ai_spin_planner.default.setTables(TABLES);
@@ -1787,7 +1839,7 @@
           const job = import_ai_tree_planner.default.create(
             null,
             { board, falling: input.current, hold: input.hold || null, queue: (input.queue || []).slice(0, 5), holdAllowed: true, b2b: Math.max(0, input.b2b | 0), combo: Math.max(0, input.combo | 0) },
-            { ...opts, ...input.human ? { maxTail: 2 } : {}, ms: 1e9, maxIters: iters, incoming: inc, gRows: g, seed: (Date.now() & 65535) + 1 }
+            { ...opts, ...like, ...input.human ? { maxTail: 2, pickBeta: 0 } : {}, ms: 1e9, maxIters: iters, incoming: inc, gRows: g, seed: (Date.now() & 65535) + 1 }
           );
           const conv = (p) => {
             if (!p) return null;

@@ -638,6 +638,10 @@ MIGRATE_OLD = "return previous == self.version or (self.version == 2 and previou
 MIGRATE_NEW = "return previous == self.version or (self.version == 2 and previous == 1) or (self.version == 5 and previous == 4)"
 
 
+AUTO_PORT_OLD = "const patch=require('./transform');"
+AUTO_PORT_NEW = "const patch=require('./auto-port')(require('./transform'),require('path').join(__dirname,'transform.js'),app.getPath('userData'));"
+
+
 def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=False, offline=None, incremental=False, notes='', ai=None, port_ids=None, duo_src=None):
     offline = offline or {}
     ai = ai or {}
@@ -658,7 +662,17 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
             added = sorted(added + ai_added)
         elif ai and kind == 'A':
             raise SystemExit('vA zip without A/offline/ai-loader.js: ' + old_zip.name)
+        # v5.11 (user: 自動で修正するようにできない？): runtime auto-port for TETR.IO renames (tools/patch/auto-port.js)
+        if 'O/standalone.js' in names and 'O/auto-port.js' not in names:
+            added = sorted(added + ['O/auto-port.js'])
         for name in sorted(names + added):
+            if name == 'O/auto-port.js' and name in added:
+                info = zin.getinfo('O/transform.js')
+                data = (Path(__file__).parent / 'auto-port.js').read_bytes()
+                zi = zipfile.ZipInfo(name, FIXED_TIME); zi.compress_type = zipfile.ZIP_DEFLATED
+                zi.external_attr = info.external_attr; zi.create_system = info.create_system
+                zout.writestr(zi, data, compresslevel=9)
+                continue
             info = (ai_template if name.startswith('A/offline/') else template) if name in added else zin.getinfo(name)
             data = b'' if name in added else zin.read(name)
             base = name[len('O/offline/'):] if name.startswith('O/offline/') else None
@@ -697,6 +711,11 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                 if offline and kind == 'A':
                     text = add_cc_fix(text)
                 text = fix_replay_c_key(text, 'O/transform.js')
+                data = text.encode('utf-8')
+            elif name == 'O/standalone.js':
+                text = data.decode('utf-8')
+                if AUTO_PORT_NEW not in text:
+                    text = replace_once(text, AUTO_PORT_OLD, AUTO_PORT_NEW, name)
                 data = text.encode('utf-8')
             elif offline and name == 'O/music-main.js':
                 data = add_updater(data.decode('utf-8')).encode('utf-8')

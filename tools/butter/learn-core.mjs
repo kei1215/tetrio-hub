@@ -23,6 +23,7 @@ const rowsOf = (st) => { const h = st.length, rows = []; for (let y = 0; y < h; 
 const K = TP.FIT_KEYS, NK = K.length, idx = Object.fromEntries(K.map((k, i) => [k, i]));
 // sparse feature vector: {i: Uint8Array, v: Float32Array}
 const sparse = (f) => { const ks = Object.keys(f).filter((k) => k in idx && f[k]); return { i: Uint8Array.from(ks.map((k) => idx[k])), v: Float32Array.from(ks.map((k) => f[k])) }; };
+const popc = (n) => { let c = 0; while (n) { n &= n - 1; c++; } return c; };
 const dot = (w, f) => { let s = 0; for (let j = 0; j < f.i.length; j++) s += w[f.i[j]] * f.v[j]; return s; };
 
 /** names of the players in a replay file (to pick from) */
@@ -36,6 +37,11 @@ export async function learn(files, playerArg, opt = {}) {
   const player = String(playerArg).toLowerCase(), MIX = opt.mix ?? 1, MAXP = opt.maxPositions ?? 20000; // MIX 1 (user: Butter 本体は真似しない、本人版は真似をする)
   const say = opt.onProgress || (() => {}), tick = opt.tick || (async () => {});
   const data = []; let games = 0, skipped = 0, realName = null;
+  // opening shapes (user: 開幕テンプレが全く違う): the board after the player's 7th and 14th piece when nothing
+  // was cleared and no garbage came, counted by shape; the most common ones become this player's openers.
+  const openings = new Map();
+  // B2B charging (user: B2Bを火力を出る数ためたのが1回だけ): peaks of the player's B2B chains that reached 4+
+  const peaks = []; let b2bPieces = 0;
   for (let fi = 0; fi < files.length && data.length < MAXP; fi++) {
     let rep; try { const f = files[fi]; rep = parseReplayFile(typeof f === "string" ? f : JSON.stringify(f)); } catch { continue; }
     for (const round of rep.rounds) for (const p of round) {
@@ -44,13 +50,16 @@ export async function learn(files, playerArg, opt = {}) {
       SP.setTables({ shapes, kicks: ks.kicks, ikicks: ks.i_kicks || ks.kicks, corner: [c4, c4, c4, c4] });
       SP.useRules({ allow180: o.allow180 !== false });
       let sim; try { sim = new PlayerSim(p.replay, { ts: p.ts }); } catch { continue; }
-      games++; realName ??= p.username;
+      games++; realName ??= p.username; let placed = 0, prevB = 0;
       for (let guard = 0; guard < 300000 && !sim.finished; guard++) {
         const e = sim.engine, pre = rowsOf(e.board.state), b2b = Math.max(0, e.stats?.b2b ?? 0), combo = Math.max(0, e.stats?.combo ?? 0);
         const hold = e.held ? String(e.held).toLowerCase() : null, queue = (e.queue || []).slice(0, 5).map((q) => String(q).toLowerCase());
         const g = e.board.state.filter((row) => row.some((c) => c && c.mino === "gb")).length;
         if (sim.step() === null) break;
         for (const lk of sim.frameLocks) {
+          placed++; b2bPieces++;
+          { const b = Math.max(0, lk.res.stats?.b2b ?? 0); if (prevB >= 4 && b < prevB) peaks.push(prevB); prevB = b; }
+          if ((placed === 8 || placed === 15) && !g) { const cells = pre.reduce((a, m) => a + popc(m), 0); if (cells === (placed - 1) * 4) { const t = []; for (let y = pre.length - 1; y >= 0 && pre[y]; y--) t.push(pre[y]); const k = t.join(","); openings.set(k, (openings.get(k) || 0) + 1); } }
           const type = String(lk.res.mino).toLowerCase(), h = pre.length;
           if (!shapes[type]) continue;
           const want = key((lk.cells || []).map(([x, y]) => [x, h - 1 - y]));
@@ -65,6 +74,7 @@ export async function learn(files, playerArg, opt = {}) {
         }
         if (sim.frame > sim.endFrame + 5) break;
       }
+      if (prevB >= 4) peaks.push(prevB);
       say({ phase: "read", file: fi + 1, files: files.length, games, pieces: data.length }); await tick();
     }
   }
@@ -108,12 +118,18 @@ export async function learn(files, playerArg, opt = {}) {
     if (a >= 10 && df >= 5 && t < 0.3 * df) ban.push(k); }
   const fitted = {}, raw = {};
   K.forEach((k, i) => { raw[k] = Math.round(w[i] * 10) / 10; fitted[k] = Math.round((base[i] + MIX * (w[i] - base[i])) * 10) / 10; });
-  fitted.tMiniSolo = Math.min(fitted.tMiniSolo, -60); // user rule: no T-Spin Mini outside a REN for B2B
+  fitted.tMiniSolo = Math.min(fitted.tMiniSolo, -60);
+  // charge like the player: the chain value runs up to the player's usual peak, and a player who charges
+  // often (1+ chain of 5+ per 300 pieces) gets a steeper chain value
+  const sp = peaks.slice().sort((a, b) => a - b), med = sp.length ? sp[Math.floor(sp.length * 0.75)] : 0, per300 = peaks.filter((x) => x >= 5).length * 300 / Math.max(1, b2bPieces);
+  const b2bStyle = { chains: peaks.length, peaks: sp, per300: +per300.toFixed(2) };
+  const b2bOpt = med >= 5 ? { b2bCap: Math.min(16, med), b2bStep: Math.max(fitted.b2bStep, per300 >= 1 ? 30 : 20) } : {}; // user rule: no T-Spin Mini outside a REN for B2B
   return {
-    kind: "va-tree-player", v: 1, player: String(playerArg).trim() || realName, // as typed (Butter Y_Kei1215); replays keep names lowercase made: new Date().toISOString(), games, pieces: data.length, skipped,
+    kind: "va-tree-player", v: 1, player: String(playerArg).trim() || realName, made: new Date().toISOString(), games, pieces: data.length, skipped, // player as typed (Butter Y_Kei1215); replays keep names lowercase
     agree: { default: +beforeClean.top.toFixed(3), fitted: +after.top.toFixed(3) },
     misdrop: { rate: +(mis.size / data.length).toFixed(4), count: mis.size, byPiece, dir },
-    mix: MIX, options: { ...TP.optionsOf(fitted), ban, tank: false }, // the player's own version plays like the player (no tank) raw, kinds: never,
+    beta, openers: [...openings.entries()].filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, n]) => ({ rows: k.split(",").map(Number), n })),
+    b2b: b2bStyle, mix: MIX, options: { ...TP.optionsOf(fitted), ...b2bOpt, ban, tank: false }, raw, kinds: never, // own version plays like the player (no tank)
   };
 }
 
