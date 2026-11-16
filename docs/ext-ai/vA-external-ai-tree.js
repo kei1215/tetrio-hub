@@ -1813,7 +1813,7 @@
                 let w = tmemo.get(key);
                 if (w === void 0) {
                   const rem = [], free = [];
-                  for (let k = 0; k < L + 2; k++) {
+                  for (let k = 0; k < L + 1; k++) {
                     const b = rows[H2 - 1 - k] || 0, tk = t[k] || 0;
                     rem.push(tk & ~b);
                     free.push(FULL & ~tk & ~(e[k] || 0) & ~b);
@@ -1836,9 +1836,13 @@
                 return { ok: w > 0 ? 1 : 0, g: 0, ways: w };
               };
               const tKeep = !(rootNode.hold === "t" && seq[0] === "t");
+              const tall = (rows) => {
+                for (let k = L + 1; k < H2; k++) if (rows[H2 - 1 - k]) return true;
+                return false;
+              };
               const okMove = (rows, type, p) => {
                 const r = lock(rows, type, p, 0);
-                if (r.lines || bad(r.rows)) return null;
+                if (r.lines || bad(r.rows) || tall(r.rows)) return null;
                 if (type === "t" && tKeep) return null;
                 if (blocked(r.rows) > blocked(rows)) return null;
                 return r;

@@ -160,14 +160,33 @@ export async function learn(files, playerArg, opt = {}) {
     agree: { default: +beforeClean.top.toFixed(3), fitted: +after.top.toFixed(3) },
     misdrop: { rate: +(mis.size / data.length).toFixed(4), count: mis.size, byPiece, dir },
     beta, openers: (() => {
-      // setups built the same way at least twice (setupOf above); a smaller one inside a bigger one is the same setup
-      // cut short and counts for it; up to 4, not one inside an already kept one
-      const all = [...openings.entries()].map(([k, n]) => { const [m, e] = k.split("|"); return { rows: m.split(",").map(Number), empty: e.split(",").map(Number), n }; });
+      // setups seen at least twice (user: 2回見たテンプレはどこを自由に組んでいいかわかるはず): boards built alike are
+      // grouped; a setup cell (setupOf) is kept only if it is in every one of them, cells that differ are free; the
+      // slots kept empty are the ones every board has. A smaller board inside a bigger one (a clear came early) adds
+      // to the count but does not cut the setup. Up to 4.
+      const pc = (m) => { let c = 0; while (m) { m &= m - 1; c++; } return c; };
+      const all = [...openings.entries()].map(([k, n]) => { const [m, e] = k.split("|"); const rows = m.split(",").map(Number); return { rows, empty: e.split(",").map(Number), n, cells: rows.reduce((a, r) => a + pc(r), 0) }; });
       const inside = (a, b) => a.rows.length <= b.rows.length && a.rows.every((m, i) => (m & ~b.rows[i]) === 0);
-      for (const a of all) a.sup = all.reduce((t, b) => t + (inside(b, a) ? b.n : 0), 0);
-      all.sort((a, b) => b.sup - a.sup || b.rows.length - a.rows.length);
-      const keep = []; for (const a of all) { if (a.n < 2 || keep.some((k) => inside(a, k))) continue; keep.push(a); if (keep.length >= 4) break; }
-      return keep.map((a) => ({ rows: a.rows, empty: a.empty, n: a.sup }));
+      const sim = (a, b) => { let i = 0, u = 0; for (let k = 0; k < Math.max(a.rows.length, b.rows.length); k++) { const x = a.rows[k] || 0, y = b.rows[k] || 0; i += pc(x & y); u += pc(x | y); } return u ? i / u : 0; };
+      const groupOf = (a) => all.filter((b) => b === a || sim(a, b) >= 0.6 || inside(b, a) || inside(a, b));
+      for (const a of all) a.sup = groupOf(a).reduce((t, b) => t + b.n, 0);
+      all.sort((a, b) => b.sup - a.sup || b.cells - a.cells);
+      const used = new Set(), out = [];
+      for (const a of all) {
+        if (used.has(a) || a.sup < 2) continue;
+        const g = groupOf(a).filter((b) => !used.has(b)); g.forEach((b) => used.add(b));
+        // the boards that are not just an early cut of another one in the group
+        const full = g.filter((b) => !g.some((c) => c !== b && c.cells > b.cells && inside(b, c)));
+        const L = Math.max(...full.map((b) => b.rows.length)), must = [], empty = [];
+        for (let k = 0; k < L; k++) { must.push(full.reduce((m, b) => m & (b.rows[k] || 0), 1023)); empty.push(full.reduce((m, b) => m & (b.empty[k] || 0), 1023)); }
+        // under a setup cell nothing is free (it would become a hole): filled in half of them or more -> setup cell
+        const tot = full.reduce((t, b) => t + b.n, 0);
+        for (let x = 0; x < 10; x++) { let roof = false; for (let k = L - 1; k >= 0; k--) { if (must[k] >> x & 1) roof = true; else if (!roof) empty[k] &= ~(1 << x); else if (!(empty[k] >> x & 1) && full.reduce((t, b) => t + ((b.rows[k] || 0) >> x & 1 ? b.n : 0), 0) >= tot / 2) must[k] |= 1 << x; } }
+        while (must.length && !must[must.length - 1]) { must.pop(); empty.pop(); }
+        if (must.length) out.push({ rows: must, empty, n: a.sup, seen: full.length });
+        if (out.length >= 4) break;
+      }
+      return out;
     })(),
     b2b: b2bStyle, mix: MIX, options: { ...TP.optionsOf(fitted), ...b2bOpt, ban, kindBias, tank: false }, raw, kinds: never, // own version plays like the player (no tank)
   };

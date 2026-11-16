@@ -357,7 +357,7 @@
       if(!ok)c++}}return c};
     const memo=new Map(),tmemo=new Map();let budget=P.openBudget;
     const leaf=(rows,hold,qi)=>{const left=seq.slice(qi),key=rows.join(',')+'|'+hold+'|'+left.join('');let w=tmemo.get(key);
-     if(w===undefined){const rem=[],free=[];for(let k=0;k<L+2;k++){const b=rows[H-1-k]||0,tk=t[k]||0;rem.push(tk&~b);free.push(FULL&~tk&~(e[k]||0)&~b)}
+     if(w===undefined){const rem=[],free=[];for(let k=0;k<L+1;k++){const b=rows[H-1-k]||0,tk=t[k]||0;rem.push(tk&~b);free.push(FULL&~tk&~(e[k]||0)&~b)}
       const n=Math.ceil(rem.reduce((a,m)=>a+popc(m),0)/4)+2,avail={};
       for(const x of left)avail[x]=(avail[x]||0)+1;if(hold)avail[hold]=(avail[hold]||0)+1;
       const gl=D0+seq.length-1,B=Math.floor(gl/7),inB=new Set();for(let j=0;j<seq.length;j++)if(Math.floor((D0+j)/7)===B)inB.add(seq[j]);
@@ -367,7 +367,9 @@
      return {ok:w>0?1:0,g:0,ways:w}};
     // the T stays in hold for the T-spins; only placed when it cannot be held (hold is a T already)
     const tKeep=!(rootNode.hold==='t'&&seq[0]==='t');
-    const okMove=(rows,type,p)=>{const r=lock(rows,type,p,0);if(r.lines||bad(r.rows))return null;
+    // free cells only up to one row above the setup (the free side is not stacked up)
+    const tall=rows=>{for(let k=L+1;k<H;k++)if(rows[H-1-k])return true;return false};
+    const okMove=(rows,type,p)=>{const r=lock(rows,type,p,0);if(r.lines||bad(r.rows)||tall(r.rows))return null;
      if(type==='t'&&tKeep)return null;if(blocked(r.rows)>blocked(rows))return null;return r};
     const dfs=(rows,hold,qi)=>{const cur=qi<P.openDepth?seq[qi]:null;if(!cur||budget--<=0)return leaf(rows,hold,qi);
      const key=rows.join(',')+'|'+hold+'|'+qi;if(memo.has(key))return memo.get(key);

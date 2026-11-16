@@ -57,8 +57,9 @@
     L.saveMatch = function (match) {
       const r = real.apply(this, arguments);
       try {
-        const names = (match.names || []).map(String), low = names.map((n) => n.toLowerCase());
-        const me = names.find((n, i) => low.includes("butter " + low[i]));
+        // the Butter side is just "Butter" in the game; its package id (va-tree-<player slug>) says whose it is
+        const names = (match.names || []).map(String), eng = match.engines || [];
+        const me = names.find((n, i) => { const o = eng[1 - i]; return !eng[i] && o && o === ("va-tree-" + slug(n)).slice(0, 32); });
         if (me) { clearTimeout(autoT); autoT = setTimeout(async () => {
           const files = [...(await pickedOf(me)), ...localReplays(me)];
           if (files.length) learnRun(me, files, (t) => console.log("[Butter 自動学習]", t));
