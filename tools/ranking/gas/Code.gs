@@ -89,6 +89,8 @@ function doPost(e) {
     if (num(d.altitude, 0.01, 100000) === null || num(d.floor, 1, 10) === null) return out({ ok: false, text: '記録データの値が範囲外です' });
     if (!Array.isArray(d.mods) || d.mods.some(function (m) { return MODS.indexOf(String(m).replace(/_reversed$/, '')) < 0; })) return out({ ok: false, text: '知らない MOD が入っています' });
     if (d.bot === true || d.engine) return out({ ok: false, text: 'BOT・外部AIの記録は送れません' });
+    // 2026-11-16: ランキングは「最初から10F相当」(猶予あり / なし)だけ
+    if (d.floor10 !== true) return out({ ok: false, text: 'ランキングに送れるのは「最初から10F相当」の記録だけです' });
     if (typeof ttr !== 'string' || !ttr.length) return out({ ok: false, text: 'リプレイがありません' });
     if (ttr.length > TTR_MAX) return out({ ok: false, text: 'リプレイが大きすぎます' });
     let rj; try { rj = JSON.parse(ttr); } catch (x) { return out({ ok: false, text: 'リプレイを読めませんでした' }); }

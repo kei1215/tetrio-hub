@@ -24,6 +24,8 @@ function clean(d, meta) {
   // user: botの記録は残さない
   if (d.bot === true || (typeof d.engine === 'string' && d.engine)) return 'BOT・外部AIの記録は登録できません。';
   if (mods.some(x => !MODS.includes(x.replace(/_reversed$/, '')))) return '知らない MOD が入っています。';
+  // 2026-11-16: ランキングは「最初から10F相当」(猶予あり / なし)だけ
+  if (d.floor10 !== true) return 'ランキングに登録できるのは「最初から10F相当」の記録だけです。';
   mods.sort();
   const name = String(d.name || '').replace(/[\u0000-\u001f<>@`]/g, '').trim().slice(0, 32) || meta.user;
   return {
