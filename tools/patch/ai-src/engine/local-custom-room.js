@@ -207,6 +207,7 @@
  // EXIT and PLAYING / SPECTATING: their native click wiring never reaches the local room (user: EXIT が使えない /
  // 左下の SPECTATING / PLAYING が使えない).
  document.addEventListener('click',ev=>{if(!room)return;const t=ev.target;if(t?.closest?.('#leaveroom')){ev.preventDefault();ev.stopImmediatePropagation();close();return}
+  if(t?.closest?.('#startroom')){ev.preventDefault();ev.stopImmediatePropagation();if(room.state==='lobby')try{start()}catch(error){sys(error.message)}return}
   if(t?.closest?.('#room_switchbracket')){ev.preventDefault();ev.stopImmediatePropagation();const m=room.players.find(p=>p._id===me().id);if(m&&room.state==='lobby')setBracket(m,m.bracket==='player'?'spectator':'player')}},true);
  // In-game chat (user: プレイ中も左にログと入力欄 / 表示を出さない設定でも T で入力欄): T opens and focuses
  // #ingame_chat_input, Enter sends (commands too), Escape closes it again.
