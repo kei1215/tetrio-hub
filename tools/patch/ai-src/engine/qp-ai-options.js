@@ -23,9 +23,9 @@
   const flag=(key,label,defaultValue)=>{flagIn(section,key,label,defaultValue).style.display='block'};
   flag('qp-local-ai-tspin-b2b','BOT: Spin B2B モード',true);
   flag('qp-win-gauge','勝率予測ゲージ',true);
-  flag('qp-ai-sync-player','プレーヤーと同時に置く',false);
+  flag('qp-ai-sync-player','Ternbase',false);
   // player:BOT piece ratio for the flag above (v4.8279)
-  const ratioLabel=document.createElement('label');ratioLabel.style.display='block';ratioLabel.append(document.createTextNode('同時に置く比 プレーヤー:BOT '));
+  const ratioLabel=document.createElement('label');ratioLabel.style.display='block';ratioLabel.append(document.createTextNode('Ternbase 比 プレーヤー:BOT '));
   const ratio=document.createElement('input');ratio.type='text';ratio.placeholder='1:1';ratio.style.width='6em';ratio.value=localStorage.getItem('qp-ai-sync-ratio')||'1:1';
   ratio.addEventListener('change',()=>{const m=/^\s*(\d+(?:\.\d+)?)\s*[:：]\s*(\d+(?:\.\d+)?)\s*$/.exec(ratio.value);if(!m||!(+m[1]>0)||!(+m[2]>0)){ratio.value=localStorage.getItem('qp-ai-sync-ratio')||'1:1';return}ratio.value=m[1]+':'+m[2];localStorage.setItem('qp-ai-sync-ratio',ratio.value)});
   ratioLabel.appendChild(ratio);section.appendChild(ratioLabel);

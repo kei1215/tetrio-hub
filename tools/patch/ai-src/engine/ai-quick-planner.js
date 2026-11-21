@@ -128,7 +128,7 @@
  // A piece-speed setting is a target cadence, not a command to stop
  // thinking after one frame. Budget the search in bounded native slices;
  // guarantee coverage of HOLD and spin routes before branching ahead.
- /* Lockstep with the player (Tab: プレーヤーと同時に置く, TL / CUSTOM vs a
+ /* Lockstep with the player (Tab: Ternbase, formerly プレーヤーと同時に置く / PtoP, TL / CUSTOM vs a
     player): the BOT places one piece each time the player places one, so both
     run at the same PPS; it plans while it waits. */
  function syncPeer(game){
@@ -276,7 +276,7 @@
     // Lockstep with the player: wait at the spawn until the player has placed,
     // so a spin / soft-drop route never forces the lock early (2026-11-13: the BOT
     // locked up to 3 s before the player on floor routes).
-    if(!target.exec&&sync&&!sync.ahead()&&deadline.total>20){game._localBotIntent='同時に置く: プレーヤー待ち';return}
+    if(!target.exec&&sync&&!sync.ahead()&&deadline.total>20){game._localBotIntent='Ternbase: プレーヤー待ち';return}
     if(!target.exec){
      if(target.routeStart&&(f.x!==target.routeStart.x||f.r!==target.routeStart.r)){fail('開始位置');return}
      const path=target.path.slice(),trace=(target.trace||[]).slice();
