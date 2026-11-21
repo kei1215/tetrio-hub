@@ -2402,7 +2402,7 @@ const real=A.register;A.register=d=>real({...d,files:{},script:SCRIPT});try{
     if (worker) return say("学習中です");
     say(files.length + " 個のリプレイから「" + name + "」を学習します…");
     try {
-      const src = await (await fetch('https://kei1215.github.io/tetrio-hub/bookmarklets/offline-va5.16/engine/butter-learn.js')).text();
+      const src = await (await fetch('https://kei1215.github.io/tetrio-hub/bookmarklets/offline-va5.17/engine/butter-learn.js')).text();
       worker = new Worker(URL.createObjectURL(new Blob([src], { type: "text/javascript" })));
     } catch (e) { worker = null; return say("学習を始められません: " + e.message); }
     worker.onmessage = async (e) => {
