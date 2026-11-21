@@ -6,6 +6,29 @@
 (() => {
   const slug = (n) => String(n || "").toLowerCase().replace(/[^a-z0-9_-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 22);
   let worker = null;
+  // 2026-11-21 (user: プレイ中のフリーズは自作の Butter だけ、テンプレのあとも大きなラグ): the automatic re-learn read every
+  // offline record on the screen thread in one go and installed the result in the middle of a match (the running
+  // Butter was dropped). Now records are read a few at a time between frames, the replays go to the Worker as text,
+  // and the re-learn and its install wait until no AI room game is being played.
+  const playing = () => { try { return (window.LocalAIRoom?.active?.() || []).length > 0; } catch { return false; } };
+  const idle = async () => { while (playing()) await new Promise((r) => setTimeout(r, 5000)); };
+  async function localReplaysAsync(name) {
+    const out = []; const Z = window.QPLocalZen, L = window.LocalReplayLibrary;
+    if (!Z || typeof Z.records !== "function") return out;
+    let t = performance.now();
+    for (const r of Z.records()) {
+      if (performance.now() - t > 8) { await new Promise((ok) => setTimeout(ok, 0)); t = performance.now(); }
+      try {
+        const rep = Z.replay(r); const loc = rep?.local || r.replay?.local || {};
+        if (loc.bot || loc.engine) continue;
+        const file = L?.portable ? L.portable(rep) : rep;
+        const users = (file.users || []).map((u) => String(u.username || "").toLowerCase());
+        if (users.length && !users.includes(String(name).toLowerCase())) continue;
+        out.push(typeof file === "string" ? file : JSON.stringify(file));
+      } catch {}
+    }
+    return out;
+  }
   function localReplays(name) {
     const out = []; const Z = window.QPLocalZen, L = window.LocalReplayLibrary;
     if (!Z || typeof Z.records !== "function") return out;
@@ -26,7 +49,7 @@
   async function pickedOf(name) { try { const d = await db(); return await new Promise((ok) => { const q = d.transaction("picked").objectStore("picked").get(String(name).toLowerCase()); q.onsuccess = () => ok(q.result || []); q.onerror = () => ok([]); }); } catch { return []; } }
   async function keepPicked(name, texts) { if (!texts.length) return; try { const all = [...new Set([...(await pickedOf(name)), ...texts])].slice(-40); const d = await db(); d.transaction("picked", "readwrite").objectStore("picked").put(all, String(name).toLowerCase()); } catch {} }
   // one learning run in a Worker; say(text) reports progress
-  async function learnRun(name, files, say) {
+  async function learnRun(name, files, say, auto) {
     if (worker) return say("学習中です");
     say(files.length + " 個のリプレイから「" + name + "」を学習します…");
     try {
@@ -39,6 +62,7 @@
       worker.terminate(); worker = null;
       if (m.t === "err") return say("学習できませんでした: " + m.msg);
       try {
+        if (auto) await idle();
         const ids = await window.LocalExternalAI.addFiles([new File([m.pkg.script], m.pkg.name, { type: "text/javascript" })]);
         window.dispatchEvent(new Event("qp-ext-ai-refresh"));
         say(`できました: ${m.pkg.label}(${m.data.games} 試合・${m.data.pieces} 手、置きミスらしい手 ${(m.data.misdrop.rate * 100).toFixed(1)}%)\n外部AIの一覧から選べます(${ids.join(", ")})`);
@@ -61,8 +85,9 @@
         const names = (match.names || []).map(String), eng = match.engines || [];
         const me = names.find((n, i) => { const o = eng[1 - i]; return !eng[i] && o && o === ("va-tree-" + slug(n)).slice(0, 32); });
         if (me) { clearTimeout(autoT); autoT = setTimeout(async () => {
-          const files = [...(await pickedOf(me)), ...localReplays(me)];
-          if (files.length) learnRun(me, files, (t) => console.log("[Butter 自動学習]", t));
+          await idle();
+          const files = [...(await pickedOf(me)), ...(await localReplaysAsync(me))];
+          if (files.length && !playing()) learnRun(me, files, (t) => console.log("[Butter 自動学習]", t), true);
         }, 45000); }
       } catch (e) { console.warn("[Butter 自動学習]", e); }
       return r;
@@ -139,7 +164,7 @@
       const name = $('[data-b="name"]').value.trim();
       if (!name) return say("プレーヤー名(TETR.IO のユーザー名)を入れてください");
       await keepPicked(name, picked);
-      const files = [...(await pickedOf(name)), ...($('[data-b="local"]').checked ? localReplays(name) : [])];
+      const files = [...(await pickedOf(name)), ...($('[data-b="local"]').checked ? await localReplaysAsync(name) : [])];
       if (!files.length) return say("リプレイがありません。.ttr / .ttrm を選ぶか、オフラインで遊んだ記録を使ってください");
       learnRun(name, files, say);
     };
