@@ -38,6 +38,8 @@
   const grav=document.createElement('select');for(const [v,n] of [['off','通常'],['bot','BOTだけなし'],['both','両方なし']]){const o=document.createElement('option');o.value=v;o.textContent=n;grav.appendChild(o)}
   grav.value=['bot','both'].includes(localStorage.getItem('qp-ai-no-gravity'))?localStorage.getItem('qp-ai-no-gravity'):'off';grav.addEventListener('change',()=>localStorage.setItem('qp-ai-no-gravity',grav.value));
   gravLabel.appendChild(grav);section.appendChild(gravLabel);
+  // v5.16: the local CUSTOM room's LOCAL AI rows write the same keys; keep these controls in step.
+  window.addEventListener('qp-ai-settings-changed',()=>{pps.value=localStorage.getItem('qp-local-bot-pps')||'2';grav.value=['bot','both'].includes(localStorage.getItem('qp-ai-no-gravity'))?localStorage.getItem('qp-ai-no-gravity'):'off';try{powerSelect.value=['low','mid','high','max'].includes(localStorage.getItem('qp-ai-power'))?localStorage.getItem('qp-ai-power'):'auto'}catch{}});
   // Compute power: auto measures this PC and fits the plan to the target PPS.
   const powerLabel=document.createElement('label');powerLabel.style.display='block';powerLabel.textContent='計算量 ';
   const powerSelect=document.createElement('select');powerSelect.setAttribute('aria-label','AIの計算量');

@@ -212,7 +212,7 @@ onmessage = async (e) => { const m = e.data;
   const root = document.createElement('div'); root.id = 'qp-ext-ai';
   root.innerHTML = `<button type="button">外部AI対戦</button><div class="p">
 <label>左 <select data-k="left"></select></label><label>右 <select data-k="right"></select></label>
-<label>ルール <select data-k="mode"><option value="league">TL</option><option value="s1">TL S1(前シーズン)</option><option value="custom">CUSTOM ルーム</option><option value="qp">QP SOLO(右の外部AIが遊ぶ)</option></select></label>
+<label>ルール <select data-k="mode"><option value="league">TL</option><option value="s1">TL S1(前シーズン)</option><option value="custom">CUSTOM ルーム</option><option value="vsai">VS AI ルーム(右の一覧から AI を招待)</option><option value="qp">QP SOLO(右の外部AIが遊ぶ)</option></select></label>
 <label>FT <input data-k="ft" type="number" min="1" max="99" step="1" value="7"></label>
 <label>外部AIの強さ 0〜100（空欄で100） <input data-k="str" type="number" min="0" max="100" step="1"></label>
 <label><input data-k="mute" type="checkbox"> ルームの音を消す(開始・カウントダウン・入退室・チャット・ロビー曲)</label>
@@ -252,7 +252,7 @@ onmessage = async (e) => { const m = e.data;
   for (const k of ['left', 'right']) $(`select[data-k="${k}"]`).addEventListener('change', () => { try { fill(); } catch {} }); // Butter: level input locked // Butter learned a player (butter-preinstalled.js)
   if (!dock()) { const mo = new MutationObserver(() => { if (dock()) mo.disconnect(); }); mo.observe(document.documentElement, { childList: true, subtree: true }); }
   $('button').onclick = async () => { if (docked) { docked.open = true; docked.scrollIntoView?.({ block: 'nearest' }); return; } root.classList.toggle('open'); if (root.classList.contains('open')) { fill(); try { await window.LocalAI?.load?.(); fill(); } catch {} } };
-  for (const [k, key] of [['mute', 'qp-local-room-mute'], ['split', 'qp-local-ai-seed-split']]) { const box = $(`input[data-k="${k}"]`); box.checked = localStorage.getItem(key) === '1'; box.onchange = () => localStorage.setItem(key, box.checked ? '1' : '0'); }
+  for (const [k, key] of [['mute', 'qp-local-room-mute'], ['split', 'qp-local-ai-seed-split']]) { const box = $(`input[data-k="${k}"]`); box.checked = localStorage.getItem(key) === '1'; box.onchange = () => localStorage.setItem(key, box.checked ? '1' : '0'); window.addEventListener('qp-ai-settings-changed', () => { box.checked = localStorage.getItem(key) === '1'; }); }
   $('[data-a="stop"]').onclick = () => { try { window.LocalAIRoom?.stop?.(); try { window.LocalNative?.resetResults?.(); window.LocalNative?.view?.('play1p'); } catch {} status('終了しました'); } catch (e) { status(e.message); } };
   // v4.8285 (user: アプリ内でそれぞれのAIをインストールする簡単な窓口): one-click install of the
   // published packages (docs/ext-ai/catalog.json on tetrio-hub Pages); same store as 外部AIを読み込む.
@@ -310,6 +310,7 @@ onmessage = async (e) => { const m = e.data;
      return;
     }
     // v5.16 (user: Custom ルームを正常に): CUSTOM opens the native room lobby (local-custom-room.js); START there.
+    if ($('select[data-k="mode"]').value === 'vsai' && window.LocalCustomRoom) { window.LocalCustomRoom.open({ vsai: true }); status('VS AI ルームを開きました'); return; }
     if ($('select[data-k="mode"]').value === 'custom' && window.LocalCustomRoom) { window.LocalCustomRoom.open({ left: side(L, engines[0], 0), right: side(R, engines[1], 1), labels, engines }); status('CUSTOM ルームを開きました(/help でコマンド)'); return; }
     window.LocalAIRoom.start({ left: side(L, engines[0], 0), right: side(R, engines[1], 1), mode: $('select[data-k="mode"]').value, labels, engines });
     status('開始: ' + [L, R].map(v => sideOptions().find(o => o[0] === v)?.[1] || v).join(' vs '));
