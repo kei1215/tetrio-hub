@@ -175,6 +175,12 @@
   if(plan.hold&&!LocalAIInformation.holdAllowed({game:{...state,setoptions:game.options}},game._aiAllowHold!==false))return false;
   return true;
  }
+ // 2026-11-21 (user: PPS 0.1 にしても Butter・CC1 が 1.6 PPS): with mimicPlay the clock came from the player's recorded
+ // timings and the BOT PPS was ignored (outside AIs inherited it from the borrowed profile). Now outside AIs use the set
+ // PPS, and a vA profile with mimicPlay keeps the player's rhythm scaled so its average is the set PPS.
+ // average frames per piece of the player's recorded timings (cached per behavior object)
+ const mimicAvgs=new WeakMap();
+ function mimicAvg(style){if(!style||typeof style!=='object')return 0;if(mimicAvgs.has(style))return mimicAvgs.get(style);const all=style.timings?.all||[];let n=0,t=0;for(const v of all){const x=Number(v);if(x>0){t+=Math.min(600,Math.max(3,x));n++}}const m=n?t/n:0;mimicAvgs.set(style,m);return m}
  function drive(game,getPPS=()=>1){let mimicPiece=-1,mimicInterval=null;let target=null,search=null,lastPiece=-1,lastFrame=-1,attempts=0,lastDropFrame=null,dueFrame=null,pieceStart=0,policyKey='',lastHeldPiece=-1,rotations=0,forecastCache=null;
   const stats=game._localAIStats={plannedDrops:0,matchedDrops:0,mismatchedDrops:0,naturalLocks:0,routeFailures:0,emergencyDrops:0,spinLocks:0,spinRouteMisses:0,spinHeightMisses:0,holdCommands:0,holdPlannedDrops:0,holdBlocked:0,holdFailures:0,holdCandidates:0,holdSelected:0,reusedPlans:0,cacheRejected:0,rootCandidatesChecked:0,futureCandidatesChecked:0,forcedByPPS:0,searchTimeMs:0,searchSlices:0,maxSliceMs:0,budgetSkips:0,humanProtectedFrames:0};let expected=null,commanded=false;
   const observe=piece=>{if(!expected){if(!commanded)stats.naturalLocks++;commanded=false;return}commanded=false;if(piece.type===expected.type&&piece.x===expected.x&&Math.ceil(piece.y)===expected.y&&piece.r===expected.rotation)stats.matchedDrops++;else stats.mismatchedDrops++;expected=null};game.on?.('lock','local-bot-route-check',observe);
@@ -182,7 +188,7 @@
    if(!game.isPlaying()||game.state.pause||game.state.zenith?.incapacitated)return;
    if(game.state.falling.flags&128)return;
    const frame=game.getFrame();if(frame===lastFrame)return;lastFrame=frame;
-   const pps=Math.min(20,Math.max(.1,Number(getPPS())||1));if(game._aiMimicTiming&&mimicPiece!==game.state.stats.piecesplaced){mimicPiece=game.state.stats.piecesplaced;mimicInterval=LocalAIBehavior.interval(game._aiBehavior,game.state)}const sync=syncPeer(game),interval=sync?sync.interval:game._aiMimicTiming&&mimicInterval!==null?mimicInterval:60/pps;// v4.8283 (user: PPS が守られていない / REN のときだけ速くなる / 常に一定の速度): piece n is due
+   const pps=Math.min(20,Math.max(.1,Number(getPPS())||1));if(game._aiMimicTiming&&mimicPiece!==game.state.stats.piecesplaced){mimicPiece=game.state.stats.piecesplaced;mimicInterval=LocalAIBehavior.interval(game._aiBehavior,game.state)}const sync=syncPeer(game),mimicOn=game._aiMimicTiming&&!game._aiEngine&&mimicInterval!==null,mimicMean=mimicOn?mimicAvg(game._aiBehavior):0,interval=sync?sync.interval:mimicOn&&mimicMean>0?mimicInterval*(60/pps)/mimicMean:60/pps;// v4.8283 (user: PPS が守られていない / REN のときだけ速くなる / 常に一定の速度): piece n is due
    // on a fixed clock (dueFrame += interval). A late piece is made up only a little (catchUp) on
    // the next one, never with a burst. Lockstep: the player's piece count decides (sync.ahead);
    // the BOT still gets a minimum think time after its piece appears (minThink), so a fast
