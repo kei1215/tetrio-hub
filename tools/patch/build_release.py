@@ -397,6 +397,41 @@ def fix_tl_bgm(text):
     return replace_once(text, TL_BGM_OLD, TL_BGM_NEW, 'O/offline/client.js TL music')
 
 
+# v5.16 (TODO 2026-11-21 #20-#23, user: オンラインでできることをオフラインでも): the offline menus ran
+# only some of the native ready callbacks. Also run (1) the ribbon (keyboard menu cursor, #ribbonglide),
+# so the arrow keys / Enter / Space / Esc move through HOME, SOLO and the QP MOD cards like online, and
+# (2) the native Quick Play keys: R (retry) starts QP again on the QP screen / results, Esc leaves.
+# Replays return to the screen they were opened from (window.__qpReplayBack, local-shell.js), else HOME
+# (they always went back to SOLO). Idempotent.
+MENU_KEYS_OLD = 'config();this._menusReady=true;'
+MENU_KEYS_NEW = ('config();'
+                 'const qpRibbon=window.__originalReadyCallbacks.find(f=>String(f).includes(\'n.id="ribbonglide"\'));'
+                 'if(qpRibbon&&!document.getElementById("ribbonglide"))qpRibbon();'
+                 'const qpZenithKeys=window.__originalReadyCallbacks.find(f=>String(f).includes(\'"zenith_party_ready":"start_zenith"\'));'
+                 'if(qpZenithKeys)qpZenithKeys();'
+                 'this._menusReady=true;')
+# The QP deck is still hidden when Hi('zenith') binds the cursor, so it found nothing: bind again once
+# the deck is visible (LocalNative.ribbon, also called by local-shell.js openNativeQP).
+RIBBON_OLD = "view(name){$i(true);Hi(name)},"
+RIBBON_NEW = "view(name){$i(true);Hi(name)},ribbon(name){bi.bindGuide(Ci[name]||{})},"
+RESULTS_RIBBON_OLD = "xt('zenithmenu').classList.remove('hidden','thidden','rolledup');xt('spectate').classList.add('hidden');"
+RESULTS_RIBBON_NEW = RESULTS_RIBBON_OLD + "bi.bindGuide(Ci.zenith||{});"
+REPLAY_BACK_OLD = "Js.loadReplay(data,{isClientSide:true,back:'play1p'});"
+REPLAY_BACK_NEW = "Js.loadReplay(data,{isClientSide:true,back:window.__qpReplayBack||'home'});"
+
+
+def fix_menu_keys(text):
+    if MENU_KEYS_NEW not in text:
+        text = replace_once(text, MENU_KEYS_OLD, MENU_KEYS_NEW, 'O/offline/client.js menu keys')
+    if RIBBON_NEW not in text:
+        text = replace_once(text, RIBBON_OLD, RIBBON_NEW, 'O/offline/client.js ribbon rebind')
+    if RESULTS_RIBBON_NEW not in text:
+        text = replace_once(text, RESULTS_RIBBON_OLD, RESULTS_RIBBON_NEW, 'O/offline/client.js results ribbon')
+    if REPLAY_BACK_NEW not in text:
+        text = replace_once(text, REPLAY_BACK_OLD, REPLAY_BACK_NEW, 'O/offline/client.js replay back')
+    return text
+
+
 def fix_offline_client(text):
     for old, new, count in OFFLINE_CLIENT_FIXES:
         if text.count(old) != count:
@@ -697,7 +732,7 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                 text = data.decode('utf-8')
                 if not incremental:
                     text = fix_offline_client(text)
-                data = fix_config_sync(fix_replay_c_key(fix_config_keep(fix_rsg(fix_tl_bgm(fix_scoreslide(fix_wheel_volume(fix_warn_toggles(fix_tl_siren(fix_custom_opts(fix_warlock_mini(text))))))))), 'O/offline/client.js')).encode('utf-8')
+                data = fix_menu_keys(fix_config_sync(fix_replay_c_key(fix_config_keep(fix_rsg(fix_tl_bgm(fix_scoreslide(fix_wheel_volume(fix_warn_toggles(fix_tl_siren(fix_custom_opts(fix_warlock_mini(text))))))))), 'O/offline/client.js'))).encode('utf-8')
             elif offline and name == 'O/preload-local.js':
                 data = fix_preload_config(data.decode('utf-8')).encode('utf-8')
             elif offline and name == 'O/local-main.js':
