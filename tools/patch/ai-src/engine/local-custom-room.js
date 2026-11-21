@@ -70,7 +70,7 @@
   const b=player('bot-'+(++botSeq),labelOf(c).toLowerCase(),true,side,c.engine);room.players.push(b);fire('room.player.add',structuredClone(b));update();sys(labelOf(c)+' を追加しました');
  }
  function removeBot(name){
-  const q=String(name||'').trim().toLowerCase();const bots=room.players.filter(p=>p.bot);const b=q?bots.find(p=>p.username===q)||bots.find(p=>p.username.includes(q)):bots.at(-1);
+  const q=String(name||'').trim().toLowerCase();const bots=room.players.filter(p=>p.bot);const b=q?bots.find(p=>p._id===q)||bots.find(p=>p.username===q)||bots.find(p=>p.username.includes(q)):bots.at(-1);
   if(!b)throw Error('外す BOT がいません');room.players=room.players.filter(p=>p!==b);fire('room.player.remove',b._id);update();sys(b.username.toUpperCase()+' を外しました');
  }
  function setOption(key,value){
@@ -156,17 +156,24 @@
  function renderVsAi(){
   const list=document.getElementById('social_relationships');
   document.body.classList.toggle('qp-vsai-social',!!room?.vsai);
-  if(!document.getElementById('qp-vsai-style')){const st=document.createElement('style');st.id='qp-vsai-style';st.textContent='body.qp-vsai-social #social_people .social_bar_content_offline{display:none!important}body.qp-vsai-social #social_people .social_bar_content{display:block!important}body.qp-vsai-social #social_relationships>:not(.qp-vsai){display:none!important}body.qp-vsai-social #social_relationships .qp-vsai .social_relationship_button_invite{display:inline-flex!important}';document.head.appendChild(st)}
+  if(!document.getElementById('qp-vsai-style')){const st=document.createElement('style');st.id='qp-vsai-style';st.textContent='body.qp-vsai-social #social .social_bar_content_offline,body.qp-vsai-social #social_top,body.qp-vsai-social #social_bottom,body.qp-vsai-social #social_dm,body.qp-vsai-social #social_relationships_tabs_pending{display:none!important}body.qp-vsai-social #social_people .social_bar_content,body.qp-vsai-social #social_notifications_content{display:block!important}body.qp-vsai-social #social_relationships>:not(.qp-vsai){display:none!important}body.qp-vsai-social #social_relationships .qp-vsai{--pri:#7df27d}body.qp-vsai-social #social_relationships .qp-vsai p{font-family:PFW,sans-serif}body.qp-vsai-social #social_relationships .qp-vsai.qp-in .social_relationship_button_invite{opacity:.35}body.qp-vsai-social #social_relationships .qp-vsai .social_relationship_button_invite{display:inline-flex!important}#qp-botpop{position:fixed;inset:0;z-index:10000000;background:#000a;display:flex;align-items:center;justify-content:center;flex-direction:column;font-family:HUN,sans-serif}#qp-botpop .b{width:min(940px,90vw);background:#2c4a2c;border:3px solid #3d6b3d;color:#c8f5c8;padding:14px 20px 22px}#qp-botpop .h{display:flex;align-items:center;justify-content:space-between}#qp-botpop .h b{font-size:44px;color:#c8f5c8;letter-spacing:1px}#qp-botpop .x{cursor:pointer;color:#8fc98f;font-size:26px}#qp-botpop .x:hover{color:#fff}#qp-botpop .c{background:#1e361e;margin-top:10px;padding:26px 30px;text-align:center}#qp-botpop .c h2{font-size:42px;margin:0 0 40px;color:#d8ffd8;font-weight:400}#qp-botpop .c p{font-size:22px;letter-spacing:2px;margin:0 0 18px}#qp-botpop .a{width:min(940px,90vw);background:#2c4a2c;border:3px solid #3d6b3d;margin-top:16px;padding:10px 22px;display:flex;gap:8px}#qp-botpop .a div{background:#3d6b3d;color:#c8f5c8;padding:8px 22px;font-size:24px;letter-spacing:2px;cursor:pointer;flex:auto;text-align:center}#qp-botpop .a div:hover{background:#4f8a4f;color:#fff}#qp-botpop .a div.off{opacity:.4;cursor:default;background:#3d6b3d;color:#c8f5c8}';;document.head.appendChild(st)}
   list?.querySelectorAll('.qp-vsai').forEach(e=>e.remove());
   if(!room?.vsai||!list)return;
   for(const c of aiChoices()){const name=labelOf(c),inRoomNow=room.players.some(p=>p.bot&&p.username===name.toLowerCase());
-   const n=document.createElement('div');n.className='social_relationship qp-vsai';const img=document.createElement('img');img.className='social_relationship_img';img.src='/res/avatar.png';n.appendChild(img);
+   const n=document.createElement('div');n.className='social_relationship qp-vsai'+(inRoomNow?' qp-in':'');const img=document.createElement('img');img.className='social_relationship_img';img.src='/res/avatar.png';n.appendChild(img);
    const h1=document.createElement('h1'),sp=document.createElement('span');sp.textContent=name.toUpperCase();h1.appendChild(sp);n.appendChild(h1);
-   const p=document.createElement('p');p.textContent=inRoomNow?'in your room':'BOT · VS AI';n.appendChild(p);n.appendChild(document.createElement('h2'));
+   const p=document.createElement('p'),pi=document.createElement('img');pi.src='/res/status/online.png';p.append(pi,' '+(inRoomNow?'In your room':'In Menus'));n.appendChild(p);n.appendChild(document.createElement('h2'));
    const holder=document.createElement('div');holder.className='social_relationship_button_holder';const b=document.createElement('div');b.title='Invite to your game';b.className='social_relationship_button social_relationship_button_invite';const bi=document.createElement('img');bi.src='/res/icon/invite.svg';b.append(bi,document.createElement('span'));
    b.addEventListener('click',ev=>{ev.stopPropagation();b.classList.add('activated');setTimeout(()=>b.classList.remove('activated'),300);try{addBot(c.name)}catch(error){sys(error.message)}});holder.appendChild(b);n.appendChild(holder);list.appendChild(n)}
  }
- function close(){if(!room)return;clearTimeout(introTimer);room=null;renderVsAi();pendingReturn=false;try{window.LocalAIRoom?.stop?.()}catch{}fire('room.leave');hideIds();setTimeout(()=>{try{window.LocalNative?.view?.('play1p')}catch{}},50)}
+ // PLAYERS row click: a bot opens a native-looking BOT card whose KICK removes it; the own row opens nothing
+ // (no profile popup offline).
+ function botPopup(b){document.getElementById('qp-botpop')?.remove();const w=document.createElement('div');w.id='qp-botpop';
+  w.innerHTML='<div class="b"><div class="h"><b></b><span class="x">CLOSE</span></div><div class="c"><h2>BOT</h2><p>THIS IS A LOCAL AI. IT RUNS ON THIS COMPUTER ONLY AND NEVER GOES ONLINE.</p><p>INVITE MORE FROM THE PEOPLE LIST (TAB OR THE BELL).</p></div></div><div class="a"><div data-k="kick">KICK</div><div data-k="kick">BAN</div><div class="off">MOVE TO PLAYERS</div><div class="off">TRANSFER OWNERSHIP</div></div>';
+  w.querySelector('.h b').textContent=b.username.toUpperCase();const shut=()=>w.remove();
+  w.addEventListener('click',ev=>{const k=ev.target.closest('[data-k]');if(k){try{removeBot(b._id)}catch(error){sys(error.message)}shut()}else if(ev.target===w||ev.target.closest('.x'))shut()});document.body.appendChild(w)}
+ document.addEventListener('click',ev=>{if(!room)return;const r=ev.target?.closest?.('#room_players .scroller_player');if(!r)return;ev.preventDefault();ev.stopImmediatePropagation();const b=room.players.find(p=>p.bot&&p._id===r.dataset.id);if(b)botPopup(b)},true);
+ function close(){if(!room)return;document.getElementById('qp-botpop')?.remove();clearTimeout(introTimer);room=null;renderVsAi();pendingReturn=false;try{window.LocalAIRoom?.stop?.()}catch{}fire('room.leave');hideIds();setTimeout(()=>{try{window.LocalNative?.view?.('play1p')}catch{}},50)}
  const backToLobby=()=>{if(!room)return;pendingReturn=false;room.state='lobby';const go=()=>{try{window.LocalNative?.resetResults?.();window.LocalNative?.view?.('lobby')}catch{}update()};go();setTimeout(go,60)};
  window.addEventListener('local-ai-match-end',ev=>{
   if(!room||!ev.detail?.result?.done)return;const w=ev.detail.winner;
