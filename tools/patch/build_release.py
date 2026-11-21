@@ -391,6 +391,43 @@ def fix_preload_config(text):
     return replace_once(text, PRELOAD_CFG_OLD, PRELOAD_CFG_NEW, 'O/preload-local.js saveConfig')
 
 
+# v5.16 (user: Custom ルームを正常に追加する / 見た目を似せるのではなく): the native CUSTOM room lobby
+# runs offline on a local room server (ai-src/engine/local-custom-room.js). The ribbon gets
+# qpFire(event, data), which calls the native room listeners (room.join / room.update / chat ...)
+# as if the server had sent them, and emit() first offers each message to window.__qpRoomEmit
+# (true = handled locally, nothing is sent). window.__qpRoomOpts builds the ROOM / MATCH / GAME
+# config rows (the native builder runs in an En.ready callback, which never fires offline).
+# __qpSa / __qpMe give the room the audio (room sound toggle) and the local user id (host).
+# Idempotent.
+LOCAL_ROOM_FIXES = [
+    ('const lr=Wa();',
+     'const lr=Wa();window.__qpRibbon=lr;window.__qpSa=()=>Sa;window.__qpMe=()=>({id:yn.id(),username:yn.username()});'),
+    ('{on:(t,s)=>{n.push([t,s]),e&&e.on(t,s)},',
+     '{qpFire:(t,d)=>{for(const[k,f]of n.slice())k===t&&f(d)},on:(t,s)=>{n.push([t,s]),e&&e.on(t,s)},'),
+    ('emit:function(t,n){e.send(t,n)}',
+     'emit:function(t,n){if(window.__qpRoomEmit?.(t,n))return;e.send(t,n)}'),
+    ('En.ready((function(){xt("room_opts_save").outerHTML=es(Jn,"room_opts")+xt("room_opts_save").outerHTML,',
+     'window.__qpRoomOpts=()=>{document.querySelector("#room_content_container .room_config_row")||(xt("room_opts_save").outerHTML=es(Jn,"room_opts")+xt("room_opts_save").outerHTML)};En.ready((function(){window.__qpRoomOpts(),'),
+    # v5.16 (user: S1 ルールの追加): TL S1 = the native room preset "tetra league (season 1)"
+    # (T-spins only, B2B chaining instead of charging, all clear 10, no opener phase).
+    ("tlPreset(){\n  const options={};for(const pair of jn['tetra league'].split(';')){",
+     "tlPreset(name='tetra league'){\n  const options={};for(const pair of (jn[name]||jn['tetra league']).split(';')){"),
+    ("const options=config.mode==='custom'?{...this.tlPreset(),...(config.options||{}),mission:'LOCAL CUSTOM',mission_type:'mission_versus'}:this.tlPreset();",
+     "const options=config.mode==='custom'?{...this.tlPreset(),...(config.options||{}),mission:'LOCAL CUSTOM',mission_type:'mission_versus'}:config.mode==='s1'?{...this.tlPreset('tetra league (season 1)'),mission:'LOCAL TETRA LEAGUE S1'}:this.tlPreset();"),
+    # v5.16 (user: シードを変える): config.seed2 = the right board's own seed (Tab option, off by default).
+    ("game.setGame({...options,gameid:8101+index,seed,seed_random:false,",
+     "game.setGame({...options,gameid:8101+index,seed:index&&Number.isInteger(config.seed2)?config.seed2:seed,seed_random:false,"),
+]
+
+
+def fix_local_room(text):
+    for old, new in LOCAL_ROOM_FIXES:
+        if new in text:
+            continue
+        text = replace_once(text, old, new, 'O/offline/client.js local custom room')
+    return text
+
+
 def fix_tl_bgm(text):
     if TL_BGM_NEW in text:
         return text
@@ -698,6 +735,7 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                 if not incremental:
                     text = fix_offline_client(text)
                 data = fix_config_sync(fix_replay_c_key(fix_config_keep(fix_rsg(fix_tl_bgm(fix_scoreslide(fix_wheel_volume(fix_warn_toggles(fix_tl_siren(fix_custom_opts(fix_warlock_mini(text))))))))), 'O/offline/client.js')).encode('utf-8')
+                data = fix_local_room(data.decode('utf-8')).encode('utf-8')
             elif offline and name == 'O/preload-local.js':
                 data = fix_preload_config(data.decode('utf-8')).encode('utf-8')
             elif offline and name == 'O/local-main.js':
