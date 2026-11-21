@@ -1075,6 +1075,7 @@
           protectW: 600,
           openBudget: 250,
           openDepth: 4,
+          openMs: 25,
           pickBeta: 0,
           misdrop: 0,
           // search
@@ -1784,6 +1785,7 @@
           function openPlan(list) {
             if (!openOn) return null;
             const H2 = rows0.length, D0 = rootCells / 4 + (rootNode.hold ? 1 : 0);
+            const tEnd = performance.now() + P.openMs;
             const better = (a, b) => a.ok !== b.ok ? a.ok > b.ok : a.g !== b.g ? a.g > b.g : a.ways > b.ways;
             let best2 = null;
             for (const o of opens) {
@@ -1843,7 +1845,7 @@
                   const bags = Math.max(0, Math.ceil((n - left.length - (hold ? 1 : 0) - restN) / 7));
                   if (bags) for (const x of PIECES) avail[x] = (avail[x] || 0) + bags;
                   avail.t = 0;
-                  w = tilings(rem, free, avail, 4, 400);
+                  w = performance.now() > tEnd ? 0 : tilings(rem, free, avail, 4, 400);
                   tmemo.set(key, w);
                 }
                 return { ok: w > 0 ? 1 : 0, g: 0, ways: w };
@@ -1862,7 +1864,7 @@
               };
               const dfs = (rows, hold, qi) => {
                 const cur = qi < P.openDepth ? seq[qi] : null;
-                if (!cur || budget-- <= 0) return leaf(rows, hold, qi);
+                if (!cur || budget-- <= 0 || performance.now() > tEnd) return leaf(rows, hold, qi);
                 const key = rows.join(",") + "|" + hold + "|" + qi;
                 if (memo.has(key)) return memo.get(key);
                 let out2 = leaf(rows, hold, qi);
@@ -1884,6 +1886,7 @@
               const n0 = need(rows0);
               for (const c2 of list) {
                 if (c2.dead) continue;
+                if (performance.now() > tEnd) break;
                 const m = c2.move;
                 const r = okMove(rows0, m.type, m);
                 if (!r) continue;
@@ -1900,6 +1903,7 @@
             const H2 = rows0.length, S = SP2.__shapes();
             let doneAny = false;
             const picks = [];
+            const tEnd = performance.now() + P.openMs;
             const sq = seq.slice();
             {
               const D0 = Math.round(rootCells / 4) + (rootNode.hold ? 1 : 0), at = (D0 + sq.length) % 7;
@@ -1945,6 +1949,7 @@
                 const key = i + "|" + rows.join(",");
                 let v = rmemo.get(key);
                 if (v !== void 0) return v;
+                if (performance.now() > tEnd) return false;
                 const full = new Array(H2).fill(0);
                 for (let k = 0; k < rows.length; k++) full[H2 - 1 - k] = rows[k];
                 v = false;
@@ -2024,6 +2029,7 @@
               const DBG = root.__bookDbg ? { cover: 0, slot: 0, tall: 0, over: 0, tk: 0, dep: 0, lines: 0, free: 0 } : null;
               for (const c2 of list) {
                 if (c2.dead) continue;
+                if (best2 && performance.now() > tEnd) break;
                 const m = c2.move, cells = S[m.type][m.r].map(([cx, cy]) => [m.x + cx, H2 - 1 - (m.y + cy)]);
                 if (cells.some(([x, k]) => k < 0 || k >= L + 6)) continue;
                 const r = lock(rows0, m.type, m, 0);
