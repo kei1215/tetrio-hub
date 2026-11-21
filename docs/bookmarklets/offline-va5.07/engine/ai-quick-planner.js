@@ -128,7 +128,7 @@
  // A piece-speed setting is a target cadence, not a command to stop
  // thinking after one frame. Budget the search in bounded native slices;
  // guarantee coverage of HOLD and spin routes before branching ahead.
- /* Lockstep with the player (Tab: プレーヤーと同時に置く, TL / CUSTOM vs a
+ /* Lockstep with the player (Tab: Ternbase, formerly プレーヤーと同時に置く / PtoP, TL / CUSTOM vs a
     player): the BOT places one piece each time the player places one, so both
     run at the same PPS; it plans while it waits. */
  function syncPeer(game){
@@ -175,6 +175,12 @@
   if(plan.hold&&!LocalAIInformation.holdAllowed({game:{...state,setoptions:game.options}},game._aiAllowHold!==false))return false;
   return true;
  }
+ // 2026-11-21 (user: PPS 0.1 にしても Butter・CC1 が 1.6 PPS): with mimicPlay the clock came from the player's recorded
+ // timings and the BOT PPS was ignored (outside AIs inherited it from the borrowed profile). Now outside AIs use the set
+ // PPS, and a vA profile with mimicPlay keeps the player's rhythm scaled so its average is the set PPS.
+ // average frames per piece of the player's recorded timings (cached per behavior object)
+ const mimicAvgs=new WeakMap();
+ function mimicAvg(style){if(!style||typeof style!=='object')return 0;if(mimicAvgs.has(style))return mimicAvgs.get(style);const all=style.timings?.all||[];let n=0,t=0;for(const v of all){const x=Number(v);if(x>0){t+=Math.min(600,Math.max(3,x));n++}}const m=n?t/n:0;mimicAvgs.set(style,m);return m}
  function drive(game,getPPS=()=>1){let mimicPiece=-1,mimicInterval=null;let target=null,search=null,lastPiece=-1,lastFrame=-1,attempts=0,lastDropFrame=null,dueFrame=null,pieceStart=0,policyKey='',lastHeldPiece=-1,rotations=0,forecastCache=null;
   const stats=game._localAIStats={plannedDrops:0,matchedDrops:0,mismatchedDrops:0,naturalLocks:0,routeFailures:0,emergencyDrops:0,spinLocks:0,spinRouteMisses:0,spinHeightMisses:0,holdCommands:0,holdPlannedDrops:0,holdBlocked:0,holdFailures:0,holdCandidates:0,holdSelected:0,reusedPlans:0,cacheRejected:0,rootCandidatesChecked:0,futureCandidatesChecked:0,forcedByPPS:0,searchTimeMs:0,searchSlices:0,maxSliceMs:0,budgetSkips:0,humanProtectedFrames:0};let expected=null,commanded=false;
   const observe=piece=>{if(!expected){if(!commanded)stats.naturalLocks++;commanded=false;return}commanded=false;if(piece.type===expected.type&&piece.x===expected.x&&Math.ceil(piece.y)===expected.y&&piece.r===expected.rotation)stats.matchedDrops++;else stats.mismatchedDrops++;expected=null};game.on?.('lock','local-bot-route-check',observe);
@@ -182,12 +188,12 @@
    if(!game.isPlaying()||game.state.pause||game.state.zenith?.incapacitated)return;
    if(game.state.falling.flags&128)return;
    const frame=game.getFrame();if(frame===lastFrame)return;lastFrame=frame;
-   const pps=Math.min(20,Math.max(.1,Number(getPPS())||1));if(game._aiMimicTiming&&mimicPiece!==game.state.stats.piecesplaced){mimicPiece=game.state.stats.piecesplaced;mimicInterval=LocalAIBehavior.interval(game._aiBehavior,game.state)}const sync=syncPeer(game),interval=sync?sync.interval:game._aiMimicTiming&&mimicInterval!==null?mimicInterval:60/pps;// v4.8283 (user: PPS が守られていない / REN のときだけ速くなる / 常に一定の速度): piece n is due
+   const pps=Math.min(20,Math.max(.1,Number(getPPS())||1));if(game._aiMimicTiming&&mimicPiece!==game.state.stats.piecesplaced){mimicPiece=game.state.stats.piecesplaced;mimicInterval=LocalAIBehavior.interval(game._aiBehavior,game.state)}const sync=syncPeer(game),mimicOn=game._aiMimicTiming&&!game._aiEngine&&mimicInterval!==null,mimicMean=mimicOn?mimicAvg(game._aiBehavior):0,interval=sync?sync.interval:mimicOn&&mimicMean>0?mimicInterval*(60/pps)/mimicMean:60/pps;// v4.8283 (user: PPS が守られていない / REN のときだけ速くなる / 常に一定の速度): piece n is due
    // on a fixed clock (dueFrame += interval). A late piece is made up only a little (catchUp) on
    // the next one, never with a burst. Lockstep: the player's piece count decides (sync.ahead);
    // the BOT still gets a minimum think time after its piece appears (minThink), so a fast
    // player does not cut every outside-AI search at once (user: PtoP だと CC が弱い).
-   const catchUp=Math.min(10,interval*.25),minThink=sync?Math.max(6,Math.min(40,sync.interval*.6)):0;
+   const catchUp=interval<=12?interval*.8:Math.min(10,interval*.25),minThink=sync?Math.max(6,Math.min(40,sync.interval*.6)):0;
    const turnReady=(slack=0)=>sync?sync.ahead():frame>=dueFrame-slack;
    const thinkDue=(slack=0)=>sync?sync.ahead()&&frame>=pieceStart+minThink:frame>=dueFrame-slack;
    const dropped=()=>{lastDropFrame=frame;dueFrame=Math.max((dueFrame??frame)+interval,frame+interval-catchUp)};
@@ -276,7 +282,7 @@
     // Lockstep with the player: wait at the spawn until the player has placed,
     // so a spin / soft-drop route never forces the lock early (2026-11-13: the BOT
     // locked up to 3 s before the player on floor routes).
-    if(!target.exec&&sync&&!sync.ahead()&&deadline.total>20){game._localBotIntent='同時に置く: プレーヤー待ち';return}
+    if(!target.exec&&sync&&!sync.ahead()&&deadline.total>20){game._localBotIntent='Ternbase: プレーヤー待ち';return}
     if(!target.exec){
      if(target.routeStart&&(f.x!==target.routeStart.x||f.r!==target.routeStart.r)){fail('開始位置');return}
      const path=target.path.slice(),trace=(target.trace||[]).slice();
@@ -287,6 +293,24 @@
      stats.inputSteps=(stats.inputSteps||0);
     }
     const ex=target.exec;
+    // 2026-11-21 (user: 10 PPS にしても 6 PPS / mochbot の 7・10 PPS の TTRM): mochbot at 10 PPS sends the whole
+    // route (hold, rotations, every column tap, hard drop) in ONE frame; one key per frame plus DAS holds capped
+    // this driver near 6 PPS. At a short clock (interval <= 12 frames, 5+ PPS) a route without soft drops is sent
+    // as one burst of taps; the next frame checks the final spot (a miss plans again) and drops at the PPS time.
+    if(!ex.started&&!ex.burst&&!sync&&interval<=12){
+     // keys before the first soft drop (a spin route: move and turn at once, then drop and spin step by step)
+     const cut=target.path.indexOf('sonicDrop'),keys=(cut<0?target.path:target.path.slice(0,cut)).filter(k=>k!=='sonicDrop'),dropAt=ex.steps.findIndex(st=>st.kind==='drop');
+     const ok=keys.length&&keys.every(k=>/^(move(Left|Right)|rotate(CW|CCW|180))$/.test(k)&&window.LocalAIPlayerSettings?.canUse?.(game,k)!==false)&&(dropAt<0||dropAt>0&&ex.steps[dropAt-1]?.to);
+     // a floor route keeps its PPS wait (the piece must not lock before its time)
+     const floorWait=dropAt>=0&&(()=>{const est=(ex.steps.length-dropAt)*2+12;return frame<dueFrame-est-12&&deadline.total>est+30})();
+     if(ok&&floorWait){game._localBotIntent='PPS待ち（接地する経路）';return}
+     if(ok){let sub=0;for(const k of keys){game.source.Push('keydown',{key:k,subframe:sub});game.source.Push('keyup',{key:k,subframe:Math.min(.99,sub+.005)});sub=Math.min(.98,sub+.01)}
+      ex.burst=true;ex.started=true;ex.pending=null;stats.bursts=(stats.bursts||0)+1;
+      if(dropAt<0)ex.i=ex.steps.length;else{ex.i=dropAt;ex.burstCheck=ex.steps[dropAt-1].to}
+      return}
+    }
+    // after a burst into a floor route: the piece must be where the drop starts
+    if(ex.burstCheck){const to=ex.burstCheck;ex.burstCheck=null;if(f.x!==to.x||f.r!==to.r){fail('まとめ入力');return}}
     // A route that touches the floor (soft drop / spin) starts late enough that the piece does
     // not lock by lock delay before its PPS time (that placed spins early). Hard-drop routes
     // wait at their final spot instead.

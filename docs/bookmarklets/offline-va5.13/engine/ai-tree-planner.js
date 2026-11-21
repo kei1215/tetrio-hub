@@ -48,7 +48,7 @@
   //  openW (no reward for matching: a reward that stops when the shape is done made the search avoid finishing).
   //  pickBeta: the move is drawn from the top lines with weight exp(pickBeta x (value - best)) like the
   //  player's own spread; misdrop: that share of moves lands one column off (the player's misdrop rate).
-  openers:null,openW:45,followKind:null,followW:300,protect:null,protectW:600,openBudget:250,openDepth:4,pickBeta:0,misdrop:0,
+  openers:null,openW:45,followKind:null,followBias:null,followW:300,protect:null,protectW:600,openBudget:250,openDepth:4,openMs:25,pickBeta:0,misdrop:0,
   // search
   ms:45,maxNodes:1e7,maxIters:1e9,maxTail:3,merge:true,speculate:true,seed:1,
  };
@@ -277,6 +277,8 @@
     rew+=P.digW*r.dug;
     // after a setup: the player's next attack from it (followKind, e.g. tspin2 then tspin3)
     if(P.followKind&&kindOf(type,p.spin,r.lines,r.dug,combo,node.g)===P.followKind)rew+=P.followW;
+    // the second attack from a setup: the player's share of each kind (followBias {kind: share}), not fixed
+    if(P.followBias){const k=kindOf(type,p.spin,r.lines,r.dug,combo,node.g);if(k&&P.followBias[k])rew+=P.followW*P.followBias[k]}
     if((P.ban&&P.ban.length)||P.kindBias){const k=kindOf(type,p.spin,r.lines,r.dug,combo,node.g);if(k){if(P.ban&&P.ban.includes(k))rew-=P.banW;
      // the player's mix of attacks (user: 攻撃の種類の割合も合わせる、ただし高さや地形で変える): a soft bonus/penalty per
      // kind, added to the search value, so the board (height, shape, a TSM combo coming) still decides
@@ -350,6 +352,8 @@
   // (tilings); among the root moves that do as well, the tree's own order decides (free cells are played well).
   function openPlan(list){
    if(!openOn)return null;const H=rows0.length,D0=rootCells/4+(rootNode.hold?1:0);
+   // time limit (user: テンプレの話を入れてからすごいラグ / たまにフリーズ: this search took up to 1.6 s for one piece)
+   const tEnd=Math.min(performance.now()+P.openMs,hardEnd);
    const better=(a,b)=>(a.ok!==b.ok?a.ok>b.ok:a.g!==b.g?a.g>b.g:a.ways>b.ways);
    let best=null;
    for(const o of opens){const t=o.rows,e=o.empty,L=t.length;
@@ -368,7 +372,7 @@
       const gl=D0+seq.length-1,B=Math.floor(gl/7),inB=new Set();for(let j=0;j<seq.length;j++)if(Math.floor((D0+j)/7)===B)inB.add(seq[j]);
       const restN=6-gl%7;if(restN>0)for(const x of PIECES)if(!inB.has(x))avail[x]=(avail[x]||0)+1;
       const bags=Math.max(0,Math.ceil((n-left.length-(hold?1:0)-restN)/7));if(bags)for(const x of PIECES)avail[x]=(avail[x]||0)+bags;
-      avail.t=0;w=tilings(rem,free,avail,4,400);tmemo.set(key,w)}
+      avail.t=0;w=performance.now()>tEnd?0:tilings(rem,free,avail,4,400);tmemo.set(key,w)}
      return {ok:w>0?1:0,g:0,ways:w}};
     // the T stays in hold for the T-spins; only placed when it cannot be held (hold is a T already)
     const tKeep=!(rootNode.hold==='t'&&seq[0]==='t');
@@ -376,7 +380,7 @@
     const tall=rows=>{for(let k=L+1;k<H;k++)if(rows[H-1-k])return true;return false};
     const okMove=(rows,type,p)=>{const r=lock(rows,type,p,0);if(r.lines||bad(r.rows)||tall(r.rows))return null;
      if(type==='t'&&tKeep)return null;if(blocked(r.rows)>blocked(rows))return null;return r};
-    const dfs=(rows,hold,qi)=>{const cur=qi<P.openDepth?seq[qi]:null;if(!cur||budget--<=0)return leaf(rows,hold,qi);
+    const dfs=(rows,hold,qi)=>{const cur=qi<P.openDepth?seq[qi]:null;if(!cur||budget--<=0||performance.now()>tEnd)return leaf(rows,hold,qi);
      const key=rows.join(',')+'|'+hold+'|'+qi;if(memo.has(key))return memo.get(key);
      let out=leaf(rows,hold,qi);const opts=[[cur,hold,qi+1]];
      if(holdOk){if(hold&&hold!==cur)opts.push([hold,cur,qi+1]);else if(!hold&&seq[qi+1])opts.push([seq[qi+1],cur,qi+2])}
@@ -387,7 +391,7 @@
      memo.set(key,out);return out};
     // the root moves the tree found, in its order
     const n0=need(rows0);
-    for(const c of list){if(c.dead)continue;const m=c.move;const r=okMove(rows0,m.type,m);if(!r)continue;
+    for(const c of list){if(c.dead)continue;if(performance.now()>tEnd)break;const m=c.move;const r=okMove(rows0,m.type,m);if(!r)continue;
      const h2=m.hold?(rootNode.hold?seq[0]:seq[0]):rootNode.hold,q2=m.hold&&!rootNode.hold?2:1;
      const sub=dfs(r.rows,h2,q2),v={ok:sub.ok,g:sub.g+n0-need(r.rows),ways:sub.ways,c};
      if(v.ok&&(!best||better(v,best)))best=v}
@@ -402,7 +406,7 @@
   // slot cell and no column above a book cell that is still open. The T is not put outside the book (kept for the T-spin).
   // Returns {c} (the root move), {done:true} (book complete: the tree plays, the package sets the follow-up) or null.
   function bookPlan(list){
-   if(!openOn)return null;const H=rows0.length,S=SP.__shapes();let doneAny=false;const picks=[];
+   if(!openOn)return null;const H=rows0.length,S=SP.__shapes();let doneAny=false;const picks=[];const tEnd=Math.min(performance.now()+P.openMs,hardEnd);
    // the known pieces, plus the last piece of the bag when only one is left (7-bag: it is certain)
    const sq=seq.slice();{const D0=Math.round(rootCells/4)+(rootNode.hold?1:0),at=(D0+sq.length)%7;
     if(at===6){const inB=new Set(sq.slice(sq.length-6));const left=PIECES.filter(t=>!inB.has(t));if(left.length===1)sq.push(left[0])}}
@@ -417,7 +421,7 @@
     // can book piece i go in now: its cells are empty, it rests on something, and it can get there (a straight drop,
     // or a slide / spin the placement search finds: a J can still be slid under the Z that was put in first)
     const rmemo=new Map();
-    const reach=(rows,i)=>{const key=i+'|'+rows.join(',');let v=rmemo.get(key);if(v!==undefined)return v;
+    const reach=(rows,i)=>{const key=i+'|'+rows.join(',');let v=rmemo.get(key);if(v!==undefined)return v;if(performance.now()>tEnd)return false;
      const full=new Array(H).fill(0);for(let k=0;k<rows.length;k++)full[H-1-k]=rows[k];v=false;
      for(const q of SP.placements(full,B[i].t,4,19,P.maxTail)){const cs=S[B[i].t][q.r];
       if(B[i].c.every(([x,k])=>cs.some(([cx,cy])=>q.x+cx===x&&H-1-(q.y+cy)===k))){v=true;break}}
@@ -431,7 +435,7 @@
     const put=(rows,i)=>{const n=rows.slice();for(const [x,k] of B[i].c)n[k]|=1<<x;return n};
     const memo=new Map();
     // most book pieces that can still go in with the known pieces from qi on
-    const dfs=(rows,dn,hold,qi)=>{const cur=sq[qi];if(!cur)return 0;const key=dn+'|'+hold+'|'+qi;if(memo.has(key))return memo.get(key);
+    const dfs=(rows,dn,hold,qi)=>{const cur=sq[qi];if(!cur)return 0;const key=dn+'|'+hold+'|'+qi;if(memo.has(key))return memo.get(key);if(performance.now()>hardEnd)return 0;
      let best=0;const opts=[[cur,hold,qi+1]];
      if(holdOk){if(hold&&hold!==cur)opts.push([hold,cur,qi+1]);else if(!hold&&sq[qi+1])opts.push([sq[qi+1],cur,qi+2])}
      for(const [type,h2,q2] of opts){let placed=false;
@@ -441,7 +445,7 @@
     // remaining book cells, and the columns above them
     const rem=new Array(L+6).fill(0);for(let i=0;i<B.length;i++)if(!(done>>i&1))for(const [x,k] of B[i].c)rem[k]|=1<<x;
     const tKeep=!(rootNode.hold==='t'&&seq[0]==='t');let best=null;const DBG=root.__bookDbg?{cover:0,slot:0,tall:0,over:0,tk:0,dep:0,lines:0,free:0}:null;
-    for(const c of list){if(c.dead)continue;const m=c.move,cells=S[m.type][m.r].map(([cx,cy])=>[m.x+cx,H-1-(m.y+cy)]);
+    for(const c of list){if(c.dead)continue;if(best&&performance.now()>tEnd||performance.now()>hardEnd)break;const m=c.move,cells=S[m.type][m.r].map(([cx,cy])=>[m.x+cx,H-1-(m.y+cy)]);
      if(cells.some(([x,k])=>k<0||k>=L+6))continue;const r=lock(rows0,m.type,m,0);if(r.lines)continue;
      const h2=m.hold?seq[0]:rootNode.hold,q2=m.hold&&!rootNode.hold?2:1;
      let bi=-1;for(let i=0;i<B.length;i++)if(!(done>>i&1)&&B[i].t===m.type&&B[i].c.every(([x,k])=>cells.some(([X,K])=>X===x&&K===k))){bi=i;break}
@@ -451,6 +455,10 @@
      else{if(m.type==='t'&&tKeep){if(DBG)DBG.tk++;continue}
       // a free piece: off the book cells and the slots, not over an open book cell, not stacked high
       let ok=true;for(const [x,k] of cells){if(rem[k]>>x&1||(e[k]||0)>>x&1||k>L+3){ok=false;if(DBG)DBG[rem[k]>>x&1?'cover':(e[k]||0)>>x&1?'slot':'tall']++;break}for(let K=0;K<k;K++)if(rem[K]>>x&1){ok=false;if(DBG)DBG.over++;break}if(!ok)break}
+      // no hole under it in the setup's rows and nothing over a slot's opening (2026-11-21: a Z on the free side left a
+      // hole in a row the DT cannon's TST clears, so the TST was lost)
+      if(ok)for(const [x,k] of cells){if(k>0&&k<=L&&!(rb[k-1]>>x&1)&&!cells.some(([X,K])=>X===x&&K===k-1)){ok=false;if(DBG)DBG.hole=(DBG.hole|0)+1;break}
+       for(let K=k-1;K>=0&&!(rb[K]>>x&1);K--)if((e[K]||0)>>x&1){ok=false;if(DBG)DBG.mouth=(DBG.mouth|0)+1;break}if(!ok)break}
       if(!ok)continue;const n=rb.slice();for(const [x,k] of cells)n[k]|=1<<x;v=dfs(n,done,h2,q2)-0.01;if(DBG){DBG.free++;DBG.fv=v}}
      if(!best||v>best.v+1e-9)best={v,c,book:bi>=0}}
     if(root.__bookDbg)root.__bookDbg({done:done.toString(2),best:best&&{v:best.v,book:best.book,t:best.c.move.type},why:DBG,list:list.length,seq:seq.join(''),hold:rootNode.hold});
@@ -463,8 +471,12 @@
    if(root.__openDbg)root.__openDbg({book:pick.book,v:pick.v,type:pick.c.move.type},rootCells);
    return {c:pick.c};
   }
+  // both opener searches together stop at hardEnd (2026-11-21, user: プレイ中のフリーズ・開始数秒の硬直: bookPlan had no
+  // limit when no root move fitted, up to 0.6 s for one piece)
+  let hardEnd=0;
   function result(){
    const list=rootNode.children||[];if(!list.length)return null;
+   hardEnd=performance.now()+2*P.openMs;
    const bp=bookPlan(list);if(bp&&bp.c)return out(bp.c);
    const op=bp&&bp.done?null:openPlan(list);if(op)return out(op);
    // CC1 pick_move: skip lines that let the waiting garbage top out the middle columns
@@ -489,7 +501,9 @@
      if(spent+performance.now()-t0>=P.ms)done=true}
     catch(e){done=true;if(root.__treeDebug)console.error(e)}
     spent+=performance.now()-t0;if(done)best=result();return done},
-   result:()=>done?best:result(),get done(){return done},get spent(){return spent},get nodes(){return nodes},
+   // before the search is done (a Worker host asks after every 25 ms slice): the tree's best line only, without the
+   // opener searches, which run once when it is done or stopped
+   result:()=>{if(done)return best;const l=(rootNode.children||[]).filter(c=>!c.dead);return l.length?out(l[0]):null},get done(){return done},get spent(){return spent},get nodes(){return nodes},
    stop(){if(!done){done=true;best=result()}return best},
   };
  }
