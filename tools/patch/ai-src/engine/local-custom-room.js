@@ -81,7 +81,7 @@
   if(getPath(room,path)===undefined&&!(path.startsWith('options.')&&path.slice(8) in EXTRA))throw Error('知らない項目: '+key);
   setPath(room,path,path==='name'?String(value):num(value));persist();update();sys(path+' = '+getPath(room,path));
  }
- const HELP=['/bot list … 呼べる AI の一覧','/bot add <AI名> … AI を入れる(名前の一部でも可、省略で先頭)','/bot remove [名前] … AI を外す(省略で最後に入れた AI)','/set <項目> <値> … 設定を変える(ft wb gp name public limit music、ほか options の名前: g gincrease garbagecap spinbonuses b2bcharging など)','/set intro on|off … PRE-MATCH INTRO(ほか pps gravity power tspin ternbase ratio mute split: ルーム設定の LOCAL AI)','/start … 開始(START ボタンと同じ)','/abort … 試合を止めてルームに戻る','/vsai … AI の招待一覧(右の PEOPLE)を出す / しまう','/help … この一覧'];
+ const HELP=['/bot list … 呼べる AI の一覧','/bot add <AI名> … AI を入れる(名前の一部でも可、省略で先頭)','/bot remove [名前] … AI を外す(省略で最後に入れた AI)','/set <項目> <値> … 設定を変える(ft wb gp name public limit music、ほか options の名前: g gincrease garbagecap spinbonuses b2bcharging など)','/set intro on|off … PRE-MATCH INTRO(ほか pps gravity power tspin ternbase ratio mute split: ルーム設定の LOCAL AI)','/start … 開始(START ボタンと同じ)','/abort … 試合を止めてルームに戻る','/vsai … AI の招待一覧(右上の人アイコン / Tab の PEOPLE)を出す / しまう','/help … この一覧'];
  function command(text){
   if(!room||!String(text).startsWith('/'))return false;
   const [cmd,...args]=String(text).trim().split(/\s+/);const c=cmd.toLowerCase();
@@ -91,7 +91,7 @@
    if(c==='/help')HELP.forEach(sys);
    else if(c==='/start')start();
    else if(c==='/abort')abort();
-   else if(c==='/vsai'){room.vsai=!room.vsai;renderVsAi();sys(room.vsai?'VS AI: 右の一覧の招待マークで AI を呼べます':'VS AI の一覧をしまいました')}
+   else if(c==='/vsai'){room.vsai=!room.vsai;renderVsAi();if(room.vsai)window.__qpSocialOpen?.();sys(room.vsai?'VS AI: 右の一覧の招待マークで AI を呼べます':'VS AI の一覧をしまいました')}
    else if(c==='/set')setOption(args[0],args.slice(1).join(' ')||undefined);
    else{const sub=(args[0]||'').toLowerCase(),rest=args.slice(1).join(' ');if(sub==='add')addBot(rest);else if(sub==='remove'||sub==='rm')removeBot(rest);else sys('AI: '+aiChoices().map(labelOf).join(', ')+'(/bot add <AI名>)')}
   }catch(error){sys(error.message)}
@@ -109,7 +109,7 @@
   window.LocalAIRoom.ft?.(Math.max(1,Math.min(99,Number(room.match.ft)||1)));
   pendingReturn=false;
   const go=()=>{if(!room||room.state!=='intro')return;window.LocalAIRoom.start({left:sides[0],right:sides[1],engines,labels,mode:'custom',options,customRoom:true,firstTo:Math.max(1,Math.min(99,Math.round(Number(room.match.ft))||1))});room.state='ingame'};
-  room.state='intro';renderVsAi();
+  room.state='intro';window.__qpSocialClose?.();
   if(readSetting(SETTINGS[0])&&typeof window.DEVHOOK_PAIRED==='function'){
    // native TETRA LEAGUE match intro (pair screen) with TR hidden (-1); the rank line shows the room record.
    const names=inRoom.map(p=>p.username),ft=Math.round(Number(room.match.ft))||1;
@@ -146,23 +146,25 @@
   sides.forEach((s,i)=>{if(s==='player')return;const engine=config.engines?.[i]||null,c=aiChoices().find(x=>engine?x.engine===engine:x.side===s);const name=(config.labels?.[i]||(c&&labelOf(c))||'BOT').toLowerCase();room.players.push(player('bot-'+(++botSeq),name,true,s,engine))});
   fire('room.join',{id:room.id,banner:{content:'LOCAL CUSTOM ROOM(オフライン)。/help でコマンド一覧。',banner:true}});
   update();
+  if(config.vsai)setTimeout(()=>window.__qpSocialOpen?.(),300);
  }
  // VS AI (user: VS AI のルームに入った瞬間、右の一覧に AI と招待マーク / フレンド一覧と同じ見た目): the native
  // PEOPLE panel (#social) shows one native-styled row per AI; the invite button adds that AI to the room.
- // Not the native #social overlay: offline it is the full-screen "OFFLINE / not connected" layer that
- // covered the room (user screenshot). A PEOPLE list of the same row look sits in the room's right column, above the chat.
+ // VS AI (user: 右上の人 / ベルのマーク、Tab でも出る PEOPLE と NOTIFICATIONS の一覧に AI と招待マーク): the
+ // native sidebar (#social, opened by local-shell.js __qpSocialOpen) gets one native friend row per AI in
+ // #social_relationships; the OFFLINE cover of the PEOPLE side is hidden while the VS AI room is open.
  function renderVsAi(){
-  let box=document.getElementById('qp-vsai-people');
-  if(!room?.vsai){box?.remove();return}
-  if(!document.getElementById('qp-vsai-style')){const st=document.createElement('style');st.id='qp-vsai-style';st.textContent='#qp-vsai-people{position:relative;flex:none;width:100%;max-height:34vh;margin-bottom:.5em;overflow:auto;z-index:30;background:rgba(12,10,24,.95);box-shadow:0 0 12px rgba(0,0,0,.6);font-family:HUN,sans-serif;color:#fff;border-radius:4px 0 0 4px}#qp-vsai-people .qp-vs-head{padding:.4em .6em;font-size:1.6em}#qp-vsai-people .qp-vs-row{position:relative;display:flex;align-items:center;gap:.6em;padding:.45em .6em;border-top:1px solid rgba(255,255,255,.08);cursor:default}#qp-vsai-people .qp-vs-row:hover{background:rgba(255,255,255,.06)}#qp-vsai-people .qp-vs-img{width:2.6em;height:2.6em;border-radius:3px;background:#222;object-fit:cover}#qp-vsai-people .qp-vs-row h1{margin:0;font-size:1.2em;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#qp-vsai-people .qp-vs-row p{margin:0;font-size:.8em;opacity:.6}#qp-vsai-people .qp-vs-invite{width:2em;height:2em;display:flex;align-items:center;justify-content:center;border-radius:3px;background:rgba(255,255,255,.1);cursor:pointer}#qp-vsai-people .qp-vs-invite:hover{background:rgba(255,255,255,.25)}#qp-vsai-people .qp-vs-invite img{width:1.2em;height:1.2em}#qp-vsai-people .qp-vs-invite.activated{transform:scale(.9)}';document.head.appendChild(st)}
-  if(!box){box=document.createElement('div');box.id='qp-vsai-people';const chat=document.getElementById('room_chat');if(chat?.parentNode)chat.parentNode.insertBefore(box,chat);else document.body.appendChild(box)}
-  const lobbyShown=!document.querySelector('[data-menuview=lobby]')?.classList.contains('hidden')&&room.state==='lobby';box.style.display=lobbyShown?'':'none';
-  box.replaceChildren();const head=document.createElement('div');head.className='qp-vs-head ns';head.textContent='PEOPLE · VS AI';box.appendChild(head);
+  const list=document.getElementById('social_relationships');
+  document.body.classList.toggle('qp-vsai-social',!!room?.vsai);
+  if(!document.getElementById('qp-vsai-style')){const st=document.createElement('style');st.id='qp-vsai-style';st.textContent='body.qp-vsai-social #social_people .social_bar_content_offline{display:none!important}body.qp-vsai-social #social_people .social_bar_content{display:block!important}body.qp-vsai-social #social_relationships>:not(.qp-vsai){display:none!important}body.qp-vsai-social #social_relationships .qp-vsai .social_relationship_button_invite{display:inline-flex!important}';document.head.appendChild(st)}
+  list?.querySelectorAll('.qp-vsai').forEach(e=>e.remove());
+  if(!room?.vsai||!list)return;
   for(const c of aiChoices()){const name=labelOf(c),inRoomNow=room.players.some(p=>p.bot&&p.username===name.toLowerCase());
-   const n=document.createElement('div');n.className='qp-vs-row';const img=document.createElement('img');img.className='qp-vs-img';img.src='/res/avatar.png';img.onerror=()=>{img.style.visibility='hidden'};n.appendChild(img);
-   const txt=document.createElement('div');txt.style.cssText='flex:1;min-width:0';const h1=document.createElement('h1');h1.textContent=name.toUpperCase();const p=document.createElement('p');p.textContent=inRoomNow?'IN YOUR ROOM':'BOT · VS AI';txt.append(h1,p);n.appendChild(txt);
-   const b=document.createElement('div');b.title='Invite to your game';b.className='qp-vs-invite';const bi=document.createElement('img');bi.src='/res/icon/invite.svg';b.appendChild(bi);
-   b.addEventListener('click',ev=>{ev.stopPropagation();b.classList.add('activated');setTimeout(()=>b.classList.remove('activated'),300);try{addBot(c.name)}catch(error){sys(error.message)}});n.appendChild(b);box.appendChild(n)}
+   const n=document.createElement('div');n.className='social_relationship qp-vsai';const img=document.createElement('img');img.className='social_relationship_img';img.src='/res/avatar.png';n.appendChild(img);
+   const h1=document.createElement('h1'),sp=document.createElement('span');sp.textContent=name.toUpperCase();h1.appendChild(sp);n.appendChild(h1);
+   const p=document.createElement('p');p.textContent=inRoomNow?'in your room':'BOT · VS AI';n.appendChild(p);n.appendChild(document.createElement('h2'));
+   const holder=document.createElement('div');holder.className='social_relationship_button_holder';const b=document.createElement('div');b.title='Invite to your game';b.className='social_relationship_button social_relationship_button_invite';const bi=document.createElement('img');bi.src='/res/icon/invite.svg';b.append(bi,document.createElement('span'));
+   b.addEventListener('click',ev=>{ev.stopPropagation();b.classList.add('activated');setTimeout(()=>b.classList.remove('activated'),300);try{addBot(c.name)}catch(error){sys(error.message)}});holder.appendChild(b);n.appendChild(holder);list.appendChild(n)}
  }
  function close(){if(!room)return;clearTimeout(introTimer);room=null;renderVsAi();pendingReturn=false;try{window.LocalAIRoom?.stop?.()}catch{}fire('room.leave');hideIds();setTimeout(()=>{try{window.LocalNative?.view?.('play1p')}catch{}},50)}
  const backToLobby=()=>{if(!room)return;pendingReturn=false;room.state='lobby';const go=()=>{try{window.LocalNative?.resetResults?.();window.LocalNative?.view?.('lobby')}catch{}update()};go();setTimeout(go,60)};

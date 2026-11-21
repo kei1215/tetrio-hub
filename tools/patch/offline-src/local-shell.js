@@ -470,8 +470,23 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
  // The Tab panel belongs only to the isolated local origin. Never install
  // this shortcut on the online TETR.IO page.
  if(location.protocol==='tetrio-local:'||window.__qpChromeOffline===true||window.__qpLocalOffline===true)window.addEventListener('keydown',event=>{
-  if(event.key==='Tab'&&!event.repeat&&!event.ctrlKey&&!event.metaKey){event.preventDefault();event.stopImmediatePropagation();panel.hidden=!panel.hidden;if(!panel.hidden)window.LocalRenderDiagnostics?.refresh()}
+  // v5.16 (user: tabの項目を一時的にtab+shiftに移して): Shift+Tab opens this panel; plain Tab opens the
+  // native PEOPLE / NOTIFICATIONS sidebar like online (the local VS AI room lists its AIs there).
+  if(event.key!=='Tab'||event.repeat||event.ctrlKey||event.metaKey)return;
+  if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)&&!event.shiftKey)return;
+  event.preventDefault();event.stopImmediatePropagation();
+  if(event.shiftKey){panel.hidden=!panel.hidden;if(!panel.hidden)window.LocalRenderDiagnostics?.refresh()}else window.__qpSocialToggle?.();
  },true);
+ // Native sidebar open / close (client Pr() / Wr(): their click wiring is in a startup callback the
+ // offline page never runs). The people / bell icons and a click on the backdrop work the same way.
+ if(location.protocol==='tetrio-local:'||window.__qpChromeOffline===true||window.__qpLocalOffline===true){
+  let closeTimer=0;
+  const social=()=>document.getElementById('social');
+  const open=()=>{const s=social();if(!s)return;clearTimeout(closeTimer);s.classList.remove('hidden');s.getBoundingClientRect();s.classList.remove('hiding');window.dispatchEvent(new Event('qp-social-open'))};
+  const close=()=>{const s=social();if(!s||s.classList.contains('hiding'))return;s.classList.add('hiding');closeTimer=setTimeout(()=>s.classList.add('hidden'),500)};
+  window.__qpSocialToggle=()=>{const s=social();if(!s)return;s.classList.contains('hiding')?open():close()};window.__qpSocialOpen=open;window.__qpSocialClose=close;
+  document.addEventListener('click',ev=>{const t=ev.target;if(t?.closest?.('#social_tray_icon_people,#social_tray_icon_notifications,#social_tray')){ev.preventDefault();window.__qpSocialToggle();return}if(t===social()||t?.closest?.('#social_back'))close()},true);
+ }
 })();
 
 /* v4.8280 (user: 登った後の最上部の状態が見れる様に / 線だけ / 操作ミノより後ろ / 上昇演出 = 次に
