@@ -28,7 +28,7 @@
   const ratioLabel=document.createElement('label');ratioLabel.style.display='block';ratioLabel.append(document.createTextNode('Ternbase 比 プレーヤー:BOT '));
   const ratio=document.createElement('input');ratio.type='text';ratio.placeholder='1:1';ratio.style.width='6em';ratio.value=localStorage.getItem('qp-ai-sync-ratio')||'1:1';
   ratio.addEventListener('change',()=>{const m=/^\s*(\d+(?:\.\d+)?)\s*[:：]\s*(\d+(?:\.\d+)?)\s*$/.exec(ratio.value);if(!m||!(+m[1]>0)||!(+m[2]>0)){ratio.value=localStorage.getItem('qp-ai-sync-ratio')||'1:1';return}ratio.value=m[1]+':'+m[2];localStorage.setItem('qp-ai-sync-ratio',ratio.value)});
-  ratioLabel.appendChild(ratio);section.appendChild(ratioLabel);
+  ratioLabel.appendChild(ratio);section.appendChild(ratioLabel);window.addEventListener('qp-ai-settings-changed',()=>{ratio.value=localStorage.getItem('qp-ai-sync-ratio')||'1:1';const box=[...section.querySelectorAll('input[type=checkbox]')].find(b=>b.closest('label')?.textContent.trim().startsWith('Ternbase'));if(box)box.checked=localStorage.getItem('qp-ai-sync-player')==='true'});
   flag('qp-ai-misdrop','置きミスを再現',false);
   const ppsLabel=document.createElement('label');ppsLabel.style.display='block';ppsLabel.append(document.createTextNode('BOT目標PPS '));
   const pps=document.createElement('input');pps.type='number';pps.min='0.1';pps.max='20';pps.step='0.1';pps.value=localStorage.getItem('qp-local-bot-pps')||'2';pps.addEventListener('change',()=>{const value=Math.max(.1,Math.min(20,Number(pps.value)||2));pps.value=String(value);localStorage.setItem('qp-local-bot-pps',String(value))});ppsLabel.appendChild(pps);section.appendChild(ppsLabel);

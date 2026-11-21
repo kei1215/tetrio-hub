@@ -20,16 +20,19 @@
   {k:'gravity',label:'BOT GRAVITY',title:'NORMAL / OFF FOR BOTS / OFF FOR BOTH',type:'pick',key:'qp-ai-no-gravity',def:'off',items:[['off','NORMAL'],['bot','OFF FOR BOTS'],['both','OFF FOR BOTH']]},
   {k:'power',label:'AI COMPUTE POWER',title:'Planning effort of the vA AI',type:'pick',key:'qp-ai-power',def:'auto',items:[['auto','AUTO'],['low','LOW'],['mid','MID'],['high','HIGH'],['max','MAX']]},
   {k:'tspin',label:'AI T-SPIN B2B',title:'vA AI keeps B2B with T-spins',type:'bool',key:'qp-local-ai-tspin-b2b',def:true,off:'false'},
+  {k:'ternbase',label:'TERNBASE',title:'BOTs place in step with the player (formerly PtoP; shared with the Tab panel)',type:'bool',key:'qp-ai-sync-player',def:false,on:'true',off:'false'},
+  {k:'ratio',label:'TERNBASE RATIO',title:'Player : BOT pieces for TERNBASE, e.g. 1:1',type:'text',key:'qp-ai-sync-ratio',def:'1:1'},
   {k:'mute',label:'MUTE ROOM SOUNDS',title:'Mission shout, countdown, join / leave, chat and lobby music',type:'bool',key:'qp-local-room-mute',def:false},
   {k:'split',label:'SEPARATE PIECE ORDER',title:'Each board gets its own seed (off = same queue like TETRA LEAGUE)',type:'bool',key:'qp-local-ai-seed-split',def:false}];
- const readSetting=s=>{const v=localStorage.getItem(s.key);if(v===null)return s.def;if(s.type==='bool')return s.off?v!==s.off:v==='1';if(s.type==='num'){const n=Number(v);return Number.isFinite(n)?n:s.def}return s.items.some(i=>i[0]===v)?v:s.def};
- const writeSetting=(s,value)=>{let v=value;if(s.type==='bool'){const on=v===true||/^(1|true|on|yes)$/i.test(String(v));localStorage.setItem(s.key,s.off?(on?'true':s.off):(on?'1':'0'))}else if(s.type==='num'){const n=Math.max(s.min,Math.min(s.max,Number(v)));if(!Number.isFinite(n))throw Error(s.label+': 数で指定');localStorage.setItem(s.key,String(n))}else{const it=s.items.find(i=>i[0]===String(v).toLowerCase()||i[1]===String(v).toUpperCase());if(!it)throw Error(s.label+': '+s.items.map(i=>i[0]).join(' / '));localStorage.setItem(s.key,it[0])}window.dispatchEvent(new CustomEvent('qp-ai-settings-changed',{detail:{key:s.key}}))};
+ const readSetting=s=>{const v=localStorage.getItem(s.key);if(v===null)return s.def;if(s.type==='bool')return s.on?v===s.on:s.off?v!==s.off:v==='1';if(s.type==='text')return v;if(s.type==='num'){const n=Number(v);return Number.isFinite(n)?n:s.def}return s.items.some(i=>i[0]===v)?v:s.def};
+ const writeSetting=(s,value)=>{let v=value;if(s.type==='bool'){const on=v===true||/^(1|true|on|yes)$/i.test(String(v));localStorage.setItem(s.key,s.off?(on?(s.on||'true'):s.off):(on?'1':'0'))}else if(s.type==='text'){const m=/^\s*(\d+(?:\.\d+)?)\s*[:：]\s*(\d+(?:\.\d+)?)\s*$/.exec(String(v));if(!m||!(+m[1]>0)||!(+m[2]>0))throw Error(s.label+': 例 1:1');localStorage.setItem(s.key,m[1]+':'+m[2])}else if(s.type==='num'){const n=Math.max(s.min,Math.min(s.max,Number(v)));if(!Number.isFinite(n))throw Error(s.label+': 数で指定');localStorage.setItem(s.key,String(n))}else{const it=s.items.find(i=>i[0]===String(v).toLowerCase()||i[1]===String(v).toUpperCase());if(!it)throw Error(s.label+': '+s.items.map(i=>i[0]).join(' / '));localStorage.setItem(s.key,it[0])}window.dispatchEvent(new CustomEvent('qp-ai-settings-changed',{detail:{key:s.key}}))};
  const qpValues=()=>Object.fromEntries(SETTINGS.map(s=>{const v=readSetting(s);return [s.k,s.type==='pick'?s.items.find(i=>i[0]===v)[1]:v]}));
  function injectRows(){
   const host=document.getElementById('room_content_room');if(!host||document.getElementById('qp-room-ai-block'))return;
   const block=document.createElement('div');block.className='scroller_block light';block.id='qp-room-ai-block';const h=document.createElement('h2');h.className='ns';h.textContent='LOCAL AI';block.appendChild(h);
   for(const s of SETTINGS){const row=document.createElement('div');row.className='room_config_row flex-row imp';row.title=s.title;const lab=document.createElement('div');lab.className='room_config_label flex-item ns';lab.textContent=s.label.toLowerCase();row.appendChild(lab);let item;
    if(s.type==='bool'){const sw=document.createElement('label');sw.className='rc_switch flex-item';item=document.createElement('input');item.type='checkbox';item.className='room_config_item';const knob=document.createElement('span');knob.className='rc_switch_knob';sw.append(item,knob);row.appendChild(sw);item.addEventListener('change',ev=>{ev.stopImmediatePropagation();apply(s,item.checked)},true)}
+   else if(s.type==='text'){item=document.createElement('input');item.type='text';item.className='room_config_item flex-item';row.appendChild(item);item.addEventListener('change',ev=>{ev.stopImmediatePropagation();apply(s,item.value)},true)}
    else if(s.type==='num'){item=document.createElement('input');item.type='number';item.className='room_config_item flex-item';item.min=s.min;item.max=s.max;item.step='0.1';row.appendChild(item);item.addEventListener('change',ev=>{ev.stopImmediatePropagation();apply(s,item.value)},true)}
    else{item=document.createElement('div');item.className='room_config_item room_config_spinner flex-item ns';row.appendChild(item);item.addEventListener('click',ev=>{ev.preventDefault();ev.stopImmediatePropagation();const cur=readSetting(s),i=s.items.findIndex(x=>x[0]===cur);apply(s,s.items[(i+1)%s.items.length][0])},true)}
    item.dataset.index='qp.'+s.k;block.appendChild(row)}
@@ -78,7 +81,7 @@
   if(getPath(room,path)===undefined&&!(path.startsWith('options.')&&path.slice(8) in EXTRA))throw Error('知らない項目: '+key);
   setPath(room,path,path==='name'?String(value):num(value));persist();update();sys(path+' = '+getPath(room,path));
  }
- const HELP=['/bot list … 呼べる AI の一覧','/bot add <AI名> … AI を入れる(名前の一部でも可、省略で先頭)','/bot remove [名前] … AI を外す(省略で最後に入れた AI)','/set <項目> <値> … 設定を変える(ft wb gp name public limit music、ほか options の名前: g gincrease garbagecap spinbonuses b2bcharging など)','/set intro on|off … PRE-MATCH INTRO(ほか pps gravity power tspin mute split: ルーム設定の LOCAL AI)','/start … 開始(START ボタンと同じ)','/abort … 試合を止めてルームに戻る','/vsai … AI の招待一覧(右の PEOPLE)を出す / しまう','/help … この一覧'];
+ const HELP=['/bot list … 呼べる AI の一覧','/bot add <AI名> … AI を入れる(名前の一部でも可、省略で先頭)','/bot remove [名前] … AI を外す(省略で最後に入れた AI)','/set <項目> <値> … 設定を変える(ft wb gp name public limit music、ほか options の名前: g gincrease garbagecap spinbonuses b2bcharging など)','/set intro on|off … PRE-MATCH INTRO(ほか pps gravity power tspin ternbase ratio mute split: ルーム設定の LOCAL AI)','/start … 開始(START ボタンと同じ)','/abort … 試合を止めてルームに戻る','/vsai … AI の招待一覧(右の PEOPLE)を出す / しまう','/help … この一覧'];
  function command(text){
   if(!room||!String(text).startsWith('/'))return false;
   const [cmd,...args]=String(text).trim().split(/\s+/);const c=cmd.toLowerCase();
@@ -106,7 +109,7 @@
   window.LocalAIRoom.ft?.(Math.max(1,Math.min(99,Number(room.match.ft)||1)));
   pendingReturn=false;
   const go=()=>{if(!room||room.state!=='intro')return;window.LocalAIRoom.start({left:sides[0],right:sides[1],engines,labels,mode:'custom',options,customRoom:true,firstTo:Math.max(1,Math.min(99,Math.round(Number(room.match.ft))||1))});room.state='ingame'};
-  room.state='intro';
+  room.state='intro';renderVsAi();
   if(readSetting(SETTINGS[0])&&typeof window.DEVHOOK_PAIRED==='function'){
    // native TETRA LEAGUE match intro (pair screen) with TR hidden (-1); the rank line shows the room record.
    const names=inRoom.map(p=>p.username),ft=Math.round(Number(room.match.ft))||1;
@@ -146,17 +149,20 @@
  }
  // VS AI (user: VS AI のルームに入った瞬間、右の一覧に AI と招待マーク / フレンド一覧と同じ見た目): the native
  // PEOPLE panel (#social) shows one native-styled row per AI; the invite button adds that AI to the room.
- let socialSnap=null;
+ // Not the native #social overlay: offline it is the full-screen "OFFLINE / not connected" layer that
+ // covered the room (user screenshot). A PEOPLE list of the same row look sits in the room's right column, above the chat.
  function renderVsAi(){
-  const social=document.getElementById('social'),list=document.getElementById('social_relationships');if(!social||!list)return;
-  if(!room?.vsai){if(socialSnap){list.querySelectorAll('.qp-vsai').forEach(e=>e.remove());[...list.children].forEach(e=>e.style.display='');social.className=socialSnap;socialSnap=null}return}
-  if(socialSnap===null)socialSnap=social.className;social.classList.remove('hidden','hiding');
-  [...list.children].forEach(e=>{if(!e.classList.contains('qp-vsai'))e.style.display='none'});list.querySelectorAll('.qp-vsai').forEach(e=>e.remove());
+  let box=document.getElementById('qp-vsai-people');
+  if(!room?.vsai){box?.remove();return}
+  if(!document.getElementById('qp-vsai-style')){const st=document.createElement('style');st.id='qp-vsai-style';st.textContent='#qp-vsai-people{position:relative;flex:none;width:100%;max-height:34vh;margin-bottom:.5em;overflow:auto;z-index:30;background:rgba(12,10,24,.95);box-shadow:0 0 12px rgba(0,0,0,.6);font-family:HUN,sans-serif;color:#fff;border-radius:4px 0 0 4px}#qp-vsai-people .qp-vs-head{padding:.4em .6em;font-size:1.6em}#qp-vsai-people .qp-vs-row{position:relative;display:flex;align-items:center;gap:.6em;padding:.45em .6em;border-top:1px solid rgba(255,255,255,.08);cursor:default}#qp-vsai-people .qp-vs-row:hover{background:rgba(255,255,255,.06)}#qp-vsai-people .qp-vs-img{width:2.6em;height:2.6em;border-radius:3px;background:#222;object-fit:cover}#qp-vsai-people .qp-vs-row h1{margin:0;font-size:1.2em;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#qp-vsai-people .qp-vs-row p{margin:0;font-size:.8em;opacity:.6}#qp-vsai-people .qp-vs-invite{width:2em;height:2em;display:flex;align-items:center;justify-content:center;border-radius:3px;background:rgba(255,255,255,.1);cursor:pointer}#qp-vsai-people .qp-vs-invite:hover{background:rgba(255,255,255,.25)}#qp-vsai-people .qp-vs-invite img{width:1.2em;height:1.2em}#qp-vsai-people .qp-vs-invite.activated{transform:scale(.9)}';document.head.appendChild(st)}
+  if(!box){box=document.createElement('div');box.id='qp-vsai-people';const chat=document.getElementById('room_chat');if(chat?.parentNode)chat.parentNode.insertBefore(box,chat);else document.body.appendChild(box)}
+  const lobbyShown=!document.querySelector('[data-menuview=lobby]')?.classList.contains('hidden')&&room.state==='lobby';box.style.display=lobbyShown?'':'none';
+  box.replaceChildren();const head=document.createElement('div');head.className='qp-vs-head ns';head.textContent='PEOPLE · VS AI';box.appendChild(head);
   for(const c of aiChoices()){const name=labelOf(c),inRoomNow=room.players.some(p=>p.bot&&p.username===name.toLowerCase());
-   const n=document.createElement('div');n.className='social_relationship qp-vsai';const img=document.createElement('img');img.className='social_relationship_img';img.src='/res/avatar.png';img.onerror=()=>{img.style.visibility='hidden'};n.appendChild(img);
-   const h1=document.createElement('h1'),sp=document.createElement('span');sp.textContent=name.toUpperCase();h1.appendChild(sp);n.appendChild(h1);const p=document.createElement('p');p.textContent=inRoomNow?'IN YOUR ROOM':'BOT';n.appendChild(p);const h2=document.createElement('h2');h2.textContent='VS AI';n.appendChild(h2);
-   const holder=document.createElement('div');holder.className='social_relationship_button_holder';const b=document.createElement('div');b.title='Invite to your game';b.className='social_relationship_button social_relationship_button_invite';const bi=document.createElement('img');bi.src='/res/icon/invite.svg';b.appendChild(bi);b.style.display='inline-block';
-   b.addEventListener('click',ev=>{ev.stopPropagation();b.classList.add('activated');setTimeout(()=>b.classList.remove('activated'),300);try{addBot(c.name)}catch(error){sys(error.message)}});holder.appendChild(b);n.appendChild(holder);list.appendChild(n)}
+   const n=document.createElement('div');n.className='qp-vs-row';const img=document.createElement('img');img.className='qp-vs-img';img.src='/res/avatar.png';img.onerror=()=>{img.style.visibility='hidden'};n.appendChild(img);
+   const txt=document.createElement('div');txt.style.cssText='flex:1;min-width:0';const h1=document.createElement('h1');h1.textContent=name.toUpperCase();const p=document.createElement('p');p.textContent=inRoomNow?'IN YOUR ROOM':'BOT · VS AI';txt.append(h1,p);n.appendChild(txt);
+   const b=document.createElement('div');b.title='Invite to your game';b.className='qp-vs-invite';const bi=document.createElement('img');bi.src='/res/icon/invite.svg';b.appendChild(bi);
+   b.addEventListener('click',ev=>{ev.stopPropagation();b.classList.add('activated');setTimeout(()=>b.classList.remove('activated'),300);try{addBot(c.name)}catch(error){sys(error.message)}});n.appendChild(b);box.appendChild(n)}
  }
  function close(){if(!room)return;clearTimeout(introTimer);room=null;renderVsAi();pendingReturn=false;try{window.LocalAIRoom?.stop?.()}catch{}fire('room.leave');hideIds();setTimeout(()=>{try{window.LocalNative?.view?.('play1p')}catch{}},50)}
  const backToLobby=()=>{if(!room)return;pendingReturn=false;room.state='lobby';const go=()=>{try{window.LocalNative?.resetResults?.();window.LocalNative?.view?.('lobby')}catch{}update()};go();setTimeout(go,60)};
