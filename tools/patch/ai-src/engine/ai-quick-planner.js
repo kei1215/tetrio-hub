@@ -193,7 +193,7 @@
    // the next one, never with a burst. Lockstep: the player's piece count decides (sync.ahead);
    // the BOT still gets a minimum think time after its piece appears (minThink), so a fast
    // player does not cut every outside-AI search at once (user: PtoP だと CC が弱い).
-   const catchUp=Math.min(10,interval*.25),minThink=sync?Math.max(6,Math.min(40,sync.interval*.6)):0;
+   const catchUp=interval<=12?interval*.8:Math.min(10,interval*.25),minThink=sync?Math.max(6,Math.min(40,sync.interval*.6)):0;
    const turnReady=(slack=0)=>sync?sync.ahead():frame>=dueFrame-slack;
    const thinkDue=(slack=0)=>sync?sync.ahead()&&frame>=pieceStart+minThink:frame>=dueFrame-slack;
    const dropped=()=>{lastDropFrame=frame;dueFrame=Math.max((dueFrame??frame)+interval,frame+interval-catchUp)};
@@ -293,6 +293,24 @@
      stats.inputSteps=(stats.inputSteps||0);
     }
     const ex=target.exec;
+    // 2026-11-21 (user: 10 PPS にしても 6 PPS / mochbot の 7・10 PPS の TTRM): mochbot at 10 PPS sends the whole
+    // route (hold, rotations, every column tap, hard drop) in ONE frame; one key per frame plus DAS holds capped
+    // this driver near 6 PPS. At a short clock (interval <= 12 frames, 5+ PPS) a route without soft drops is sent
+    // as one burst of taps; the next frame checks the final spot (a miss plans again) and drops at the PPS time.
+    if(!ex.started&&!ex.burst&&!sync&&interval<=12){
+     // keys before the first soft drop (a spin route: move and turn at once, then drop and spin step by step)
+     const cut=target.path.indexOf('sonicDrop'),keys=(cut<0?target.path:target.path.slice(0,cut)).filter(k=>k!=='sonicDrop'),dropAt=ex.steps.findIndex(st=>st.kind==='drop');
+     const ok=keys.length&&keys.every(k=>/^(move(Left|Right)|rotate(CW|CCW|180))$/.test(k)&&window.LocalAIPlayerSettings?.canUse?.(game,k)!==false)&&(dropAt<0||dropAt>0&&ex.steps[dropAt-1]?.to);
+     // a floor route keeps its PPS wait (the piece must not lock before its time)
+     const floorWait=dropAt>=0&&(()=>{const est=(ex.steps.length-dropAt)*2+12;return frame<dueFrame-est-12&&deadline.total>est+30})();
+     if(ok&&floorWait){game._localBotIntent='PPS待ち（接地する経路）';return}
+     if(ok){let sub=0;for(const k of keys){game.source.Push('keydown',{key:k,subframe:sub});game.source.Push('keyup',{key:k,subframe:Math.min(.99,sub+.005)});sub=Math.min(.98,sub+.01)}
+      ex.burst=true;ex.started=true;ex.pending=null;stats.bursts=(stats.bursts||0)+1;
+      if(dropAt<0)ex.i=ex.steps.length;else{ex.i=dropAt;ex.burstCheck=ex.steps[dropAt-1].to}
+      return}
+    }
+    // after a burst into a floor route: the piece must be where the drop starts
+    if(ex.burstCheck){const to=ex.burstCheck;ex.burstCheck=null;if(f.x!==to.x||f.r!==to.r){fail('まとめ入力');return}}
     // A route that touches the floor (soft drop / spin) starts late enough that the piece does
     // not lock by lock delay before its PPS time (that placed spins early). Hard-drop routes
     // wait at their final spot instead.
