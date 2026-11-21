@@ -51,6 +51,7 @@
 | 2026-11-10 | commit e84ebccd2 / build 20261109T164827 | `CLIENT_RENAMES_2026_11_10`(Ko→Vo, kc→Bc, Bs→Ls, Ml→Dl, _c→gc, yl→Al, vl→wl, Rt→Ht, Ys→Qs, Qo→Yo) | v4.8247 |
 | 2026-11-10b | commit e84ebccd2 / build 20261109T191625(同じ commit の作り直し) | `CLIENT_RENAMES_2026_11_10B`(Bc→Lc, Gc→Xc, Kc→Qc, Ls→Bs, Vo→Ko, Yl→Jl)。症状: QP TOOLS の停止と PATCH DELETE が消えた、`Unsupported client version` | v4.8255 |
 | 2026-11-16 | commit 75ce2f9f5 / build 20261115T210526 | `CLIENT_RENAMES_2026_11_16`(26 個、`--port-2026-11-16`)+ 文字の置き換え 2 つ(`function x(e,n,i){`→`y`、`new _.Text(`→`m.Text(`)。旧本体が手元になかったので、transform.js の旧アンカーを新本体に当て、String の split/includes/match を見張って外れたものを順に直した。症状: OFFLINE で EXIT TETR.IO? | v5.10 |
+| 2026-11-21 | commit f2df51313 / build 20261120T230635 | `CLIENT_RENAMES_2026_11_21`(Js↔Zs の入れ替え、`--port-2026-11-21`)。auto-port.js を Node で当てて見つけた(出力は手の移植と同じ)。症状: CONFIG の QP TOOLS 停止 ON/OFF と PATCH DELETE が消えた、`[Local patch] Unsupported client`。本体は ~/Downloads/all-tetrio-patch/tetrio-js-20261120T230635.js に保存 | v5.15 |
 
 ## v5.11: automatic port at runtime (tools/patch/auto-port.js)
 O/standalone.js wraps transform with `auto-port.js`. When the stock transform fails on the tetrio.js the app gets,

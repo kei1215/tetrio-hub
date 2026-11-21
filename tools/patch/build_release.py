@@ -113,6 +113,9 @@ CLIENT_RENAMES_2026_11_16 = {'xa': 'Aa', 'ki': 'wi', 'ca': 'pa', '$i': 'Gi', 'xt
                              'Jl': 'ec', 'Bs': 'Ss', 'Ko': 'Yo', 'ta': 'na', 'oa': 'aa', 'ea': 'ta', 'ia': 'oa', 'Al': 'vl',
                              'wl': 'Bl', 'Ht': 'Nt', 'Qs': 'Js', 'ka': 'wa', 'Dl': 'Ol', 'la': 'ca', 'yn': 'xn', 'gc': 'fc',
                              'Yo': 'Qo', 'Jo': 'ea'}
+# TETR.IO client of 2026-11-20 (commit f2df51313, build 20261120T230635): Js and Zs swapped. Symptom: QP TOOLS
+# ON/PAUSED and PATCH DELETE gone from CONFIG ([Local patch] Unsupported client). Found by auto-port.js in Node.
+CLIENT_RENAMES_2026_11_21 = {'Js': 'Zs', 'Zs': 'Js'}
 PORT_LITERALS_2026_11_16 = [('function x(e,n,i){', 'function y(e,n,i){'), ('new _.Text(', 'new m.Text(')]
 
 
@@ -839,6 +842,7 @@ def main():
     ap.add_argument('--port-2026-11-09', dest='port', action='store_true', help='adapt anchors to the TETR.IO client of 2026-11-09')
     ap.add_argument('--port-2026-11-10', dest='port1110', action='store_true', help='with --incremental: rename the client ids in transform.js for the TETR.IO client of 2026-11-10')
     ap.add_argument('--port-2026-11-16', dest='port1116', action='store_true', help='with --incremental: rename the client ids for the TETR.IO client of 2026-11-15 (build 20261115T210526)')
+    ap.add_argument('--port-2026-11-21', dest='port1121', action='store_true', help='with --incremental: rename the client ids for the TETR.IO client of 2026-11-20 (build 20261120T230635)')
     ap.add_argument('--port-2026-11-10b', dest='port1110b', action='store_true', help='with --incremental: rename the client ids for the rebuilt 2026-11-10 client (build 20261109T191625)')
     ap.add_argument('--offline-src', type=Path, help='folder with changed O/offline/* files (tools/patch/offline-src)')
     ap.add_argument('--incremental', action='store_true', help='OLD is already a build of this script (v4.8239+): only re-overlay O/offline, keep transform.js and client.js')
@@ -861,7 +865,7 @@ def main():
         old_zip = a.old_dir / f'QP-Patch-v{kind}{OV}-Source.zip'
         new_zip = a.new_dir / f'QP-Patch-v{kind}{NV}-Source.zip'
         old_sha = sha256(old_zip.read_bytes())
-        payload = build_zip(old_zip, new_zip, kind, a.old, a.new, edit_src, counter_src, a.port, offline, a.incremental, a.notes, ai if kind == 'A' else None, CLIENT_RENAMES_2026_11_10 if a.port1110 else CLIENT_RENAMES_2026_11_10B if a.port1110b else CLIENT_RENAMES_2026_11_16 if getattr(a, 'port1116', False) else None, duo_src)
+        payload = build_zip(old_zip, new_zip, kind, a.old, a.new, edit_src, counter_src, a.port, offline, a.incremental, a.notes, ai if kind == 'A' else None, CLIENT_RENAMES_2026_11_10 if a.port1110 else CLIENT_RENAMES_2026_11_10B if a.port1110b else CLIENT_RENAMES_2026_11_16 if getattr(a, 'port1116', False) else CLIENT_RENAMES_2026_11_21 if getattr(a, 'port1121', False) else None, duo_src)
         sums[new_zip.name] = sha256(payload)
         for osname, ext, flavor in OS_FILES:
             old_file = a.old_dir / f'tetrio-patch-{osname}-v{kind}{OV}{ext}'
