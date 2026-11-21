@@ -201,12 +201,25 @@
   room.players.filter(p=>p.bracket==='player').forEach((p,i)=>{p.record.games++;if(i===w){p.record.wins++;p.record.streak++}else p.record.streak=0});
   pendingReturn=true;sys('game finished');sortPlayers();
  });
+ // SAVE (user: GAME タブのプリセットや盤面サイズが試合に反映されない): the native SAVE handler (Cr.saveRoomConfig,
+ // only rows marked unsaved) is wired in a startup callback the offline page never runs, so every native row is read
+ // here the same way (spinner = its innerHTML id, music = data-song, checkbox = checked). A newly picked GAME
+ // PRESET loads that preset's options first (LocalNative.tlPreset), like the server does.
+ function saveConfig(){
+  if(!room)return;const items=[...document.querySelectorAll('#room_content_container .room_config_item[data-index]')].filter(e=>!e.dataset.index.startsWith('qp.'));
+  const val=e=>e.classList.contains('music_picker')?e.getAttribute('data-song'):e.classList.contains('room_config_spinner')?e.innerHTML.trim():e.type==='checkbox'?!!e.checked:e.type==='range'?undefined:e.value;
+  const pe=items.find(e=>e.dataset.index==='options.presets'),pick=pe&&val(pe);
+  if(pick&&pick!=='custom'&&pick!==room.options.presets){const o=window.LocalNative?.tlPreset?.(pick);if(o)for(const [k,v] of Object.entries(o))if(k in room.options||k in Object.fromEntries(Object.keys(EXTRA).map(x=>[x.slice(8),1])))room.options[k]=v;room.options.presets=pick;persist();update();configUpdated();return}
+  for(const e of items){const ix=e.dataset.index,v=val(e);if(v===undefined||v===null||ix==='options.presets')continue;const cur=getPath(room,ix);const nv=ix==='name'?String(v):num(v);if(String(cur)!==String(nv)){setPath(room,ix,nv);if(ix.startsWith('options.'))room.options.presets='custom'}}
+  persist();update();configUpdated();
+ }
  const setBracket=(p,b)=>{p.bracket=b;fire('room.update.bracket',{uid:p._id,bracket:b});if(p._id===me().id)document.getElementById('roomview')?.classList.toggle('spectating',b==='spectator');update()};
  // PLAYERS order like online: most wins first (#sp_<id> containers are flex items).
  function sortPlayers(){if(!room)return;setTimeout(()=>{for(const p of room.players){const e=document.getElementById('sp_'+p._id);if(e)e.style.order=String(-(p.record.wins*1000+p.record.games))}},80)}
  // EXIT and PLAYING / SPECTATING: their native click wiring never reaches the local room (user: EXIT が使えない /
  // 左下の SPECTATING / PLAYING が使えない).
  document.addEventListener('click',ev=>{if(!room)return;const t=ev.target;if(t?.closest?.('#leaveroom')){ev.preventDefault();ev.stopImmediatePropagation();close();return}
+  if(t?.closest?.('#room_opts_save')){ev.preventDefault();ev.stopImmediatePropagation();try{saveConfig()}catch(error){sys(error.message)}return}
   if(t?.closest?.('#startroom')){ev.preventDefault();ev.stopImmediatePropagation();if(room.state==='lobby')try{start()}catch(error){sys(error.message)}return}
   if(t?.closest?.('#room_switchbracket')){ev.preventDefault();ev.stopImmediatePropagation();const m=room.players.find(p=>p._id===me().id);if(m&&room.state==='lobby')setBracket(m,m.bracket==='player'?'spectator':'player')}},true);
  // In-game chat (user: プレイ中も左にログと入力欄 / 表示を出さない設定でも T で入力欄): T opens and focuses
