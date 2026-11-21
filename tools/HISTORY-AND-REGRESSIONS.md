@@ -71,6 +71,7 @@
 - サイト全体を Clean Blog 風に作り直した(ナビバー「TETR.IO tools」)。
 - AI 版の取得ページに Discord のロール確認を付けた(auth.html)。
 - リプレイ → MP4 変換のブックマークレット(docs/replay-video/)。
+- 2026-11-21(未リリース・未 push):オフライン QP「最初から10F相当」の穴バラをリプレイに残す(TODO 24/25)。毎フレーム zthm.Update を上書きしていたのをやめ、標準の zenith_messy を options に入れる(MOD の zenith_mods は変えない)、10F の猶予(15F、EXPERT 6F)は LOCAL TRAINING の ige に delay で入れる。ミッションで MOD が変わっても zenith_messy を残す。MP4:盤面修正(qp_replay_edit、CC 盤面修正も)入りは読み込みで断る(26)、2人の盤面を左右に 32px ずつ離す(DUO 以外、27)、カウントダウン中は操作ミノなし・最初のミノは NEXT の先頭(28)。
 - リプレイ → MP4(2026-11-13、未 push):裏 DUO(Bleeding Hearts)の倒れる・蘇生(盤面・NEXT・HOLD・B2B のリセット、せり上げ)・味方が倒れている間は自分に返る攻撃。2人分の .ttrm では相方の記録から蘇生時刻を補う(linkDuoRevives)。
 - リプレイ → MP4:合成した QP DUO の .ttrm を DUO 専用ボード(duoleft / duoright)で描く。TL 扱いにしない(開始演出 DUO、点数表示なし)。
 - QP DUO リプレイ保存のブックマークレット(docs/duo-save/)。gsm の受け口はリプレイ盤面修正・カウンターと共有(__rpe)。
@@ -155,6 +156,8 @@
 | 外部AIの強さを 0 にしても弱くならない | 0 は捨てられて既定(全力)のまま。数値はパッケージの探索量そのもので、CC1 は探索を減らしてもほぼ同じ強さ(Node: 3ms でも 3000ms でも APP 0.65) | 強さは 0〜100。(1-強さ)²×35% の手を1〜2列ずらす(bot-ai.js misdrop)。50 未満は探索も最小。Node(CC1 単独 150 手):APP 100/80/60/40 = 0.70/0.69/0.49/0.43、20 以下は自滅 |
 | 外部AI(CC)の手が勝手に vAI の手に変わる(速い相手ほど CC が弱い) | CC の答えの後、候補を順に確かめる途中で PPS の時刻が来ると、確かめ済みの vAI 候補で置いた(TTRM aiDebug: 79 手中 14 手 forcedByPPS、CC1 との一致 約60%) | 外部AIの配置を最初に確かめ、時刻で打ち切っても必ずそれを置く(bot-ai.js externalPick)。TTRM の aiDebug.plan で played+playedLate = plans |
 | AI 戦で盤面の 3,2,1,GO が動かない(上の文字だけ) | TL の設定(tlPreset)はカウントダウンが切ってあり、v4.8282 は部屋の掛け声(rsg)だけ出していた | local-ai-room.js が毎ラウンド countdown 3 / 1000ms を入れる(プレスタートの後に読まれるので間に合う)。デバッグ用アプリで 3→2→1→GO! が両方の盤面に出るのを確認 |
+| オフライン QP「最初から10F相当」の穴バラ・猶予がリプレイ(本体・MP4)で無かったことになる | ライブだけ zthm.Update を上書きしていた。zenith_messy を options に、猶予は ige の delay に(本体の AddPendingGarbage が delay ?? garbagephase) | 10F相当で遊んだ .ttr の options に zenith_messy:true、LOCAL TRAINING の ige に delay。ライブの最後の盤面の穴の列と MP4 エンジンで再生した穴の列が同じ(2026-11-21: 20段すべて一致) |
+| MP4 のカウントダウン中に操作ミノ(と HOLD)が出ている | 開始前の絵に frame 0 の状態をそのまま使っていた。開始前は falling・hold なしで、最初のミノを NEXT の先頭に | TL/ルームの .ttrm で 3,2,1 の間、盤面が空で NEXT の先頭が最初のミノ |
 
 ## 3. 守ること(ユーザーのルール)
 - 旧サイト kei1215/kei1215.github.io は読み取り専用。
