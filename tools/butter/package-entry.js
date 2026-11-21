@@ -55,15 +55,17 @@ LocalExternalAI.register({
           if (!cells) { live = true; follow = null; ready = null; }
           else if (lastCells < 0 || cells - lastCells > 4) { live = false; follow = null; }
           else if (cells < lastCells) { const lines = Math.max(1, Math.round((lastCells + 4 - cells) / 10));
-            follow = null;   // only the first attack from a setup is fixed (user: DT砲で確定で打つのは1回目のみ、2回目は J・Z スピンで B2B にする時もある)
+            // only the first attack from a setup is fixed (user: DT砲で確定で打つのは1回目のみ、2回目は J・Z スピンで B2B にする時もある);
+            // until the second clear the kinds the player made second get a share-sized bonus (opener.then2)
+            follow = !follow && live && ready && ready.then2 && Object.keys(ready.then2).length ? { bias: ready.then2 } : null;
             live = false; }
           if (live && like.openers) ready = like.openers.find((o) => o.rows.every((m, k) => (m & ~(rowsB[k] || 0)) === 0) && (o.empty || []).every((m, k) => (m & (rowsB[k] || 0)) === 0)) || ready;
           lastCells = cells; }
-        const fol = follow && follow.then.length ? { followKind: follow.then[0], protect: follow.protect } : {};
+        const fol = follow ? { followBias: follow.bias } : {};
         // the T-spins of a setup like a DT cannon need several turns after the drop (maxTail 5 while they are due)
         const fol0 = live && ready && ready.then && ready.then.length ? { followKind: ready.then[0], protect: ready.empty || null } : {};
         const job = TP.create(null, { board, falling: input.current, hold: input.hold || null, queue: (input.queue || []).slice(0, 5), holdAllowed: true, b2b: Math.max(0, input.b2b | 0), combo: Math.max(0, input.combo | 0) },
-          { ...opts, ...like, ...fol0, ...fol, ...(fol0.followKind || fol.followKind ? { maxTail: 5 } : {}), openLive: live && !!like.openers, ...(input.human ? { maxTail: 2, pickBeta: 0 } : {}), ms: 1e9, maxIters: iters, incoming: inc, gRows: g, seed: (Date.now() & 0xffff) + 1 });
+          { ...opts, ...like, ...fol0, ...fol, ...(fol0.followKind || fol.followBias ? { maxTail: 5 } : {}), openLive: live && !!like.openers, ...(input.human ? { maxTail: 2, pickBeta: 0 } : {}), ms: 1e9, maxIters: iters, incoming: inc, gRows: g, seed: (Date.now() & 0xffff) + 1 });
         const conv = (p) => {
           if (!p) return null;
           const cells = TABLES.shapes[p.type][p.r].map(([cx, cy]) => [p.x + cx, H - 1 - (p.y + cy)]);

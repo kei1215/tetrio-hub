@@ -31,9 +31,9 @@
     mod
   ));
 
-  // ../tetrio-hub/tools/patch/ai-src/engine/ai-spin-planner.js
+  // ../tetrio-hub/.claude/worktrees/determined-mccarthy-f2cb4e/tools/patch/ai-src/engine/ai-spin-planner.js
   var require_ai_spin_planner = __commonJS({
-    "../tetrio-hub/tools/patch/ai-src/engine/ai-spin-planner.js"(exports, module) {
+    "../tetrio-hub/.claude/worktrees/determined-mccarthy-f2cb4e/tools/patch/ai-src/engine/ai-spin-planner.js"(exports, module) {
       (function spinPlannerFactory(root) {
         "use strict";
         const W2 = 10, FULL = (1 << W2) - 1;
@@ -999,9 +999,9 @@
     }
   });
 
-  // ../tetrio-hub/tools/patch/ai-src/engine/ai-tree-planner.js
+  // ../tetrio-hub/.claude/worktrees/determined-mccarthy-f2cb4e/tools/patch/ai-src/engine/ai-tree-planner.js
   var require_ai_tree_planner = __commonJS({
-    "../tetrio-hub/tools/patch/ai-src/engine/ai-tree-planner.js"(exports, module) {
+    "../tetrio-hub/.claude/worktrees/determined-mccarthy-f2cb4e/tools/patch/ai-src/engine/ai-tree-planner.js"(exports, module) {
       (function treePlannerFactory(root) {
         "use strict";
         const SP2 = (typeof __require === "function" ? require_ai_spin_planner() : null) || root.LocalSpinPlanner;
@@ -1070,6 +1070,7 @@
           openers: null,
           openW: 45,
           followKind: null,
+          followBias: null,
           followW: 300,
           protect: null,
           protectW: 600,
@@ -1626,6 +1627,10 @@
               if (r.lines === 4 && combo >= 2 && node.g > 0) rew += P.renQuad;
               rew += P.digW * r.dug;
               if (P.followKind && kindOf(type, p.spin, r.lines, r.dug, combo, node.g) === P.followKind) rew += P.followW;
+              if (P.followBias) {
+                const k = kindOf(type, p.spin, r.lines, r.dug, combo, node.g);
+                if (k && P.followBias[k]) rew += P.followW * P.followBias[k];
+              }
               if (P.ban && P.ban.length || P.kindBias) {
                 const k = kindOf(type, p.spin, r.lines, r.dug, combo, node.g);
                 if (k) {
@@ -1785,7 +1790,7 @@
           function openPlan(list) {
             if (!openOn) return null;
             const H2 = rows0.length, D0 = rootCells / 4 + (rootNode.hold ? 1 : 0);
-            const tEnd = performance.now() + P.openMs;
+            const tEnd = Math.min(performance.now() + P.openMs, hardEnd);
             const better = (a, b) => a.ok !== b.ok ? a.ok > b.ok : a.g !== b.g ? a.g > b.g : a.ways > b.ways;
             let best2 = null;
             for (const o of opens) {
@@ -1903,7 +1908,7 @@
             const H2 = rows0.length, S = SP2.__shapes();
             let doneAny = false;
             const picks = [];
-            const tEnd = performance.now() + P.openMs;
+            const tEnd = Math.min(performance.now() + P.openMs, hardEnd);
             const sq = seq.slice();
             {
               const D0 = Math.round(rootCells / 4) + (rootNode.hold ? 1 : 0), at = (D0 + sq.length) % 7;
@@ -2001,6 +2006,7 @@
                 if (!cur) return 0;
                 const key = dn + "|" + hold + "|" + qi;
                 if (memo.has(key)) return memo.get(key);
+                if (performance.now() > hardEnd) return 0;
                 let best3 = 0;
                 const opts = [[cur, hold, qi + 1]];
                 if (holdOk) {
@@ -2029,7 +2035,7 @@
               const DBG = root.__bookDbg ? { cover: 0, slot: 0, tall: 0, over: 0, tk: 0, dep: 0, lines: 0, free: 0 } : null;
               for (const c2 of list) {
                 if (c2.dead) continue;
-                if (best2 && performance.now() > tEnd) break;
+                if (best2 && performance.now() > tEnd || performance.now() > hardEnd) break;
                 const m = c2.move, cells = S[m.type][m.r].map(([cx, cy]) => [m.x + cx, H2 - 1 - (m.y + cy)]);
                 if (cells.some(([x, k]) => k < 0 || k >= L + 6)) continue;
                 const r = lock(rows0, m.type, m, 0);
@@ -2059,6 +2065,19 @@
                     for (let K = 0; K < k; K++) if (rem[K] >> x & 1) {
                       ok = false;
                       if (DBG) DBG.over++;
+                      break;
+                    }
+                    if (!ok) break;
+                  }
+                  if (ok) for (const [x, k] of cells) {
+                    if (k > 0 && k <= L && !(rb[k - 1] >> x & 1) && !cells.some(([X, K]) => X === x && K === k - 1)) {
+                      ok = false;
+                      if (DBG) DBG.hole = (DBG.hole | 0) + 1;
+                      break;
+                    }
+                    for (let K = k - 1; K >= 0 && !(rb[K] >> x & 1); K--) if ((e[K] || 0) >> x & 1) {
+                      ok = false;
+                      if (DBG) DBG.mouth = (DBG.mouth | 0) + 1;
                       break;
                     }
                     if (!ok) break;
@@ -2093,9 +2112,11 @@
             if (root.__openDbg) root.__openDbg({ book: pick2.book, v: pick2.v, type: pick2.c.move.type }, rootCells);
             return { c: pick2.c };
           }
+          let hardEnd = 0;
           function result() {
             const list = rootNode.children || [];
             if (!list.length) return null;
+            hardEnd = performance.now() + 2 * P.openMs;
             const bp = bookPlan(list);
             if (bp && bp.c) return out(bp.c);
             const op = bp && bp.done ? null : openPlan(list);
@@ -2167,7 +2188,13 @@
               if (done) best = result();
               return done;
             },
-            result: () => done ? best : result(),
+            // before the search is done (a Worker host asks after every 25 ms slice): the tree's best line only, without the
+            // opener searches, which run once when it is done or stopped
+            result: () => {
+              if (done) return best;
+              const l = (rootNode.children || []).filter((c2) => !c2.dead);
+              return l.length ? out(l[0]) : null;
+            },
             get done() {
               return done;
             },
@@ -2199,17 +2226,17 @@
     }
   });
 
-  // ../tetrio-hub/tools/butter/package-entry.js
+  // ../tetrio-hub/.claude/worktrees/determined-mccarthy-f2cb4e/tools/butter/package-entry.js
   var import_ai_spin_planner = __toESM(require_ai_spin_planner());
   var import_ai_tree_planner = __toESM(require_ai_tree_planner());
 
-  // ../tetrio-hub/tools/butter/shapes.json
+  // ../tetrio-hub/.claude/worktrees/determined-mccarthy-f2cb4e/tools/butter/shapes.json
   var shapes_default = { t: [[[1, 0, 241], [0, 1, 199], [1, 1, 164], [2, 1, 124]], [[2, 1, 124], [1, 0, 241], [1, 1, 41], [1, 2, 31]], [[1, 2, 31], [2, 1, 124], [1, 1, 74], [0, 1, 199]], [[0, 1, 199], [1, 2, 31], [1, 1, 146], [1, 0, 241]]], s: [[[1, 0, 201], [2, 0, 124], [0, 1, 199], [1, 1, 156]], [[2, 1, 114], [2, 2, 31], [1, 0, 241], [1, 1, 39]], [[1, 2, 156], [0, 2, 199], [2, 1, 124], [1, 1, 201]], [[0, 1, 39], [0, 0, 241], [1, 2, 31], [1, 1, 114]]], z: [[[0, 0, 199], [1, 0, 114], [1, 1, 39], [2, 1, 124]], [[2, 0, 241], [2, 1, 156], [1, 1, 201], [1, 2, 31]], [[2, 2, 124], [1, 2, 39], [1, 1, 114], [0, 1, 199]], [[0, 2, 31], [0, 1, 201], [1, 1, 156], [1, 0, 241]]], l: [[[2, 0, 241], [0, 1, 199], [1, 1, 68], [2, 1, 156]], [[2, 2, 124], [1, 0, 241], [1, 1, 17], [1, 2, 39]], [[0, 2, 31], [2, 1, 124], [1, 1, 68], [0, 1, 201]], [[0, 0, 199], [1, 2, 31], [1, 1, 17], [1, 0, 114]]], j: [[[0, 0, 241], [0, 1, 39], [1, 1, 68], [2, 1, 124]], [[2, 0, 124], [1, 0, 201], [1, 1, 17], [1, 2, 31]], [[2, 2, 31], [2, 1, 114], [1, 1, 68], [0, 1, 199]], [[0, 2, 199], [1, 2, 156], [1, 1, 17], [1, 0, 241]]], i: [[[0, 1, 199], [1, 1, 68], [2, 1, 68], [3, 1, 124]], [[2, 0, 241], [2, 1, 17], [2, 2, 17], [2, 3, 31]], [[3, 2, 124], [2, 2, 68], [1, 2, 68], [0, 2, 199]], [[1, 3, 31], [1, 2, 17], [1, 1, 17], [1, 0, 241]]], o: [[[0, 0, 193], [1, 0, 112], [0, 1, 7], [1, 1, 28]], [[1, 0, 112], [1, 1, 28], [0, 0, 193], [0, 1, 7]], [[1, 1, 28], [0, 1, 7], [1, 0, 112], [0, 0, 193]], [[0, 1, 7], [0, 0, 193], [1, 1, 28], [1, 0, 112]]] };
 
-  // ../tetrio-hub/tools/butter/kicks-srsplus.json
+  // ../tetrio-hub/.claude/worktrees/determined-mccarthy-f2cb4e/tools/butter/kicks-srsplus.json
   var kicks_srsplus_default = { kicks: { "10": [[1, 0], [1, 1], [0, -2], [1, -2]], "12": [[1, 0], [1, 1], [0, -2], [1, -2]], "13": [[1, 0], [1, -2], [1, -1], [0, -2], [0, -1]], "20": [[0, 1], [-1, 1], [1, 1], [-1, 0], [1, 0]], "21": [[-1, 0], [-1, -1], [0, 2], [-1, 2]], "23": [[1, 0], [1, -1], [0, 2], [1, 2]], "30": [[-1, 0], [-1, 1], [0, -2], [-1, -2]], "31": [[-1, 0], [-1, -2], [-1, -1], [0, -2], [0, -1]], "32": [[-1, 0], [-1, 1], [0, -2], [-1, -2]], "01": [[-1, 0], [-1, -1], [0, 2], [-1, 2]], "03": [[1, 0], [1, -1], [0, 2], [1, 2]], "02": [[0, -1], [1, -1], [-1, -1], [1, 0], [-1, 0]] }, i_kicks: { "10": [[-1, 0], [2, 0], [-1, 2], [2, -1]], "12": [[-1, 0], [2, 0], [-1, -2], [2, 1]], "13": [[1, 0]], "20": [[0, 1]], "21": [[-2, 0], [1, 0], [-2, -1], [1, 2]], "23": [[2, 0], [-1, 0], [2, -1], [-1, 2]], "30": [[1, 0], [-2, 0], [1, 2], [-2, -1]], "31": [[-1, 0]], "32": [[1, 0], [-2, 0], [1, -2], [-2, 1]], "01": [[1, 0], [-2, 0], [-2, 1], [1, -2]], "03": [[-1, 0], [2, 0], [2, 1], [-1, -2]], "02": [[0, -1]] } };
 
-  // ../tetrio-hub/tools/butter/package-entry.js
+  // ../tetrio-hub/.claude/worktrees/determined-mccarthy-f2cb4e/tools/butter/package-entry.js
   var shapes = {};
   for (const t of Object.keys(shapes_default)) shapes[t] = shapes_default[t].map((r) => r.map(([x, y]) => [x, y]));
   var c = [[0, 0, 0, 3], [2, 0, 0, 1], [2, 2, 1, 2], [0, 2, 2, 3]];
@@ -2269,18 +2296,18 @@
               follow = null;
             } else if (cells < lastCells) {
               const lines = Math.max(1, Math.round((lastCells + 4 - cells) / 10));
-              follow = null;
+              follow = !follow && live && ready && ready.then2 && Object.keys(ready.then2).length ? { bias: ready.then2 } : null;
               live = false;
             }
             if (live && like.openers) ready = like.openers.find((o) => o.rows.every((m, k) => (m & ~(rowsB[k] || 0)) === 0) && (o.empty || []).every((m, k) => (m & (rowsB[k] || 0)) === 0)) || ready;
             lastCells = cells;
           }
-          const fol = follow && follow.then.length ? { followKind: follow.then[0], protect: follow.protect } : {};
+          const fol = follow ? { followBias: follow.bias } : {};
           const fol0 = live && ready && ready.then && ready.then.length ? { followKind: ready.then[0], protect: ready.empty || null } : {};
           const job = import_ai_tree_planner.default.create(
             null,
             { board, falling: input.current, hold: input.hold || null, queue: (input.queue || []).slice(0, 5), holdAllowed: true, b2b: Math.max(0, input.b2b | 0), combo: Math.max(0, input.combo | 0) },
-            { ...opts, ...like, ...fol0, ...fol, ...fol0.followKind || fol.followKind ? { maxTail: 5 } : {}, openLive: live && !!like.openers, ...input.human ? { maxTail: 2, pickBeta: 0 } : {}, ms: 1e9, maxIters: iters, incoming: inc, gRows: g, seed: (Date.now() & 65535) + 1 }
+            { ...opts, ...like, ...fol0, ...fol, ...fol0.followKind || fol.followBias ? { maxTail: 5 } : {}, openLive: live && !!like.openers, ...input.human ? { maxTail: 2, pickBeta: 0 } : {}, ms: 1e9, maxIters: iters, incoming: inc, gRows: g, seed: (Date.now() & 65535) + 1 }
           );
           const conv = (p) => {
             if (!p) return null;
