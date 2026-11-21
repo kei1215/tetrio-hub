@@ -29,7 +29,7 @@
   {k:'tlplus',tab:'ui',label:'TL SCORE +1 EFFECT',title:'TETRA LEAGUE style +1 score pop after each round',type:'bool',key:'qp-local-tl-score-rise',def:false},
   {k:'tlscore',tab:'ui',label:'TL SCORE SCREEN',title:'TETRA LEAGUE style score screen after a round is won / lost',type:'bool',key:'qp-local-tl-scoreslide',def:false},
   {k:'tlmusic',tab:'ui',label:'TL MUSIC',title:'TETRA LEAGUE music during the match (shared with the Tab panel)',type:'bool',key:'qp-local-tl-music',def:false},
-  {k:'split',label:'SEPARATE PIECE ORDER',title:'Each board gets its own seed (off = same queue like TETRA LEAGUE)',type:'bool',key:'qp-local-ai-seed-split',def:false}];
+  {k:'split',tab:'ui',label:'SEPARATE PIECE ORDER',title:'Each board gets its own seed (off = same queue like TETRA LEAGUE)',type:'bool',key:'qp-local-ai-seed-split',def:false}];
  const readSetting=s=>{const v=localStorage.getItem(s.key);if(v===null)return s.def;if(s.type==='bool')return s.on?v===s.on:s.off?v!==s.off:v==='1';if(s.type==='text')return v;if(s.type==='num'){const n=Number(v);return Number.isFinite(n)?n:s.def}return s.items.some(i=>i[0]===v)?v:s.def};
  const writeSetting=(s,value)=>{let v=value;if(s.type==='bool'){const on=v===true||/^(1|true|on|yes)$/i.test(String(v));localStorage.setItem(s.key,s.off?(on?(s.on||'true'):s.off):(on?'1':'0'))}else if(s.type==='text'){const m=/^\s*(\d+(?:\.\d+)?)\s*[:：]\s*(\d+(?:\.\d+)?)\s*$/.exec(String(v));if(!m||!(+m[1]>0)||!(+m[2]>0))throw Error(s.label+': 例 1:1');localStorage.setItem(s.key,m[1]+':'+m[2])}else if(s.type==='num'){const n=Math.max(s.min,Math.min(s.max,Number(v)));if(!Number.isFinite(n))throw Error(s.label+': 数で指定');localStorage.setItem(s.key,String(n))}else{const it=s.items.find(i=>i[0]===String(v).toLowerCase()||i[1]===String(v).toUpperCase());if(!it)throw Error(s.label+': '+s.items.map(i=>i[0]).join(' / '));localStorage.setItem(s.key,it[0])}window.dispatchEvent(new CustomEvent('qp-ai-settings-changed',{detail:{key:s.key}}))};
  const qpValues=()=>Object.fromEntries(SETTINGS.map(s=>{const v=readSetting(s);return [s.k,s.type==='pick'?s.items.find(i=>i[0]===v)[1]:v]}));
@@ -38,39 +38,25 @@
  function uiTab(){
   const src=document.getElementById('room_opts_room'),tabs=src?.parentElement,box=document.getElementById('room_content_room')?.parentElement;if(!tabs||!box)return null;
   let page=document.getElementById('room_content_qpui');if(page)return page;
-  const t=src.cloneNode(false);t.id='room_tab_qpui';t.dataset.target='room_content_qpui';t.textContent='UI';t.classList.remove('active','selected','hidden');tabs.appendChild(t);
+  const t=src.cloneNode(false);t.id='room_tab_qpui';t.dataset.target='room_content_qpui';t.textContent='LOCAL';t.classList.remove('active','selected','hidden');tabs.appendChild(t);
   page=document.getElementById('room_content_room').cloneNode(false);page.id='room_content_qpui';page.classList.add('hidden');page.style.display='none';const rc=document.getElementById('room_content_room');box.insertBefore(page,rc.nextSibling);
   const show=on=>{page.style.display=on?'':'none';page.classList.toggle('hidden',!on);t.classList.toggle('active',on);t.classList.toggle('selected',on);for(const c of box.children)if(c!==page&&/^room_content_(welcome|room|match|game)$/.test(c.id))c.style.display=on?'none':''};
   tabs.addEventListener('click',ev=>{const x=ev.target.closest('.room_tab');if(!x)return;if(x===t){ev.preventDefault();ev.stopImmediatePropagation();for(const o of tabs.querySelectorAll('.room_tab'))if(o!==t)o.classList.remove('active','selected');show(true)}else show(false)},true);
   return page;
  }
- // Presets (user: AI もまとめて preset): the room's options / match plus every LOCAL AI and LOCAL UI value,
- // saved by name and loaded back (also /set preset <name>, /set savepreset <name>).
- const PKEY='qp-local-room-presets-v1';
- const BUILTIN={'TL S1 + vA 3.5PPS':{preset:'tetra league (season 1)',qp:{pps:3.5}},'TL + Butter 2PPS':{preset:'tetra league',qp:{pps:2}}};
- const presets=()=>{let u={};try{u=JSON.parse(localStorage.getItem(PKEY)||'{}')||{}}catch{}return {...BUILTIN,...u}};
- function savePreset(name){name=String(name||'').trim();if(!name)throw Error('使い方: /set savepreset <名前>');let u={};try{u=JSON.parse(localStorage.getItem(PKEY)||'{}')||{}}catch{}u[name]={options:{...room.options},match:{ft:room.match.ft,wb:room.match.wb,gp:room.match.gp},qp:Object.fromEntries(SETTINGS.map(s=>[s.k,readSetting(s)]))};localStorage.setItem(PKEY,JSON.stringify(u));sys('プリセットを保存しました: '+name);refreshPresets()}
- function loadPreset(name){const all=presets(),q=String(name||'').trim().toLowerCase(),key=Object.keys(all).find(k=>k.toLowerCase()===q)||Object.keys(all).find(k=>k.toLowerCase().includes(q));if(!q||!key)throw Error('プリセット: '+Object.keys(all).join(' / '));const p=all[key];
-  if(p.preset){const opts=window.__qpRoomOpts?.()?.[p.preset];if(opts&&typeof opts==='object')for(const [k,v] of Object.entries(opts))setPath(room,k.includes('.')?k:'options.'+k,v);else if(typeof opts==='string')for(const pair of opts.split(';')){const at=pair.indexOf('=');if(at>0)setPath(room,pair.slice(0,at).trim(),num(pair.slice(at+1)))}}
-  if(p.options)Object.assign(room.options,p.options);if(p.match)Object.assign(room.match,p.match);
-  for(const [k,v] of Object.entries(p.qp||{})){const s=SETTINGS.find(x=>x.k===k);if(s)try{writeSetting(s,v)}catch{}}
-  persist();update();configUpdated();sys('プリセット: '+key)}
- function presetBlock(){const b=document.createElement('div');b.className='scroller_block light';b.id='qp-room-preset-block';b.innerHTML='<h2 class="ns">LOCAL PRESETS (ROOM + AI + UI)</h2><div class="room_config_row flex-row imp" title="Load a saved set of room, AI and UI settings"><div class="room_config_label flex-item ns">preset</div><select class="room_config_item flex-item" id="qp-preset-pick"></select></div><div class="room_config_row flex-row imp" title="Save the current room, AI and UI settings under a name"><div class="room_config_label flex-item ns">save as</div><input type="text" class="room_config_item flex-item" id="qp-preset-name" placeholder="name + Enter"></div>';
-  const pick=b.querySelector('select'),nm=b.querySelector('input');pick.addEventListener('change',ev=>{ev.stopImmediatePropagation();if(pick.value)try{loadPreset(pick.value)}catch(error){sys(error.message)}pick.value=''},true);nm.addEventListener('keydown',ev=>{if(ev.key!=='Enter')return;ev.preventDefault();ev.stopImmediatePropagation();try{savePreset(nm.value);nm.value=''}catch(error){sys(error.message)}},true);setTimeout(refreshPresets);return b}
- function refreshPresets(){const pick=document.getElementById('qp-preset-pick');if(!pick)return;pick.replaceChildren(new Option('— choose —',''),...Object.keys(presets()).map(k=>new Option(k,k)))}
  function configUpdated(){if(!room)return;fire('room.chat',{content:'Room configuration updated',user:{username:'[CMD]',_id:null},system:false,id:'local-'+Date.now()+Math.random()});
   document.getElementById('qp-cfgtoast')?.remove();const t=document.createElement('div');t.id='qp-cfgtoast';t.innerHTML='<span>✓</span>ROOM CONFIGURATION UPDATED!';document.body.appendChild(t);setTimeout(()=>t.classList.add('out'),2600);setTimeout(()=>t.remove(),3200)}
  function injectRows(){
   const host=document.getElementById('room_content_room');if(!host||document.getElementById('qp-room-ai-block'))return;
   const ui=uiTab();const mk=(id,title)=>{const b=document.createElement('div');b.className='scroller_block light';b.id=id;const h=document.createElement('h2');h.className='ns';h.textContent=title;b.appendChild(h);return b};
-  const blocks={ai:mk('qp-room-ai-block','LOCAL AI'),ui:mk('qp-room-ui-block','LOCAL UI'),preset:presetBlock()};
+  const blocks={ai:mk('qp-room-ai-block','LOCAL AI'),ui:mk('qp-room-ui-block','LOCAL UI'),};
   for(const s of SETTINGS){const block=blocks[s.tab||'ai'];const row=document.createElement('div');row.className='room_config_row flex-row imp';row.title=s.title;const lab=document.createElement('div');lab.className='room_config_label flex-item ns';lab.textContent=s.label.toLowerCase();row.appendChild(lab);let item;
    if(s.type==='bool'){const sw=document.createElement('label');sw.className='rc_switch flex-item';item=document.createElement('input');item.type='checkbox';item.className='room_config_item';const knob=document.createElement('span');knob.className='rc_switch_knob';sw.append(item,knob);row.appendChild(sw);item.addEventListener('change',ev=>{ev.stopImmediatePropagation();apply(s,item.checked)},true)}
    else if(s.type==='text'){item=document.createElement('input');item.type='text';item.className='room_config_item flex-item';row.appendChild(item);item.addEventListener('change',ev=>{ev.stopImmediatePropagation();apply(s,item.value)},true)}
    else if(s.type==='num'){item=document.createElement('input');item.type='number';item.className='room_config_item flex-item';item.min=s.min;item.max=s.max;item.step='0.1';row.appendChild(item);item.addEventListener('change',ev=>{ev.stopImmediatePropagation();apply(s,item.value)},true)}
    else{item=document.createElement('div');item.className='room_config_item room_config_spinner flex-item ns';row.appendChild(item);item.addEventListener('click',ev=>{ev.preventDefault();ev.stopImmediatePropagation();const cur=readSetting(s),i=s.items.findIndex(x=>x[0]===cur);apply(s,s.items[(i+1)%s.items.length][0])},true)}
    item.dataset.index='qp.'+s.k;block.appendChild(row)}
-  host.insertBefore(blocks.ai,host.querySelector('.scroller_block'));host.insertBefore(blocks.preset,blocks.ai);if(ui)ui.append(blocks.ui);
+  if(ui)ui.append(blocks.ai,blocks.ui);else host.insertBefore(blocks.ai,host.querySelector('.scroller_block'));
  }
  const syncWarn=()=>{window.__qpWarn={sound:localStorage.getItem('qp-local-warn-sound')==='1',piece:localStorage.getItem('qp-local-warn-piece')==='1'}};
  function apply(s,value){try{writeSetting(s,value);syncWarn();if(room){update();sys(s.label+' = '+qpValues()[s.k])}}catch(error){sys(error.message)}}
@@ -110,14 +96,13 @@
  }
  function setOption(key,value){
   if(!key||value===undefined)throw Error('使い方: /set <項目> <値>(例: /set ft 7、/set g 0.02、/set public on)');
-  if(/^preset$/i.test(key))return loadPreset(value);if(/^savepreset$/i.test(key))return savePreset(value);
   const qs=SETTINGS.find(s=>s.k===key.toLowerCase()||s.label.toLowerCase().replace(/[^a-z0-9]/g,'')===key.toLowerCase().replace(/[^a-z0-9]/g,''));if(qs){writeSetting(qs,value);syncWarn();update();sys(qs.label+' = '+qpValues()[qs.k]);return}
   const short={ft:'match.ft',wb:'match.wb',gp:'match.gp',gamemode:'match.gamemode',name:'name',public:'public',limit:'userLimit',music:'gamebgm'};
   let path=short[key]||key;if(!path.includes('.')&&!(path in room))path='options.'+path;
   if(getPath(room,path)===undefined&&!(path.startsWith('options.')&&path.slice(8) in EXTRA))throw Error('知らない項目: '+key);
   setPath(room,path,path==='name'?String(value):num(value));persist();update();configUpdated();sys(path+' = '+getPath(room,path));
  }
- const HELP=['/bot list … 呼べる AI の一覧','/bot add <AI名> … AI を入れる(名前の一部でも可、省略で先頭)','/bot remove [名前] … AI を外す(省略で最後に入れた AI)','/set <項目> <値> … 設定を変える(ft wb gp name public limit music、ほか options の名前: g gincrease garbagecap spinbonuses b2bcharging など)','/set pps 3.5 … LOCAL AI(pps gravity power tspin ternbase ratio split)','/set intro on|off … UI タブ(intro mute warnsound warnpiece garbageline tlplus tlscore tlmusic)','/set preset <名前> … プリセットを呼ぶ(ルーム + AI + UI)/ /set savepreset <名前> … 今の設定を保存','/start … 開始(START ボタンと同じ)','/abort … 試合を止めてルームに戻る','/vsai … AI の招待一覧(右上の人アイコン / Tab の PEOPLE)を出す / しまう','/help … この一覧'];
+ const HELP=['/bot list … 呼べる AI の一覧','/bot add <AI名> … AI を入れる(名前の一部でも可、省略で先頭)','/bot remove [名前] … AI を外す(省略で最後に入れた AI)','/set <項目> <値> … 設定を変える(ft wb gp name public limit music、ほか options の名前: g gincrease garbagecap spinbonuses b2bcharging など)','/set pps 3.5 … LOCAL AI(pps gravity power tspin ternbase ratio split)','/set intro on|off … LOCAL タブ(intro mute warnsound warnpiece garbageline tlplus tlscore tlmusic)','/start … 開始(START ボタンと同じ)','/abort … 試合を止めてルームに戻る','/vsai … AI の招待一覧(右上の人アイコン / Tab の PEOPLE)を出す / しまう','/help … この一覧'];
  function command(text){
   if(!room||!String(text).startsWith('/'))return false;
   const [cmd,...args]=String(text).trim().split(/\s+/);const c=cmd.toLowerCase();
@@ -235,6 +220,8 @@
  // The native chat Enter handler is in a startup callback the offline page does not run; while the
  // local room is open its own input sends here (commands, or a chat line through the native path).
  document.addEventListener('keydown',ev=>{if(!room||ev.target?.id!=='chat_input'||ev.isComposing||(ev.code!=='Enter'&&ev.code!=='NumpadEnter'&&ev.key!=='Enter'))return;ev.preventDefault();ev.stopImmediatePropagation();const v=ev.target.value;ev.target.value='';if(!v.trim())return;if(!command(v))emit('room.chat.send',{content:v,pinned:false})},true);
+ // VS AI entry in the offline SOLO menu (user: VS AI ルームの入り口 / 本物の SOLO の項目と同じ見た目).
+ if(location.protocol==='tetrio-local:'||window.__qpLocalOffline===true){const addEntry=()=>{const src=document.getElementById('game_custom');if(!src||document.getElementById('game_qp_vsai'))return;const n=src.cloneNode(true);n.id='game_qp_vsai';n.querySelector('h1').textContent='VS AI';n.querySelector('p').textContent='invite local AIs to a custom room and play them offline';const cs=getComputedStyle(src);n.style.background=cs.background;n.style.borderColor=cs.borderColor;for(const t of ['h1','p'])n.querySelector(t).style.color=getComputedStyle(src.querySelector(t)).color;n.addEventListener('click',ev=>{ev.preventDefault();ev.stopImmediatePropagation();try{window.Sa?.SePlay?.('menuconfirm')}catch{}try{open({vsai:true})}catch(error){console.warn('[local room]',error)}},true);src.after(n)};addEntry();setTimeout(addEntry,1500);setTimeout(addEntry,5000)}
  window.__qpRoomEmit=emit;window.__qpRoomCmd=command;
  window.LocalCustomRoom={open,close,active:()=>!!room,room:()=>room,command,start};
 })();
