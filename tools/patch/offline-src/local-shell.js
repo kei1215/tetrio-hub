@@ -85,7 +85,7 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
   let info=null;
   const check=()=>window.IPC.invoke('qp-patch-update-check').then(r=>{info=r;
    if(!r?.ok){updateButton.textContent='パッチ更新：確認できません';updateButton.title=r?.error||'';updateButton.disabled=false;return}
-   updateButton.textContent=r.available?'パッチを v'+r.version+' に更新':'パッチ：最新(v4.'+r.installed+' '+r.kind+')';updateButton.title=r.failed?'前回の更新は完了しませんでした: '+r.failed:'';updateButton.disabled=!r.available;
+   updateButton.textContent=r.available?'パッチを v'+r.version+' に更新':'パッチ：最新(v'+(r.installedVersion||(Number(r.installed)>=1000?'4.'+r.installed:'5.'+String(r.installed).padStart(2,'0')))+' '+r.kind+')';updateButton.title=r.failed?'前回の更新は完了しませんでした: '+r.failed:'';updateButton.disabled=!r.available;
   }).catch(error=>{info=null;updateButton.textContent='パッチ更新：確認できません';updateButton.title=String(error?.message||error);updateButton.disabled=false});
   updateButton.onclick=()=>{
    if(!info?.ok){updateButton.disabled=true;updateButton.textContent='パッチ更新：確認中…';check();return}
