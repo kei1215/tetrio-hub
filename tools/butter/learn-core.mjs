@@ -60,6 +60,10 @@ export async function learn(files, playerArg, opt = {}) {
      // follows: setup key -> how the next two clears went
   // B2B charging (user: B2Bを火力を出る数ためたのが1回だけ): peaks of the player's B2B chains that reached 4+
   const peaks = []; let b2bPieces = 0;
+  // take, then send (user 2026-11-21: 相殺外しの会得 = ガベージを受けてから撃つ): on boards that can take the waiting
+  // garbage (stack + waiting <= TANK_SAFE rows), lines the player cancelled vs lines they let in and then answered
+  // with an attack within 3 pieces
+  const TANK_SAFE = 14; let tankCancel = 0, tankTake = 0;
   for (let fi = 0; fi < files.length && data.length < MAXP; fi++) {
     let rep; try { const f = files[fi]; rep = parseReplayFile(typeof f === "string" ? f : JSON.stringify(f)); } catch { continue; }
     for (const round of rep.rounds) for (const p of round) {
@@ -68,8 +72,9 @@ export async function learn(files, playerArg, opt = {}) {
       SP.setTables({ shapes, kicks: ks.kicks, ikicks: ks.i_kicks || ks.kicks, corner: [c4, c4, c4, c4] });
       SP.useRules({ allow180: o.allow180 !== false });
       let sim; try { sim = new PlayerSim(p.replay, { ts: p.ts }); } catch { continue; }
-      games++; realName ??= p.username; let placed = 0, prevB = 0, openSt = 0, openPrev = null, lastKind = null, follow = null; const openIdx = new Map(), openTypes = {};
+      games++; realName ??= p.username; let placed = 0, prevB = 0, openSt = 0, openPrev = null, lastKind = null, follow = null; const openIdx = new Map(), openTypes = {}; let tankWin = null;
       for (let guard = 0; guard < 300000 && !sim.finished; guard++) {
+        let pendNow = Math.max(0, Number(sim.engine.garbageQueue?.size) || 0);
         const e = sim.engine, pre = rowsOf(e.board.state), b2b = Math.max(0, e.stats?.b2b ?? 0), combo = Math.max(0, e.stats?.combo ?? 0);
         const hold = e.held ? String(e.held).toLowerCase() : null, queue = (e.queue || []).slice(0, 5).map((q) => String(q).toLowerCase());
         const g = e.board.state.filter((row) => row.some((c) => c && c.mino === "gb")).length;
@@ -81,6 +86,12 @@ export async function learn(files, playerArg, opt = {}) {
           const lkLines = Math.max(0, lk.res.lines | 0), lkT = String(lk.res.mino).toLowerCase(), lkSp = lk.res.spin;
           const lkKind = !lkLines ? null : lkT === "t" && lkSp === "normal" ? "tspin" + lkLines : lkT === "t" && lkSp === "mini" ? "tmini" : lkLines === 4 ? "quad" : lkSp && lkSp !== "none" ? "allSpin" : "clear" + lkLines;
           const kindPrev = lastKind; lastKind = lkKind;
+          { const atk = (lk.res.rawGarbage || []).reduce((a, n) => a + (Number(n) || 0), 0), top = (() => { for (let k = 0; k < pre.length; k++) if (pre[k]) return pre.length - k; return 0; })(), safe = top + pendNow <= TANK_SAFE;
+            if (lkLines > 0) { const c = Math.min(pendNow, atk); if (c > 0 && safe) tankCancel += c; pendNow -= c;
+              if (tankWin && atk >= 2) { tankTake += tankWin.n; tankWin = null; } }
+            else { const got = (Array.isArray(lk.res.garbageAdded) ? lk.res.garbageAdded : []).reduce((a, x) => a + (Number(x?.amount) || 0), 0);
+              if (got > 0) { if (safe) tankWin = { n: got + (tankWin ? tankWin.n : 0), left: 3 }; pendNow = Math.max(0, pendNow - got); } }
+            if (tankWin && lkLines === 0 && --tankWin.left < 0) tankWin = null; }
           if (follow && lkKind && follow.seq.length < 2) { follow.seq.push(lkKind); if (follow.seq.length === 2) { const m = follows.get(follow.key) || new Map(); m.set(follow.seq.join(">"), (m.get(follow.seq.join(">")) || 0) + 1); follows.set(follow.key, m); } }
           { const b = Math.max(0, lk.res.stats?.b2b ?? 0); if (prevB >= 4 && b < prevB) peaks.push(prevB); prevB = b; }
           // the opener = the board just before the first line clear, within the first 3 bags (user: DT砲などは2巡目まで
@@ -164,6 +175,9 @@ export async function learn(files, playerArg, opt = {}) {
   // often (1+ chain of 5+ per 300 pieces) gets a steeper chain value
   const sp = peaks.slice().sort((a, b) => a - b), med = sp.length ? sp[Math.floor(sp.length * 0.75)] : 0, per300 = peaks.filter((x) => x >= 5).length * 300 / Math.max(1, b2bPieces);
   const b2bStyle = { chains: peaks.length, peaks: sp, per300: +per300.toFixed(2) };
+  // share of the waiting garbage the player takes and answers (0 = always cancels); too few lines -> no tank
+  const tankN = tankCancel + tankTake, tankShare = tankN >= 12 ? tankTake / tankN : 0;
+  const tankOpt = tankShare >= 0.15 ? { tank: true, tankW: Math.round(240 * Math.min(1, tankShare)), tankSafe: TANK_SAFE } : { tank: false };
   const b2bOpt = med >= 5 ? { b2bCap: Math.min(16, med), b2bStep: Math.max(fitted.b2bStep, per300 >= 1 ? 30 : 20) } : {}; // user rule: no T-Spin Mini outside a REN for B2B
   return {
     kind: "va-tree-player", v: 1, player: String(playerArg).trim() || realName, made: new Date().toISOString(), games, pieces: data.length, skipped, // player as typed (Butter Y_Kei1215); replays keep names lowercase
@@ -237,7 +251,7 @@ export async function learn(files, playerArg, opt = {}) {
       }
       return out;
     })(),
-    b2b: b2bStyle, mix: MIX, options: { ...TP.optionsOf(fitted), ...b2bOpt, ban, kindBias, tank: false }, raw, kinds: never, // own version plays like the player (no tank)
+    b2b: b2bStyle, mix: MIX, options: { ...TP.optionsOf(fitted), ...b2bOpt, ban, kindBias, ...tankOpt }, tank: { take: tankTake, cancel: tankCancel, share: +tankShare.toFixed(3) }, raw, kinds: never, // own version plays like the player (takes garbage as often as the player)
   };
 }
 
