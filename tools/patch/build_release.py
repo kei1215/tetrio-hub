@@ -414,6 +414,10 @@ LOCAL_ROOM_FIXES = [
      "tlPreset(name='tetra league'){\n  const options={};for(const pair of (jn[name]||jn['tetra league']).split(';')){"),
     ("const options=config.mode==='custom'?{...this.tlPreset(),...(config.options||{}),mission:'LOCAL CUSTOM',mission_type:'mission_versus'}:this.tlPreset();",
      "const options=config.mode==='custom'?{...this.tlPreset(),...(config.options||{}),mission:'LOCAL CUSTOM',mission_type:'mission_versus'}:config.mode==='s1'?{...this.tlPreset('tetra league (season 1)'),mission:'LOCAL TETRA LEAGUE S1'}:this.tlPreset();"),
+    # v5.16 (user: /bot add・/set・/help をチャットで): window.__qpRoomCmd sees a chat line first and
+    # returns true when the local room handled it (offline local room only; online it is undefined).
+    ('function P(e){const t={content:e,pinned:!1};if(e.startsWith("/")){',
+     'function P(e){if(window.__qpRoomCmd?.(e))return;const t={content:e,pinned:!1};if(e.startsWith("/")){'),
     # v5.16 (user: シードを変える): config.seed2 = the right board's own seed (Tab option, off by default).
     ("game.setGame({...options,gameid:8101+index,seed,seed_random:false,",
      "game.setGame({...options,gameid:8101+index,seed:index&&Number.isInteger(config.seed2)?config.seed2:seed,seed_random:false,"),
