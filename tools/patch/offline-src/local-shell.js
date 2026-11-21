@@ -7,6 +7,10 @@
     #pixi unless body is .ingame; local TL / outside-AI rooms and replays never set it. Show the
     board canvas whenever the menus are hidden. */
  body.qp-local-mode:has(#menus.hidden) #pixi{display:block!important}
+  /* v5.16 (TODO 2026-11-21 #19, user: プレイ中にマウスカーソルが消えない): online hides the cursor with
+     body.ingame.idlemouse (idlemouse = 5 s without moving the mouse). Local games never set .ingame;
+     a hidden menu means a board (game, AI room, replay) is shown. Same 5 s rule, moving shows it again. */
+ body.qp-local-mode.idlemouse:has(#menus.hidden):not(.chatfocus),body.qp-local-mode.idlemouse:has(#menus.hidden):not(.chatfocus) #pixi{cursor:none!important}
  body.qp-local-mode .qp-online-unavailable{position:relative;cursor:not-allowed}
  body.qp-local-mode .qp-online-unavailable::after{content:'OFFLINE — ONLINE PLAY IS UNAVAILABLE';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(30,0,0,.85);color:white;font:700 clamp(16px,2vw,36px) sans-serif;text-align:center;z-index:20;pointer-events:none}
  body.qp-local-mode .qp-online-unavailable>*{opacity:.35}
@@ -311,7 +315,10 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
  // navigation event, so watch both the deck and the menu tree.
  const leaveQP=event=>{const target=event.target;if(target===settingsButton||settingsButton.contains(target)||settings.contains(target))return;closeQPSettings()};
  document.addEventListener('pointerdown',leaveQP,true);
- document.addEventListener('keydown',event=>{if(event.key==='Escape')closeQPSettings()},true);
+ // v5.16: the native QP keys now run offline (R = start, Esc = leave QP, arrows = MOD cards). Esc with the
+ // settings open only closes them, and keys typed in the settings never reach those menu keys.
+ document.addEventListener('keydown',event=>{if(event.key==='Escape'){if(settings.open){event.stopPropagation();event.preventDefault()}closeQPSettings()}},true);
+ settings.addEventListener('keydown',event=>{if(event.key!=='Escape'&&event.key!=='Tab')event.stopPropagation()});
  document.addEventListener('visibilitychange',()=>{if(document.hidden)closeQPSettings()});
  const updateQPSettingsVisibility=()=>{
   // The native client leaves #zenithmenu mounted when SOLO is displayed.
@@ -357,7 +364,7 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
   document.getElementById('zenith_rollup_main').textContent='PLAY';
   document.getElementById('header_text').textContent='QUICK PLAY';
   document.getElementById('footer_text').textContent='OVERTHROW THE TOWER!';
-  requestAnimationFrame(()=>{updateQPSettingsVisibility();placeSettingsButton();if(showSettings){settings.open=true;settingsButton.setAttribute('aria-expanded','true');settings.querySelector('select,input')?.focus({preventScroll:true})}});
+  requestAnimationFrame(()=>{LocalNative.ribbon?.('zenith');updateQPSettingsVisibility();placeSettingsButton();if(showSettings){settings.open=true;settingsButton.setAttribute('aria-expanded','true');settings.querySelector('select,input')?.focus({preventScroll:true})}});
  }
  // Shared launcher used by vA's training screen.  It only calls the same
  // local routes used by the visible SOLO/QP controls, so no online match or
@@ -414,16 +421,34 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
   }
  };
  for(const type of ['click','keydown'])window.addEventListener(type,qpRoute,true);
+ // v5.16 (TODO 2026-11-21 #22, user: R キー / Space で QP をもう一度プレイ): R is the native retry key
+ // (client.js fix_menu_keys runs the native QP keys). Space on the QP results starts again too, unless
+ // the keyboard menu cursor points at something else (then Space presses that, like online).
+ document.addEventListener('keydown',event=>{
+  if(event.code!=='Space'||event.repeat||event.ctrlKey||event.metaKey||event.altKey)return;
+  const body=document.body,tag=document.activeElement?.tagName?.toLowerCase();
+  if(['input','textarea','select','button'].includes(tag)||body.classList.contains('chatfocus'))return;
+  const pointed=document.querySelector('[rg-hover]');if(pointed&&pointed.id!=='start_zenith')return;
+  if(!body.classList.contains('inzenith')||!zenithMenu.classList.contains('inresults')||zenithMenu.classList.contains('hidden')||zenithMenu.classList.contains('rolledup'))return;
+  if(window.OriginalReplay?.game?.()?.isPlaying?.())return;
+  const startButton=document.getElementById('start_zenith');if(!startButton||!startButton.offsetParent)return;
+  event.preventDefault();event.stopImmediatePropagation();startButton.click();
+ },true);
  ownPress(qp,openNativeQP);
  document.getElementById('solo_menu').append(qp);
  document.querySelectorAll('[data-solo]').forEach(button=>button.onclick=()=>playSolo(button.dataset.solo));
- document.getElementById('local-stop').onclick=()=>{generation++;leaveNativeQP();LocalNative.stop();setTimeout(()=>{OriginalReplay.stop();document.body.classList.remove('qp-local-playing');LocalNative.view('play1p');panel.hidden=true},600)};
+ document.getElementById('local-stop').onclick=()=>{generation++;const back=LocalNative.replayActive()?replayBackView():'play1p';leaveNativeQP();LocalNative.stop();setTimeout(()=>{OriginalReplay.stop();document.body.classList.remove('qp-local-playing');LocalNative.view(back);panel.hidden=true},600)};
  document.getElementById('play-original').onclick=()=>document.getElementById('local-file').click();
+ // v5.16 (TODO 2026-11-21 #23, user: リプレイから戻ると SOLO に戻ってしまう): a replay returns to the
+ // screen it was opened from (TETRA CHANNEL records, HOME, ...); QP results go back to SOLO (QP OFFLINE
+ // lives there); anything else to HOME. Read by LocalNative.replay (client.js fix_menu_keys).
+ const setReplayBack=()=>{const view=document.getElementById('menus')?.getAttribute('data-menu-type')||'';window.__qpReplayBack=view==='zenith'?'play1p':(!view||['none','results','replay','lobby'].includes(view))?'home':view;return window.__qpReplayBack};
+ const replayBackView=()=>window.__qpReplayBack||'home';
  async function openReplayFile(file){
   if(!file)return;
   if(OriginalReplay.game()?.isPlaying()){probeLog('プレイを終了してからリプレイを開いてください。');return}
   try{const data=JSON.parse(await file.text());const type=LocalReplayData.describe(data);await LocalReplayData.check(type.profile);if(!data.users?.length)data.users=[{username:data.replay.options.username||'REPLAY'}];
-   await start(()=>{LocalNative.replay(data);return null},type.profile);
+   setReplayBack();await start(()=>{LocalNative.replay(data);return null},type.profile);
   }catch(error){probeLog(error.stack)}
  }
  document.getElementById('local-file').onchange=event=>openReplayFile(event.target.files[0]);
@@ -450,7 +475,7 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
   panel.hidden=true;LocalNative.view('tetra_me');
   LocalReplayLibrary.show(document.getElementById('tetra_myrecords'),async data=>{
    if(OriginalReplay.game()?.isPlaying()){probeLog('プレイを終了してからリプレイを開いてください。');return}
-   try{const copy=structuredClone(data),type=LocalReplayData.describe(copy);await start(()=>{LocalNative.replay(copy);return null},type.profile)}catch(error){LocalUIHealth.fail('リプレイ再生',error)}
+   try{const copy=structuredClone(data),type=LocalReplayData.describe(copy);setReplayBack();await start(()=>{LocalNative.replay(copy);return null},type.profile)}catch(error){LocalUIHealth.fail('リプレイ再生',error)}
   },filter);
  }
  const intercept=(id,action)=>document.getElementById(id)?.addEventListener('click',event=>{event.preventDefault();event.stopImmediatePropagation();action()},true);
@@ -468,7 +493,7 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
  for(const [id,mode] of [['start_40l','40l'],['start_blitz','blitz'],['start_zen','zen'],['start_custom','custom']]){
   document.getElementById(id).addEventListener('click',event=>{event.preventDefault();event.stopImmediatePropagation();playSolo(mode)},true);
  }
- LocalUIHealth.check().then(()=>{if(!window.OriginalReplay)throw Error('OFFLINE本体の初期化に失敗しました');return window.OriginalReplay.init()}).then(()=>{LocalUIHealth.stage('メニュー初期化');LocalNative.menus();try{window.__qpCustomOpts?.()}catch(error){probeLog('CUSTOM設定: '+error.message)}LocalNative.view('play1p');const fps=localStorage.getItem('qp-local-fps-limit');if(fps!==null)LocalNative.setFrameLimit(fps);LocalUIHealth.complete();panel.hidden=true}).catch(error=>{LocalUIHealth.fail(null,error);probeLog(error.stack)});
+ LocalUIHealth.check().then(()=>{if(!window.OriginalReplay)throw Error('OFFLINE本体の初期化に失敗しました');return window.OriginalReplay.init()}).then(()=>{LocalUIHealth.stage('メニュー初期化');LocalNative.menus();try{window.__qpCustomOpts?.()}catch(error){probeLog('CUSTOM設定: '+error.message)}LocalNative.view('home');const fps=localStorage.getItem('qp-local-fps-limit');if(fps!==null)LocalNative.setFrameLimit(fps);LocalUIHealth.complete();panel.hidden=true}).catch(error=>{LocalUIHealth.fail(null,error);probeLog(error.stack)});
  window.addEventListener('pagehide' ,()=>{const game=window.OriginalReplay?.game?.();if(game?.options.zenlevels&&game.isPlaying())game.endNow()});
  // The Tab panel belongs only to the isolated local origin. Never install
  // this shortcut on the online TETR.IO page.

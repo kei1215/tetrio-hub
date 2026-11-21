@@ -1303,6 +1303,10 @@
   const tetraOpen = () => /^tetra/.test(menuType()) || !!document.querySelector('#menus [data-menuview^="tetra"]:not(.hidden)');
   const atHome = () => menuType() === 'home' && !!document.querySelector('#menus [data-menuview="home"]:not(.hidden)');
   const replayOnScreen = () => {
+    // リプレイの途中で TL などのメニューへ移っても、#replay とリプレイのゲームは残ることがある。
+    // メニューが出ている(盤面の画面でない)ときは「リプレイ中」と数えない(カウンターも一緒に消える)
+    const m = document.getElementById('menus');
+    if (m && !m.classList.contains('hidden')) return false;
     const r = document.getElementById('replay');
     if (r && !r.classList.contains('hidden')) return true;
     return games.some(n => { try { return n.esm && n.esm.IsReplay() && alive(n) && n.hm.H.holder.worldVisible; } catch (e) { return false; } });
