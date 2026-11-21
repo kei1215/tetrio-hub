@@ -438,6 +438,41 @@ def fix_tl_bgm(text):
     return replace_once(text, TL_BGM_OLD, TL_BGM_NEW, 'O/offline/client.js TL music')
 
 
+# v5.16 (TODO 2026-11-21 #20-#23, user: オンラインでできることをオフラインでも): the offline menus ran
+# only some of the native ready callbacks. Also run (1) the ribbon (keyboard menu cursor, #ribbonglide),
+# so the arrow keys / Enter / Space / Esc move through HOME, SOLO and the QP MOD cards like online, and
+# (2) the native Quick Play keys: R (retry) starts QP again on the QP screen / results, Esc leaves.
+# Replays return to the screen they were opened from (window.__qpReplayBack, local-shell.js), else HOME
+# (they always went back to SOLO). Idempotent.
+MENU_KEYS_OLD = 'config();this._menusReady=true;'
+MENU_KEYS_NEW = ('config();'
+                 'const qpRibbon=window.__originalReadyCallbacks.find(f=>String(f).includes(\'n.id="ribbonglide"\'));'
+                 'if(qpRibbon&&!document.getElementById("ribbonglide"))qpRibbon();'
+                 'const qpZenithKeys=window.__originalReadyCallbacks.find(f=>String(f).includes(\'"zenith_party_ready":"start_zenith"\'));'
+                 'if(qpZenithKeys)qpZenithKeys();'
+                 'this._menusReady=true;')
+# The QP deck is still hidden when Hi('zenith') binds the cursor, so it found nothing: bind again once
+# the deck is visible (LocalNative.ribbon, also called by local-shell.js openNativeQP).
+RIBBON_OLD = "view(name){$i(true);Hi(name)},"
+RIBBON_NEW = "view(name){$i(true);Hi(name)},ribbon(name){bi.bindGuide(Ci[name]||{})},"
+RESULTS_RIBBON_OLD = "xt('zenithmenu').classList.remove('hidden','thidden','rolledup');xt('spectate').classList.add('hidden');"
+RESULTS_RIBBON_NEW = RESULTS_RIBBON_OLD + "bi.bindGuide(Ci.zenith||{});"
+REPLAY_BACK_OLD = "Js.loadReplay(data,{isClientSide:true,back:'play1p'});"
+REPLAY_BACK_NEW = "Js.loadReplay(data,{isClientSide:true,back:window.__qpReplayBack||'home'});"
+
+
+def fix_menu_keys(text):
+    if MENU_KEYS_NEW not in text:
+        text = replace_once(text, MENU_KEYS_OLD, MENU_KEYS_NEW, 'O/offline/client.js menu keys')
+    if RIBBON_NEW not in text:
+        text = replace_once(text, RIBBON_OLD, RIBBON_NEW, 'O/offline/client.js ribbon rebind')
+    if RESULTS_RIBBON_NEW not in text:
+        text = replace_once(text, RESULTS_RIBBON_OLD, RESULTS_RIBBON_NEW, 'O/offline/client.js results ribbon')
+    if REPLAY_BACK_NEW not in text:
+        text = replace_once(text, REPLAY_BACK_OLD, REPLAY_BACK_NEW, 'O/offline/client.js replay back')
+    return text
+
+
 def fix_offline_client(text):
     for old, new, count in OFFLINE_CLIENT_FIXES:
         if text.count(old) != count:
@@ -637,6 +672,47 @@ def add_updater(text):
     return replace_appended(text, UPDATER_MARK, APP_SRC / 'patch-updater.js')
 
 
+# v5.16 (user: スピンカウンターの項目をオンラインでも使えるように / (a)): CONFIG > QP PATCH TOOLS >
+# SPIN COUNTER (localStorage 'qp-spin-counter-v1'). ON runs the embedded spin counter by itself
+# (W.__scStandalone: shown in online games and replays, no self-update) when REPLAY BOARD EDIT is OFF;
+# with REPLAY BOARD EDIT ON the board edit already runs it. Online client only. Idempotent.
+SPIN_CONFIG_MARK = 'qp-spin-counter-config-v1'
+SPIN_CONFIG_FN = r"""/* qp-spin-counter-config-v1 */
+function qpSpinCounterConfig(document, window, src) {
+ if(window.location.protocol!=='https:')return;
+ const ls=window.localStorage,on=ls?.getItem('qp-spin-counter-v1')==='1',edit=ls?.getItem('qp-replay-edit-v1')==='1';
+ const install=()=>{
+  if(document.getElementById('qp-spin-counter-toggle'))return;
+  const before=document.getElementById('qp-replay-edit-toggle');if(!before)return;
+  const node=document.createElement('div');node.id='qp-spin-counter-toggle';node.className=before.className;
+  node.setAttribute('role','button');node.tabIndex=0;
+  const title=document.createElement('h1'),detail=document.createElement('p');
+  title.textContent='SPIN COUNTER: '+(on?'ON':'OFF');
+  detail.textContent=(on?'対戦中とリプレイでスピンカウンター(SPIN・T-SPIN・QUAD)を出しています。クリックで OFF':'クリックで ON。盤面修正なしでも、対戦中とリプレイでスピンカウンター(SPIN・T-SPIN・QUAD)を出す')+(edit?'(REPLAY BOARD EDIT が ON の間は、盤面修正のカウンターを使います)':'');
+  node.append(title,detail);
+  const toggle=()=>{if(on)ls?.removeItem('qp-spin-counter-v1');else ls?.setItem('qp-spin-counter-v1','1');window.location.reload()};
+  node.addEventListener('click',event=>{event.preventDefault();event.stopImmediatePropagation();toggle()},true);
+  node.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();toggle()}},true);
+  before.after(node);
+ };
+ setInterval(install,1000);
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
+ if(!on||edit||window.__scStandalone)return;
+ window.__scStandalone=true;
+ const run=()=>{try{(new Function(src))()}catch(e){console.warn('[spin-counter]',e)}};
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run,{once:true});else run();
+}
+"""
+
+
+def add_spin_counter_config(text):
+    if SPIN_CONFIG_MARK in text:
+        return text
+    code = "\\n;('+qpSpinCounterConfig.toString()+')(document,window,'+JSON.stringify(QP_SPIN_COUNTER_SRC)+');"
+    text = replace_once(text, TAIL_END, code + TAIL_END, 'transform tail (spin counter config)')
+    return SPIN_CONFIG_FN + text
+
+
 def add_update_config(text):
     """Add CONFIG > QP PATCH TOOLS > PATCH UPDATE to the online-client tail in O/transform.js."""
     if UPDATE_CONFIG_MARK in text:
@@ -738,7 +814,7 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                 text = data.decode('utf-8')
                 if not incremental:
                     text = fix_offline_client(text)
-                data = fix_config_sync(fix_replay_c_key(fix_config_keep(fix_rsg(fix_tl_bgm(fix_scoreslide(fix_wheel_volume(fix_warn_toggles(fix_tl_siren(fix_custom_opts(fix_warlock_mini(text))))))))), 'O/offline/client.js')).encode('utf-8')
+                data = fix_menu_keys(fix_config_sync(fix_replay_c_key(fix_config_keep(fix_rsg(fix_tl_bgm(fix_scoreslide(fix_wheel_volume(fix_warn_toggles(fix_tl_siren(fix_custom_opts(fix_warlock_mini(text))))))))), 'O/offline/client.js'))).encode('utf-8')
                 data = fix_local_room(data.decode('utf-8')).encode('utf-8')
             elif offline and name == 'O/preload-local.js':
                 data = fix_preload_config(data.decode('utf-8')).encode('utf-8')
@@ -760,6 +836,7 @@ def build_zip(old_zip, new_zip, kind, old, new, edit_src, counter_src, port=Fals
                     text = add_duo_save(text, duo_src)
                 if offline:
                     text = add_duo_view(add_mp4_button(text))
+                    text = add_spin_counter_config(text)
                 if offline and kind == 'A':
                     text = add_cc_fix(text)
                 text = fix_replay_c_key(text, 'O/transform.js')

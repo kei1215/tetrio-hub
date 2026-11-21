@@ -298,7 +298,8 @@
   document.body.append(panel, mini);
   const setClosed = c => { S.panelClosed = c; panel.style.display = c ? 'none' : 'grid'; mini.style.display = c ? 'block' : 'none'; };
   // パッチ版: 盤面修正と同じく、TETRA CHANNEL かリプレイで動き始めるまでは表示しない(数えるのは起動時から)
-  const shownYet = () => !W.__qpEmbedded || !!W.__qpEditStarted;
+  // CONFIG > SPIN COUNTER(盤面修正なしの単独起動、W.__scStandalone)は対戦中もリプレイでも常に出す
+  const shownYet = () => !W.__qpEmbedded || !!W.__scStandalone || !!W.__qpEditStarted;
   let visible = shownYet();
   if (visible) setClosed(S.panelClosed); else { panel.style.display = 'none'; mini.style.display = 'none'; }
 
@@ -382,7 +383,7 @@
     } catch (e) {}
   };
   clearInterval(W.__scUpd);
-  if (!W.__qpEmbedded) {   // パッチ版はパッチと一緒に更新する
+  if (!W.__qpEmbedded && !W.__scStandalone) {   // パッチ版はパッチと一緒に更新する
     checkUpdate();
     W.__scUpd = setInterval(checkUpdate, 30000);
   }
@@ -1696,6 +1697,10 @@
   const tetraOpen = () => /^tetra/.test(menuType()) || !!document.querySelector('#menus [data-menuview^="tetra"]:not(.hidden)');
   const atHome = () => menuType() === 'home' && !!document.querySelector('#menus [data-menuview="home"]:not(.hidden)');
   const replayOnScreen = () => {
+    // リプレイの途中で TL などのメニューへ移っても、#replay とリプレイのゲームは残ることがある。
+    // メニューが出ている(盤面の画面でない)ときは「リプレイ中」と数えない(カウンターも一緒に消える)
+    const m = document.getElementById('menus');
+    if (m && !m.classList.contains('hidden')) return false;
     const r = document.getElementById('replay');
     if (r && !r.classList.contains('hidden')) return true;
     return games.some(n => { try { return n.esm && n.esm.IsReplay() && alive(n) && n.hm.H.holder.worldVisible; } catch (e) { return false; } });

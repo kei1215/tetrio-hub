@@ -280,6 +280,8 @@
    }
    const selection={};for(const mod of mods){const name=mod.replace(/_reversed$/,'');if(LocalQPOptions.names.includes(name))selection[name]=mod.endsWith('_reversed')?'reverse':'normal'}
    const values={...LocalQPOptions.build(selection).options,zenith_mods:mods};
+   // 10F相当 keeps its native messy holes through mission rules (local-shell.js sets zenith_messy at the start).
+   if(game._localAttackConfig?.floor10)values.zenith_messy=true;
    const v=task.effects?.visibility||{};
    if(v.hold!==undefined)values.display_hold=v.hold!==false;
    if(v.next!==undefined||v.nextCount!==undefined)values.display_next=v.next!==false&&v.nextCount!==0;

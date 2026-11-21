@@ -233,6 +233,10 @@ export async function learn(files, playerArg, opt = {}) {
         // how the player attacked from it: the most common first two clears (e.g. tspin2>tspin3 = DT砲)
         const fm = new Map(); for (const b of g) for (const [q, c] of follows.get((b.src || b).key) || []) fm.set(q, (fm.get(q) || 0) + c);
         const then = fm.size ? [...fm.entries()].sort((p, q) => q[1] - p[1])[0][0].split(">") : [];
+        // the second clear is not fixed (user: 2回目は J・Z スピンで B2B にする時もある): the player's share of each kind
+        // after the usual first one (y_kei1215 after the DT cannon's TSD: TST 61%, J/Z spin 24%) -> a soft bonus
+        const then2 = {}; { let n = 0; for (const [q, c] of fm) { const [a, b] = q.split(">"); if (a === then[0] && b) { then2[b] = (then2[b] || 0) + c; n += c; } }
+          for (const k of Object.keys(then2)) { const v = +(then2[k] / n).toFixed(2); if (n >= 3 && v >= 0.1) then2[k] = v; else delete then2[k]; } }
         // the book (user: y_kei1215 の DT砲を組めていない): the pieces themselves. A piece (kind + cells) that is in 90% or
         // more of these boards is a book piece (the right side of a DT cannon's second bag differs from game to game: free), in the order the player placed it; the planner puts book pieces where
         // the player did (the first bag's T too), keeps the other pieces off them, and the rest stays free.
@@ -246,7 +250,7 @@ export async function learn(files, playerArg, opt = {}) {
         // with a book, the setup cells are the book's cells (the setup is done when every book piece is in)
         if (book.length >= 4) { for (const q of book) for (const [x, k] of q.c) { while (must.length <= k) must.push(0); must[k] |= 1 << x; } while (empty.length < must.length) empty.push(0);
           for (let k = 0; k < must.length; k++) empty[k] &= ~must[k]; }
-        if (must.length) out.push({ rows: must, empty, n: a.sup, seen: full.length, then, mirror: g.some((b) => b.flipped), ...(book.length >= 4 ? { book } : {}) });
+        if (must.length) out.push({ rows: must, empty, n: a.sup, seen: full.length, then, then2, mirror: g.some((b) => b.flipped), ...(book.length >= 4 ? { book } : {}) });
         if (out.length >= 4) break;
       }
       return out;

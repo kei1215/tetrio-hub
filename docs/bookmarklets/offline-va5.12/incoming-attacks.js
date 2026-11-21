@@ -25,22 +25,23 @@
     next=game.getFrame()+wait();
     for(const target of [game,window.LocalTestQP?.getAlly()].filter(Boolean)){
      if(!target.isPlaying()||target.state.zenith?.incapacitated)continue;
-     target.source.Push('ige',{id:'local-training-'+ ++id,type:'interaction',data:{type:'garbage',gameid:8000,username:'LOCAL TRAINING',amt:config.attackMode==='floor'?(lines+Math.max(0,(config.floor10?Math.max(10,target.state.stats.zenith.floor||1):(target.state.stats.zenith.floor||1))-1)):lines,zthalt:target.getZenithAltitude(),x:4.5,y:30}});
+     target.source.Push('ige',{id:'local-training-'+ ++id,type:'interaction',data:{type:'garbage',gameid:8000,username:'LOCAL TRAINING',...floorDelay(target),amt:config.attackMode==='floor'?(lines+Math.max(0,(config.floor10?Math.max(10,target.state.stats.zenith.floor||1):(target.state.stats.zenith.floor||1))-1)):lines,zthalt:target.getZenithAltitude(),x:4.5,y:30}});
     }
    };
-   // Floor-10 garbage (holes, delay, targeting) from the start: QP recomputes messiness every
-   // frame (zthm.Update: change 2.5*e, inner e, e = 0.03 (expert 0.05) x floor).
-   let unhook=null;
-   if(config.floor10){const engine=game.source?.self,z=engine?.zthm,S=engine?.gsm;
-    if(z&&S&&typeof z.Update==='function'){const own=Object.hasOwn(z,'Update'),orig=z.Update;
-     z.Update=function(...args){const r=orig.apply(this,args);try{const o=S.setoptions,e=(o.zenith_expert?.05:.03)*10;
-      o.messiness_change=Math.max(Number(o.messiness_change)||0,Math.min(1,2.5*e));o.messiness_inner=Math.max(Number(o.messiness_inner)||0,e);o.messiness_center=false;
-      // 10F garbage timing too: delay before garbage goes live (garbagephase 165-15F / expert 66-6F),
-      // targeting (garbagefavor 33-3F / expert -3F, messy -25) and no targeting grace.
-      o.garbagephase=Math.min(Number(o.garbagephase)||999,o.zenith_expert?6:15);
-      o.garbagefavor=Math.min(Number(o.garbagefavor)||0,(o.zenith_expert?0:33)-30-(o.zenith_messy?25:0));
-      if(S.stats?.zenith)S.stats.zenith.targetinggrace=0}catch{}return r};
-     unhook=()=>{if(own)z.Update=orig;else delete z.Update}}}
+   // Floor-10 garbage from the start, kept replayable (2026-11-21, user: 穴バラは標準の messiness = messy の穴バラで):
+   // the old per-frame zthm.Update hook (messiness / garbagefavor / garbagephase / targeting grace) lived only
+   // in the live game, so every replay - native, MP4 - lost the scattered holes and the short delay.
+   //  - holes: local-shell.js starts the run with the native zenith_messy flag (saved in the replay options;
+   //    messiness 0.25+0.03/floor, no grace reduction, garbagefavor -25 - about floor 9-10 from 1F).
+   //  - delay: the 10F garbagephase (15F, expert 6F, halved at cancel streak 25+) goes in the ige data
+   //    itself (native AddPendingGarbage: delay = n.delay ?? garbagephase), so the replay carries it too.
+   function floorDelay(target){
+    if(!config.floor10)return {};
+    const S=target.source?.self?.gsm;let d=S?.setoptions?.zenith_expert?6:15;
+    if(Number(S?.cancelstreak)>=25&&!S?.setoptions?.zenith_volatile)d=Math.floor(d/2);
+    return {delay:d};
+   }
+   const unhook=null;
    active={game,unhook};game.on('frame','local-training-attacks',tick);game.on('end','local-training-stop',()=>api.stop());
   },
   stop(){if(!active)return;const {game,unhook}=active;active=null;try{unhook?.()}catch{}game.remove('frame','local-training-attacks');game.remove('end','local-training-stop')}

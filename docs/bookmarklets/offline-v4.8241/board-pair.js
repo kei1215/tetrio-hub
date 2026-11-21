@@ -5,7 +5,9 @@
  function fit(mode='duo'){
   // On TL, keep identical orientation on both boards; separate the two
   // complete HOLD / BOARD / NEXT units instead of swapping HUD sides.
-  return mode==='tl'?[{x:-.40,y:0,scale:.88},{x:.40,y:0,scale:.88}]:[{x:-.32,y:0,scale:1},{x:.32,y:0,scale:1}];
+  // v5.16 (user: AI対戦で盤面が小さい): full size like the native 1v1 (room spectating and the
+  // TTRM replay both place the two boards at x -0.4 / 0.4, scale 1); was 0.88.
+  return mode==='tl'?[{x:-.40,y:0,scale:1},{x:.40,y:0,scale:1}]:[{x:-.32,y:0,scale:1},{x:.32,y:0,scale:1}];
  }
  window.LocalBoardPair={fit,attach(games,settings={}){let stopped=false,pending=0;const timers=[];
   // Keep the two holders on their own left/right halves like live QP DUO.
