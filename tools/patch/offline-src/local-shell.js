@@ -184,7 +184,7 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
  const attackSeconds=field('攻撃間隔（ゲーム内秒）',document.createElement('input'));attackSeconds.type='number';attackSeconds.min='.5';attackSeconds.max='60';attackSeconds.step='.5';attackSeconds.value=saved('qp-local-attack-seconds','5');attackSeconds.setAttribute('aria-label','攻撃間隔');
  // Practice for players (2026-11-14): targeted like floor 10 from the start - the floor attack
  // counts as floor 10 or more and garbage holes are at least as scattered as on floor 10.
- const floor10=field('最初から10F相当（狙われ方・穴のばらけ・ゴミの猶予・攻撃間隔）',document.createElement('input'));floor10.type='checkbox';floor10.checked=saved('qp-local-floor10','false')==='true';floor10.setAttribute('aria-label','最初から10F相当');
+ const floor10=field('最初から10F相当（穴のばらけ・ゴミの猶予・攻撃間隔、リプレイでも同じ）',document.createElement('input'));floor10.type='checkbox';floor10.checked=saved('qp-local-floor10','false')==='true';floor10.setAttribute('aria-label','最初から10F相当');
  // v5.07 (user: 完全に火力が来ないのをなしにするかを設定 / 今までの状態): floor attacks with rare lulls (up to 30 s) or the old timing.
  const attackLull=field('火力が来ない時間を入れる（まれに最大10秒）',document.createElement('input'));attackLull.type='checkbox';attackLull.checked=saved('qp-local-attack-lull','true')==='true';attackLull.setAttribute('aria-label','火力が来ない時間を入れる');attackLull.addEventListener('change',()=>localStorage.setItem('qp-local-attack-lull',String(attackLull.checked)));
  // v5.07 (user: QP設定に3,2,1,goを入れるかのオンオフ): the board countdown (3, 2, 1, GO!) before a QP start. Default OFF (real QP has none).
@@ -343,6 +343,9 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
   config.testMode=duo;config.attackMode=attackMode.value;
   config.attackLines=Number(attackLines.value);config.attackSeconds=Number(attackSeconds.value);config.floor10=floor10.checked;config.attackLull=attackLull.checked;
   if(countdown.checked)config.options={...(config.options||{}),countdown:true,countdown_count:3,countdown_interval:1000};
+  // 10F相当 (2026-11-21): scattered holes via the native MESSY garbage flag (not the MESSY MOD: zenith_mods
+  // stays as chosen), so the replay options reproduce the holes in every player. See incoming-attacks.js.
+  if(config.floor10)config.options={...(config.options||{}),zenith_messy:true};
   config.missions={source:missionSource.value,attackEnabled:config.attackMode!=='none',includeAttackRequired:attackRequired.checked,allowControlPenalties:controlPenalties.checked};
   return config;
  }
