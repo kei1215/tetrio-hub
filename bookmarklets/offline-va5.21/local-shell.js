@@ -114,6 +114,7 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
  const replayToggle=(label,key,enabled=true)=>{const row=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.checked=localStorage.getItem(key)!==(enabled?'0':'1');input.addEventListener('change',()=>{localStorage.setItem(key,input.checked?'1':'0');window.dispatchEvent(new CustomEvent('qp-replay-settings-changed',{detail:{key,value:input.checked}}))});row.append(label,input);replaySettings.appendChild(row);return input};
  replayToggle('QPリプレイ背景', 'qp-replay-qp-background-v1');
  replayToggle('TL開始演出', 'qp-replay-tl-presentation-v1');
+ replayToggle('BOTの操作を人間らしく保存 (finesse)', 'qp-bot-human-finesse');
  panel.append(localSettings,replaySettings);
  const localRoutes=new Map();
  const ownPress=(element,activate)=>localRoutes.set(element.id,activate);
@@ -167,7 +168,7 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
   return LocalNative.solo(mode,aiName);
  });
  const qp=document.createElement('div');qp.id='game_qp_offline';qp.className='scroller_item has_image has_description ns';
- const icon=document.createElement('img');icon.src='https://kei1215.github.io/tetrio-hub/bookmarklets/offline-va5.23/qpo.svg';icon.alt='';qp.appendChild(icon);
+ const icon=document.createElement('img');icon.src='https://kei1215.github.io/tetrio-hub/bookmarklets/offline-va5.24/qpo.svg';icon.alt='';qp.appendChild(icon);
  const qpTitle=document.createElement('h1');qpTitle.textContent='QP OFFLINE';qp.appendChild(qpTitle);
  const qpHint=document.createElement('p');qpHint.textContent='LOCAL ONLY · NO OPPONENTS · NO KILLS';qp.appendChild(qpHint);
  const zenithMenu=document.getElementById('zenithmenu');

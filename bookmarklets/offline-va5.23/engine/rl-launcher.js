@@ -30,7 +30,7 @@
     // v5.07 (user: 外部AIもQPできる様に): an outside AI (ai-external.js) decides every placement;
     // the vA profile only drives the keys. Set before the driver attaches; no learning in that run.
     if (engine) { game._aiEngine = engine; game._aiExternalStats = null; }
-    if(controller==='bot'){const name=engine?(window.LocalExternalAI?.label?.(engine)||engine):profile.name;game._localAIPlayerName=name;game.options.username=name;}
+    if(controller==='bot'){const name=engine?(window.LocalExternalAI?.label?.(engine)||engine):profile.name;game._localAIPlayerName=name;game.options.username=name;try{window.LocalReplayLibrary?.trackBot?.(game)}catch{}}
     game._localLearningMode = profile.model.mode;
     window.LocalAIRoom?.add(game);
     // A profile is stored as JSON, so create an isolated mutable learner for

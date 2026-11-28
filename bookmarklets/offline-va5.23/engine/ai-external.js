@@ -237,7 +237,11 @@ onmessage = async (e) => { const m = e.data;
     // A worker search can not be waited for here (its messages arrive between frames):
     // take the best move it has sent so far.
     // bot-ai keeps waiting (frame by frame, nothing blocks) until done turns true.
-    if (bot.worker) { if (!job.done && !early) { early = true; stats.early++; } job.stop(); return job.done ? convert() : null; }
+    // 2026-11-29 (user: 上手いプレイをしてるけど遅れてる / 思考時間以外にも問題): waiting for the worker to confirm the stop
+    // cost ~0.15-0.2 s a piece (Butter spent ~470 ms per move when asked to stop at ~310 ms, Turnbase TTRM). The worker posts its
+    // best move after every slice, so Butter's is taken now (Cold Clear still waits: its early slices have no usable move);
+    // only with no move yet keep waiting frame by frame.
+    if (bot.worker) { if (!job.done && !early) { early = true; stats.early++; } job.stop(); return butter || job.done ? convert() : null; }
     if (!job.done) {
      stats.early++;
      const t0 = performance.now();

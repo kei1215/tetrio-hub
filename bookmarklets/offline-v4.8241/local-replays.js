@@ -37,6 +37,102 @@
   const round=users.map((user,i)=>({...base(user,i),alive:false,lifetime:Math.round(plays[i].frames/60*1000),stats:stat(plays[i]),replay:plays[i]}));
   return {version:1,gamemode:file.gamemode,ts:file.ts,users,replay:{leaderboard,rounds:[round]},local:{...file.local,duoSide:null,duoMerged:true,source:'auto-duo',frames:Math.max(plays[0].frames,plays[1].frames),requiresPatch:true}};
  };
+ // BOT replay pacing (user 2026-11-29): the bot thinks, then sends its whole route in a few frames ("inhuman finesse").
+ // Only in the saved replay, move the free part of each route (hold / rotate / move before any soft drop) back into the
+ // think time and space it at a human pace, so the replay shows the piece being moved while the bot thinks.
+ // Lock frames, soft-drop/spin finishes and the hard drop keep their exact frames, so the game result does not change.
+ function humanizeReplay(rep,opt){
+  opt=opt||{};
+  if(!rep||!Array.isArray(rep.events)||rep.__humanized)return rep;
+  const o=rep.options||{},delay=Math.max(0,Number(o.are)||0)+Math.max(0,Number(o.lineclear_are)||0);
+  const gap=Math.max(2,Math.min(12,Math.round(Number(opt.gap)||5)));
+  const ev=rep.events,T=e=>e.frame+(Number(e.data?.subframe)||0);
+  const keys=ev.filter(e=>e.type==='keydown'||e.type==='keyup');
+  const track=Array.isArray(opt.track)?opt.track:null,maxH=Number(opt.maxH)||13,maxG=Number(opt.maxG)||0.1;
+  let prevDrop=-Infinity,seg=[],moved=new Map(),piece=0;
+  const flush=drop=>{
+   // pair keydown/keyup in order; a press still held at the drop stops the free part
+   const acts=[];const open=new Map();
+   for(const e of seg){
+    if(e===drop)break;
+    if(e.data.key==='softDrop'&&e.type==='keydown')break;
+    if(e.type==='keydown'){if(open.has(e.data.key))return;const a={down:e,up:null};open.set(e.data.key,a);acts.push(a)}
+    else{const a=open.get(e.data.key);if(!a)return;a.up=e;open.delete(e.data.key)}
+   }
+   if(open.size)return;
+   if(!acts.length)return;
+   // the bot waited inside its route (gravity / lock timing): leave it
+   // presses must not overlap (a rotate during a DAS hold is one motion)
+   for(let i=1;i<acts.length;i++)if(T(acts[i].down)<T(acts[i-1].up))return;
+   for(let i=1;i<acts.length;i++)if(acts[i].down.frame-Math.ceil(T(acts[i-1].up))>1)return;
+   const lastUp=Math.max(...acts.map(a=>T(a.up)));
+   const after=seg.find(e=>!acts.some(a=>a.down===e||a.up===e)&&T(e)>=lastUp);
+   const end=after?after.frame:drop.frame;            // next fixed input frame (soft drop or hard drop)
+   if(!Number.isFinite(prevDrop))return; // first piece: its spawn frame is not in the replay
+   // a high stack or fast gravity makes the row the piece is at matter: keep the bot's own frames there
+   const info=track&&track[piece];if(!info||!(info.h<=maxH)||Number(info.g)>maxG)return;
+   const earliest=prevDrop+2+delay; // a frame of margin after the last drop's release
+   if(!(earliest<end))return;
+   // lay the presses back from the fixed input: each takes its own hold time, then a human gap
+   const plan=[];let t=end;
+   for(let i=acts.length-1;i>=0;i--){
+    const a=acts[i],held=Math.max(T(a.up)-T(a.down),0.5);
+    const upF=t-gap,startF=Math.ceil(upF-held);
+    plan.unshift({a,start:startF,held});t=startF;
+   }
+   if(plan[0].start<earliest){
+    // not enough think time: squeeze evenly into [earliest, end)
+    const total=acts.reduce((s,a)=>s+Math.max(T(a.up)-T(a.down),0.5),0),free=end-earliest-total;
+    const g=Math.floor(free/(acts.length));if(g<1)return;
+    let s=earliest;for(const p of plan){p.start=s;s=Math.ceil(s+p.held)+g}
+    if(Math.ceil(plan[plan.length-1].start+plan[plan.length-1].held)>=end)return;
+   }
+   for(const p of plan){
+    const d=p.a.down,u=p.a.up,ds=Number(d.data.subframe)||0,us=Number(u.data.subframe)||0;
+    const shift=p.start-d.frame;if(shift>0)return; // never later than the bot pressed
+    moved.set(d,shift);moved.set(u,shift);
+   }
+  };
+  for(const e of keys){
+   if(e.type==='keyup'&&e.data.key==='hardDrop'){prevDrop=Math.max(prevDrop,Math.ceil(T(e)));continue}
+   seg.push(e);
+   if(e.type==='keydown'&&e.data.key==='hardDrop'){flush(e);prevDrop=e.frame;seg=[];piece++}
+  }
+  const mark=()=>{try{Object.defineProperty(rep,'__humanized',{value:true,enumerable:false,configurable:true})}catch{}};
+  if(!moved.size){mark();return rep}
+  const out=ev.map((e,i)=>{const s=moved.get(e);return {e:s?{...e,frame:e.frame+s}:e,i,k:s?1:0}});
+  out.sort((a,b)=>a.e.frame-b.e.frame||a.k-b.k||a.i-b.i);
+  rep.events=out.map(x=>x.e);
+  mark();
+  return rep;
+ }
+ // median gap (frames) between a human's presses before a drop, for matching the bot's pace to them
+ function humanGap(rep){
+  if(!rep||!Array.isArray(rep.events))return 0;
+  const ds=rep.events.filter(e=>e.type==='keydown'&&e.data.key!=='softDrop');const g=[];
+  for(let i=1;i<ds.length;i++){const d=ds[i].frame-ds[i-1].frame;if(ds[i-1].data.key!=='hardDrop'&&d>0&&d<30)g.push(d)}
+  if(g.length<10)return 0;g.sort((a,b)=>a-b);return g[g.length>>1];
+ }
+
+ // user 2026-11-29: ON/OFF for the bot's "human finesse" in saved replays (default ON). Tab panel / replay settings.
+ const humanOn=()=>localStorage.getItem('qp-bot-human-finesse')!=='0';
+ const isBot=game=>!!(game&&(game._localAIPlayerName||game._localAIProfileId));
+ // board height (rows from the bottom) and gravity each time the bot gets a new piece; humanizeReplay keeps the
+ // bot's own frames for a piece on a high stack or with fast gravity
+ function trackBot(game){
+  if(!game||game._humanTrack)return;game._humanTrack=[];let placed=-1;
+  const look=()=>{try{const st=game.state;const n=Number(st?.stats?.piecesplaced);if(!Number.isFinite(n)||n===placed)return;placed=n;
+   const b=st.board;let h=0;if(Array.isArray(b))for(let y=0;y<b.length;y++)if(b[y].some(c=>c!==null&&c!==undefined)){h=b.length-y;break}
+   const g=Number(game.source?.self?.fm?.GetEffectiveGravity?.()??st.g)||0;game._humanTrack[n]={h,g}}catch{}};
+  game.on?.('frame','replay-humanize-track',look);
+ }
+ function humanize(game,replay,peerReplay){
+  try{if(!humanOn()||!isBot(game)||!replay)return replay;
+   const gap=humanGap(peerReplay)||Number(localStorage.getItem('qp-human-gap'))||5;
+   return humanizeReplay(replay,{gap,track:game._humanTrack||null});
+  }catch(error){console.warn('[replay] humanize',error);return replay}
+ }
+ function rememberHumanGap(game,replay){try{if(isBot(game))return;const g=humanGap(replay);if(g)localStorage.setItem('qp-human-gap',String(g))}catch{}}
  // AI room / TL match: every finished round goes into one TTRM (official multi-round shape).
  const matchFile=match=>{
   const users=match.names.map((name,i)=>({id:'0'.repeat(23)+(i+2),username:String(name).slice(0,32),avatar_revision:0,banner_revision:0,flags:0,country:null}));
@@ -47,14 +143,15 @@
   const rounds=match.rounds.map(r=>users.map((user,i)=>({...base(user,i),alive:i===r.winner,lifetime:Math.round(r.replays[i].frames/60*1000),stats:stat(r.replays[i]),replay:r.replays[i]})));
   return {version:1,gamemode:match.mode,ts:new Date().toISOString(),users,replay:{leaderboard,rounds},local:{source:'ai-room',matchKey:match.key,ai:match.ai,wins:[...match.wins],frames:Math.max(...match.rounds.map(r=>Math.max(r.replays[0].frames,r.replays[1].frames))),requiresPatch:false}};
  };
- const api=window.LocalReplayLibrary={portable,duo,matchFile,
+ const api=window.LocalReplayLibrary={portable,duo,matchFile,humanizeReplay,humanGap,trackBot,humanize,rememberHumanGap,
   // A long match (FT99 between two Cold Clears) crashed the renderer (2026-11-28): every round rebuilt and wrote
   // the TTRM of the whole match, ~3 MB a round, so by round 60 each save copied hundreds of MB several times.
   // Now a long match is saved in parts of PART rounds: only the open part is rewritten, and the replays of a closed
   // part are dropped from memory (its TTRM is already saved).
   saveMatch(match,reason){
-   // user 2026-11-29: FT7を上限にして分けない — FT7 is at most 13 rounds, so a match up to FT7 stays in one TTRM
-   const PART=13,from=match.partFrom||0,rounds=match.rounds.slice(from),part=Math.floor(from/PART)+1;
+   // user 2026-11-29: FTは11まで(ルーム側で上限)、試合は分けない — FT11 is at most 21 rounds, one TTRM. PART is kept only
+   // as a guard for a match that somehow runs past that
+   const PART=21,from=match.partFrom||0,rounds=match.rounds.slice(from),part=Math.floor(from/PART)+1;
    const wins=[0,0];for(const r of rounds)if(r.winner===0||r.winner===1)wins[r.winner]++;
    const file=matchFile({...match,rounds,wins});
    if(match.recordId)try{QPLocalZen.deleteRecord(match.recordId)}catch(error){console.warn('[AI room] old match record',error)}
@@ -65,7 +162,8 @@
    return file;
   },
   save(game,reason){
-   const replay=game.replay.Export();if(!(replay.frames>0))return;
+   let replay=game.replay.Export();if(!(replay.frames>0))return;
+   rememberHumanGap(game,replay);replay=humanize(game,replay,null);
    const gamemode=mode(game),mods=game.options.zenith_mods||[];
    const local={testMode:game._localTestMode||'solo',duoSide:game._localReplaySide||(game.options.zenith_duo?'player':null),speedChanges:game._localSpeedChanges||[],incomingAttacks:game._localAttackConfig||null,missions:game._localMissionConfig||null,requiresPatch:mods.filter(x=>x.endsWith('_reversed')).length>1||!!game._localCustomMissionUsed,bot:!!game._localAIPlayerName,engine:game._aiEngine||null};
    const file=portable({version:1,gamemode,ts:new Date().toISOString(),local,users:[{username:game.options.username||localStorage.getItem('qp-local-username')||'LOCAL'}],replay});
@@ -74,7 +172,8 @@
    if(game.options.zenith_duo&&game._localDuoPartner){
     if(game._localDuoSaved)return;game._localDuoSaved=true;
     try{
-     const partner=game._localDuoPartnerReplay||game._localDuoPartner.replay.Export();
+     let partner=game._localDuoPartnerReplay||game._localDuoPartner.replay.Export();
+     if(partner&&!game._localDuoPartnerReplay)partner=humanize(game._localDuoPartner,partner,replay);
      if(partner&&partner.frames>0)saved=api.duo(file,partner,game._localDuoPartner.options?.username||'LOCAL PARTNER');
     }catch(error){console.warn('[QP DUO] partner replay not saved',error)}
    }

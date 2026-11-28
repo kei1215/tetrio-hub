@@ -141,7 +141,8 @@
   // panel (qp-ai-sync-ratio, "10:9"); the BOT may place floor(player pieces x 9/10).
   let ratio=1;try{const m=/^\s*(\d+(?:\.\d+)?)\s*[:：]\s*(\d+(?:\.\d+)?)\s*$/.exec(localStorage.getItem('qp-ai-sync-ratio')||'');if(m&&+m[1]>0&&+m[2]>0)ratio=Math.max(.1,Math.min(10,+m[2]/+m[1]))}catch{}
   const pf=Number(peer.getFrame?.())||0,pp=theirs();
-  return {ahead:()=>Math.floor(theirs()*ratio+1e-9)>mine(),interval:pp>2?Math.max(3,Math.min(120,pf/pp/ratio)):30};
+  // behind: how many pieces the BOT owes (1 = its normal turn, 2+ = it fell behind the player)
+   return {ahead:()=>Math.floor(theirs()*ratio+1e-9)>mine(),behind:()=>Math.floor(theirs()*ratio+1e-9)-mine(),interval:pp>2?Math.max(3,Math.min(120,pf/pp/ratio)):30};
  }
  function humanPlaying(game){
   const peer=game?._localTLPeer||game?.source?.self?.zthm?.duoOtherSideGame;
@@ -193,7 +194,10 @@
    // the next one, never with a burst. Lockstep: the player's piece count decides (sync.ahead);
    // the BOT still gets a minimum think time after its piece appears (minThink), so a fast
    // player does not cut every outside-AI search at once (user: PtoP だと CC が弱い).
-   const catchUp=interval<=12?interval*.8:Math.min(10,interval*.25),minThink=sync?Math.max(6,Math.min(40,sync.interval*.6)):0;
+   // 2026-11-29 (user: 上手いプレイをしてるけど遅れてる — Turnbase TTRM: Butter 4 pieces behind at 1.8-1.9 PPS, 1.1-1.4 s
+    // late per piece): once the BOT owes 2+ pieces its minimum think time is only 6 frames and sends its route as one burst, to catch up.
+    const late=!!sync&&sync.behind()>=2;
+    const catchUp=interval<=12?interval*.8:Math.min(10,interval*.25),minThink=sync?(late?6:Math.max(6,Math.min(40,sync.interval*.6))):0;
    const turnReady=(slack=0)=>sync?sync.ahead():frame>=dueFrame-slack;
    const thinkDue=(slack=0)=>sync?sync.ahead()&&frame>=pieceStart+minThink:frame>=dueFrame-slack;
    const dropped=()=>{lastDropFrame=frame;dueFrame=Math.max((dueFrame??frame)+interval,frame+interval-catchUp)};
@@ -305,12 +309,12 @@
     // route (hold, rotations, every column tap, hard drop) in ONE frame; one key per frame plus DAS holds capped
     // this driver near 6 PPS. At a short clock (interval <= 12 frames, 5+ PPS) a route without soft drops is sent
     // as one burst of taps; the next frame checks the final spot (a miss plans again) and drops at the PPS time.
-    if(!ex.started&&!ex.burst&&!sync&&interval<=12){
+    if(!ex.started&&!ex.burst&&(sync?late:interval<=12)){
      // keys before the first soft drop (a spin route: move and turn at once, then drop and spin step by step)
      const cut=target.path.indexOf('sonicDrop'),keys=(cut<0?target.path:target.path.slice(0,cut)).filter(k=>k!=='sonicDrop'),dropAt=ex.steps.findIndex(st=>st.kind==='drop');
      const ok=keys.length&&keys.every(k=>/^(move(Left|Right)|rotate(CW|CCW|180))$/.test(k)&&window.LocalAIPlayerSettings?.canUse?.(game,k)!==false)&&(dropAt<0||dropAt>0&&ex.steps[dropAt-1]?.to);
      // a floor route keeps its PPS wait (the piece must not lock before its time)
-     const floorWait=dropAt>=0&&(()=>{const est=(ex.steps.length-dropAt)*2+12;return frame<dueFrame-est-12&&deadline.total>est+30})();
+     const floorWait=!sync&&dropAt>=0&&(()=>{const est=(ex.steps.length-dropAt)*2+12;return frame<dueFrame-est-12&&deadline.total>est+30})();
      if(ok&&floorWait){game._localBotIntent='PPS待ち（接地する経路）';return}
      if(ok){let sub=0;for(const k of keys){game.source.Push('keydown',{key:k,subframe:sub});game.source.Push('keyup',{key:k,subframe:Math.min(.99,sub+.005)});sub=Math.min(.98,sub+.01)}
       ex.burst=true;ex.started=true;ex.pending=null;stats.bursts=(stats.bursts||0)+1;

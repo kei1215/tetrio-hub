@@ -1157,20 +1157,29 @@
           { n: 4, req: (o, x, h) => h[3] <= h[2] + 1 && o(x - 1, h[2]) && o(x - 1, h[2] - 2), sy: (h) => h[2] + 2, ok: { dx: 0, y: (h) => h[2] - 1, rot: "E" }, rows: ["##??", "__??", "__??", "__??", "_#??"] }
         ];
         const DET_HS = [null, null, null, [0, 0, 0], [0, 0, 0, 0]];
+        function compileRows(rows) {
+          const out = [];
+          rows.forEach((row, k) => {
+            for (let i = 0; i < row.length; i++) {
+              const c2 = row[i];
+              if (c2 === "#") out.push(i, k, 1);
+              else if (c2 === "_") out.push(i, k, 0);
+            }
+          });
+          return Int8Array.from(out);
+        }
         function detect(o, h, shape) {
           const hs = DET_HS[shape.n];
           for (let x = 0; x + shape.n <= W2; x++) {
             for (let i = 0; i < shape.n; i++) hs[i] = h[x + i];
             if (!shape.req(o, x, hs)) continue;
             let y = shape.sy(hs), ok = true;
-            for (const row of shape.rows) {
-              for (let i = 0; i < row.length && ok; i++) {
-                const c2 = row[i];
-                if (c2 === "#" && !o(x + i, y)) ok = false;
-                else if (c2 === "_" && o(x + i, y)) ok = false;
+            const ck = shape.ck || (shape.ck = compileRows(shape.rows));
+            for (let j = 0; j < ck.length; j += 3) {
+              if (!!o(x + ck[j], y - ck[j + 1]) !== (ck[j + 2] === 1)) {
+                ok = false;
+                break;
               }
-              if (!ok) break;
-              y--;
             }
             if (ok) return { x: x + shape.ok.dx, y: shape.ok.y(hs), rot: shape.ok.rot };
           }
@@ -1616,11 +1625,14 @@
                 miny = Math.min(miny, cy);
                 maxy = Math.max(maxy, cy);
               }
-              SLOT[t].push({ rows: [...m].map(([dy, b]) => [dy, b]), cells: S[t][r].map(([x, y]) => [x, y]), minx, maxx, miny, maxy });
+              const rs = [...m];
+              SLOT[t].push({ rows: rs.map(([dy, b]) => [dy, b]), dy: Int8Array.from(rs.map((e) => e[0])), bm: Int32Array.from(rs.map((e) => e[1])), cx: Int8Array.from(S[t][r].map((e) => e[0])), cy: Int8Array.from(S[t][r].map((e) => e[1])), cells: S[t][r].map(([x, y]) => [x, y]), minx, maxx, miny, maxy });
             }
           }
           return SLOT;
         }
+        const SLOT_SEEN = new Int32Array(64 * 128);
+        let SLOT_STAMP = 0;
         function spinSlotBonus(rows, node, seq, P) {
           const H = rows.length, have = /* @__PURE__ */ new Set(), SL = slotShapes();
           if (node.hold) have.add(node.hold);
@@ -1642,36 +1654,50 @@
           if (!covs.length || !near) return 0;
           const fits2 = (sh, x, y) => {
             if (x + sh.minx < 0 || x + sh.maxx >= W2 || y + sh.maxy >= H) return false;
-            for (const [dy, b] of sh.rows) {
-              const yy = y + dy;
+            const dy = sh.dy, bm = sh.bm;
+            for (let i = 0; i < dy.length; i++) {
+              const yy = y + dy[i];
               if (yy < 0) continue;
-              const m = x >= 3 ? b << x - 3 : b >> 3 - x;
+              const b = bm[i], m = x >= 3 ? b << x - 3 : b >> 3 - x;
               if (rows[yy] & m) return false;
             }
             return true;
           };
-          let best = 0;
+          let best = 0, top1 = 0;
+          for (let i = 1; i <= 3; i++) {
+            const v = P.spinSlot[i] || 0;
+            if (v > top1) top1 = v;
+          }
           for (const type of have) {
             const shs = SL[type];
             if (!shs) continue;
             for (let r = 0; r < 4; r++) {
-              const sh = shs[r];
-              const tried = /* @__PURE__ */ new Set();
-              for (let k = 0; k < covs.length; k += 2) for (const [cx, cy] of sh.cells) {
-                const x = covs[k] - cx, y = covs[k + 1] - cy, key = x * 64 + y;
-                if (tried.has(key)) continue;
-                tried.add(key);
+              const sh = shs[r], cxs = sh.cx, cys = sh.cy, dy = sh.dy, bm = sh.bm;
+              if (++SLOT_STAMP > 2e9) {
+                SLOT_SEEN.fill(0);
+                SLOT_STAMP = 1;
+              }
+              const stamp = SLOT_STAMP;
+              for (let k = 0; k < covs.length; k += 2) for (let j = 0; j < cxs.length; j++) {
+                const x = covs[k] - cxs[j], y = covs[k + 1] - cys[j], key = (x + 16) * 128 + (y + 16);
+                if (key >= 0 && key < SLOT_SEEN.length) {
+                  if (SLOT_SEEN[key] === stamp) continue;
+                  SLOT_SEEN[key] = stamp;
+                }
                 if (!fits2(sh, x, y) || fits2(sh, x, y + 1) || fits2(sh, x, y - 1) || fits2(sh, x - 1, y) || fits2(sh, x + 1, y)) continue;
                 let lines = 0;
-                for (const [dy, b] of sh.rows) {
-                  const yy = y + dy;
+                for (let i = 0; i < dy.length; i++) {
+                  const yy = y + dy[i];
                   if (yy < 0) continue;
-                  const m = x >= 3 ? b << x - 3 : b >> 3 - x;
+                  const b = bm[i], m = x >= 3 ? b << x - 3 : b >> 3 - x;
                   if ((rows[yy] | m) === FULL) lines++;
                 }
                 if (!lines) continue;
                 const v = P.spinSlot[Math.min(3, lines)] || 0;
-                if (v > best) best = v;
+                if (v > best) {
+                  best = v;
+                  if (best >= top1) return best;
+                }
               }
             }
           }
@@ -1964,10 +1990,12 @@
               if (P.b2bBreak && r.lines) {
                 const special2 = p.spin || r.lines === 4;
                 const kills = P.oppRoom != null && P.charging && node.b2b > P.chargeAt && node.b2b - P.chargeAt + P.chargeBase >= P.oppRoom;
-                let t0 = 0;
-                {
+                let t0 = node._top;
+                if (t0 === void 0) {
+                  t0 = 0;
                   const h0 = heightsOf(node.rows);
                   for (let x = 0; x < W2; x++) if (h0[x] > t0) t0 = h0[x];
+                  node._top = t0;
                 }
                 const danger = t0 + node.pend >= P.breakSafe;
                 if ((kills || danger) && !special2 && node.b2b > P.chargeAt && P.charging) rew += 3e3 * Math.max(0, 1 - 0.3 * node.depth);

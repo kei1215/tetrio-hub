@@ -114,6 +114,7 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
  const replayToggle=(label,key,enabled=true)=>{const row=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.checked=localStorage.getItem(key)!==(enabled?'0':'1');input.addEventListener('change',()=>{localStorage.setItem(key,input.checked?'1':'0');window.dispatchEvent(new CustomEvent('qp-replay-settings-changed',{detail:{key,value:input.checked}}))});row.append(label,input);replaySettings.appendChild(row);return input};
  replayToggle('QPリプレイ背景', 'qp-replay-qp-background-v1');
  replayToggle('TL開始演出', 'qp-replay-tl-presentation-v1');
+ replayToggle('BOTの操作を人間らしく保存 (finesse)', 'qp-bot-human-finesse');
  panel.append(localSettings,replaySettings);
  const localRoutes=new Map();
  const ownPress=(element,activate)=>localRoutes.set(element.id,activate);

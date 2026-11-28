@@ -75,11 +75,14 @@
   {n:4,req:(o,x,h)=>h[3]<=h[2]+1&&o(x-1,h[2])&&o(x-1,h[2]-2),sy:h=>h[2]+2,ok:{dx:0,y:h=>h[2]-1,rot:'E'},rows:['##??','__??','__??','__??','_#??']},
  ];
  const DET_HS=[null,null,null,[0,0,0],[0,0,0,0]];
+ function compileRows(rows){const out=[];rows.forEach((row,k)=>{for(let i=0;i<row.length;i++){const c=row[i];if(c==='#')out.push(i,k,1);else if(c==='_')out.push(i,k,0)}});return Int8Array.from(out)}
  function detect(o,h,shape){
   const hs=DET_HS[shape.n];
   for(let x=0;x+shape.n<=W;x++){for(let i=0;i<shape.n;i++)hs[i]=h[x+i];
    if(!shape.req(o,x,hs))continue;let y=shape.sy(hs),ok=true;
-   for(const row of shape.rows){for(let i=0;i<row.length&&ok;i++){const c=row[i];if(c==='#'&&!o(x+i,y))ok=false;else if(c==='_'&&o(x+i,y))ok=false}if(!ok)break;y--}
+   // speed (2026-11-29): the pattern is compiled once to (column, row step, filled?) checks in the same order
+   const ck=shape.ck||(shape.ck=compileRows(shape.rows));
+   for(let j=0;j<ck.length;j+=3){if(!!o(x+ck[j],y-ck[j+1])!==(ck[j+2]===1)){ok=false;break}}
    if(ok)return {x:x+shape.ok.dx,y:shape.ok.y(hs),rot:shape.ok.rot};
   }
   return null;
@@ -255,7 +258,10 @@
  function slotShapes(){if(SLOTW===W&&SLOT)return SLOT;const S=SP.__shapes();SLOT={};SLOTW=W;
   for(const t of ['s','z','l','j','i']){SLOT[t]=[];for(let r=0;r<4;r++){const m=new Map();let minx=9,maxx=-9,miny=9,maxy=-9;
    for(const [cx,cy] of S[t][r]){m.set(cy,(m.get(cy)||0)|1<<(cx+3));minx=Math.min(minx,cx);maxx=Math.max(maxx,cx);miny=Math.min(miny,cy);maxy=Math.max(maxy,cy)}
-   SLOT[t].push({rows:[...m].map(([dy,b])=>[dy,b]),cells:S[t][r].map(([x,y])=>[x,y]),minx,maxx,miny,maxy})}}return SLOT}
+   const rs=[...m];SLOT[t].push({rows:rs.map(([dy,b])=>[dy,b]),dy:Int8Array.from(rs.map(e=>e[0])),bm:Int32Array.from(rs.map(e=>e[1])),cx:Int8Array.from(S[t][r].map(e=>e[0])),cy:Int8Array.from(S[t][r].map(e=>e[1])),cells:S[t][r].map(([x,y])=>[x,y]),minx,maxx,miny,maxy})}}return SLOT}
+ // speed (2026-11-29, user: v1v2v3の性能をそのまま判断処理の向上): same answers, less work — spots already tried are marked
+ // in a stamp array (no Set per rotation), shape rows are typed arrays, and the search ends once the top value is found
+ const SLOT_SEEN=new Int32Array(64*128);let SLOT_STAMP=0;
  function spinSlotBonus(rows,node,seq,P){
   const H=rows.length,have=new Set(),SL=slotShapes();if(node.hold)have.add(node.hold);
   for(let i=node.qi;i<Math.min(seq.length,node.qi+(P.spinLook||3));i++)have.add(seq[i]);
@@ -267,16 +273,17 @@
   if(!covs.length||!near)return 0;
   // cell mask of the piece at x (shift from the +3 base); outside the board = blocked
   const fits=(sh,x,y)=>{if(x+sh.minx<0||x+sh.maxx>=W||y+sh.maxy>=H)return false;
-   for(const [dy,b] of sh.rows){const yy=y+dy;if(yy<0)continue;const m=x>=3?b<<(x-3):b>>(3-x);if(rows[yy]&m)return false}return true};
-  let best=0;
+   const dy=sh.dy,bm=sh.bm;for(let i=0;i<dy.length;i++){const yy=y+dy[i];if(yy<0)continue;const b=bm[i],m=x>=3?b<<(x-3):b>>(3-x);if(rows[yy]&m)return false}return true};
+  let best=0,top1=0;for(let i=1;i<=3;i++){const v=P.spinSlot[i]||0;if(v>top1)top1=v}
   for(const type of have){const shs=SL[type];if(!shs)continue;
-   for(let r=0;r<4;r++){const sh=shs[r];
+   for(let r=0;r<4;r++){const sh=shs[r],cxs=sh.cx,cys=sh.cy,dy=sh.dy,bm=sh.bm;
     // only spots where a piece cell sits in a covered cell
-    const tried=new Set();
-    for(let k=0;k<covs.length;k+=2)for(const [cx,cy] of sh.cells){const x=covs[k]-cx,y=covs[k+1]-cy,key=x*64+y;if(tried.has(key))continue;tried.add(key);
+    if(++SLOT_STAMP>2e9){SLOT_SEEN.fill(0);SLOT_STAMP=1}const stamp=SLOT_STAMP;
+    for(let k=0;k<covs.length;k+=2)for(let j=0;j<cxs.length;j++){const x=covs[k]-cxs[j],y=covs[k+1]-cys[j],key=(x+16)*128+(y+16);
+     if(key>=0&&key<SLOT_SEEN.length){if(SLOT_SEEN[key]===stamp)continue;SLOT_SEEN[key]=stamp}
      if(!fits(sh,x,y)||fits(sh,x,y+1)||fits(sh,x,y-1)||fits(sh,x-1,y)||fits(sh,x+1,y))continue;
-     let lines=0;for(const [dy,b] of sh.rows){const yy=y+dy;if(yy<0)continue;const m=x>=3?b<<(x-3):b>>(3-x);if((rows[yy]|m)===FULL)lines++}
-     if(!lines)continue;const v=P.spinSlot[Math.min(3,lines)]||0;if(v>best)best=v}}}
+     let lines=0;for(let i=0;i<dy.length;i++){const yy=y+dy[i];if(yy<0)continue;const b=bm[i],m=x>=3?b<<(x-3):b>>(3-x);if((rows[yy]|m)===FULL)lines++}
+     if(!lines)continue;const v=P.spinSlot[Math.min(3,lines)]||0;if(v>best){best=v;if(best>=top1)return best}}}}
   return best}
  // ---- Butter v3: mid-game T-spin templates (user 2026-11-27: この地形だったら tspin の途中テンプレ何が組めるかで火力を上げる) ----
  // setTemplates([[name, rows top first, '/' between]]): letters = the template's pieces (T = the T-spin), # = base, X = surface,
@@ -437,7 +444,7 @@
     if(P.b2bBreak&&r.lines){const special=p.spin||r.lines===4;
      // free to break when in danger (stack + waiting garbage at breakSafe) or when the released charge kills (oppRoom)
      const kills=P.oppRoom!=null&&P.charging&&node.b2b>P.chargeAt&&node.b2b-P.chargeAt+P.chargeBase>=P.oppRoom;
-     let t0=0;{const h0=heightsOf(node.rows);for(let x=0;x<W;x++)if(h0[x]>t0)t0=h0[x]}const danger=t0+node.pend>=P.breakSafe;
+     let t0=node._top;if(t0===undefined){t0=0;const h0=heightsOf(node.rows);for(let x=0;x<W;x++)if(h0[x]>t0)t0=h0[x];node._top=t0}const danger=t0+node.pend>=P.breakSafe;
      // and cash it now, not later (the search has no discount, so waiting looked as good)
      if((kills||danger)&&!special&&node.b2b>P.chargeAt&&P.charging)rew+=3000*Math.max(0,1-.3*node.depth);
      if(!special&&node.b2b>0&&!kills&&!danger){rew-=P.b2bBreak;brk=true}
