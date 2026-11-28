@@ -104,10 +104,8 @@ select { font: inherit; background: #262a38; color: var(--text); border: 1px sol
       <div class="row"><button id="edFind">この形で探す</button><button id="edClear">消す</button></div>
       <div id="edHits" class="choices" style="margin-top:8px"></div>
     </div>
-    <div class="panel row">
-      <input type="hidden" id="speed" value="400"><!-- 速さはふつうのみ (user 2026-11-29) -->
-      <label><input type="checkbox" id="mirror" checked> 左右反転も出す</label>
-    </div>
+    <!-- 速さはふつう、左右反転はあり、どちらも変えられない (user 2026-11-29) -->
+    <input type="hidden" id="speed" value="400"><input type="checkbox" id="mirror" checked style="display:none">
     <div class="dim quizOnly">AI がテンプレの形を組んで、T-spin まで撃ちます。早く当てるほど高得点(組み終わる前に当てると +1)。</div>
   </div>
   <div class="dim" id="otherRow" style="margin-top:8px"><a id="other" style="color:var(--acc)"></a></div>
