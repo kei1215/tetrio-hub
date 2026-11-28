@@ -110,6 +110,8 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
  // native WarningSiren / HyperTopoutWarning sounds and HoldWarning (client.js fix_warn_toggles).
  const warnState=()=>{window.__qpWarn={sound:localStorage.getItem('qp-local-warn-sound')==='1',piece:localStorage.getItem('qp-local-warn-piece')==='1'}};warnState();
  for(const [key,label] of [['qp-local-warn-sound','警告音'],['qp-local-warn-piece','警告ミノ'],['qp-local-rise-line','せり上がり予告線'],['qp-local-tl-score-rise','TL点数の+1演出'],['qp-local-tl-scoreslide','TL勝敗後の点数画面'],['qp-local-tl-music','TLの曲']]){const row=document.createElement('label'),input=document.createElement('input');row.style.display='block';input.type='checkbox';input.checked=localStorage.getItem(key)==='1';input.addEventListener('change',()=>{localStorage.setItem(key,input.checked?'1':'0');warnState()});row.append(input,' '+label);localSettings.appendChild(row)}
+ // user 2026-11-29 (finesse をオフにする機能がない): the bot's human finesse in saved replays, ON unless set to '0'
+ {const row=document.createElement('label'),input=document.createElement('input');row.style.display='block';input.type='checkbox';input.checked=localStorage.getItem('qp-bot-human-finesse')!=='0';input.addEventListener('change',()=>localStorage.setItem('qp-bot-human-finesse',input.checked?'1':'0'));row.append(input,' BOTの人間らしい操作 (finesse・リプレイ)');localSettings.appendChild(row)}
  const replaySettings=document.createElement('details');replaySettings.id='local-replay-settings';const replaySettingsTitle=document.createElement('summary');replaySettingsTitle.textContent='リプレイ表示設定';replaySettings.appendChild(replaySettingsTitle);
  const replayToggle=(label,key,enabled=true)=>{const row=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.checked=localStorage.getItem(key)!==(enabled?'0':'1');input.addEventListener('change',()=>{localStorage.setItem(key,input.checked?'1':'0');window.dispatchEvent(new CustomEvent('qp-replay-settings-changed',{detail:{key,value:input.checked}}))});row.append(label,input);replaySettings.appendChild(row);return input};
  replayToggle('QPリプレイ背景', 'qp-replay-qp-background-v1');
@@ -168,7 +170,7 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
   return LocalNative.solo(mode,aiName);
  });
  const qp=document.createElement('div');qp.id='game_qp_offline';qp.className='scroller_item has_image has_description ns';
- const icon=document.createElement('img');icon.src='https://kei1215.github.io/tetrio-hub/bookmarklets/offline-va5.24/qpo.svg';icon.alt='';qp.appendChild(icon);
+ const icon=document.createElement('img');icon.src='https://kei1215.github.io/tetrio-hub/bookmarklets/offline-va5.25/qpo.svg';icon.alt='';qp.appendChild(icon);
  const qpTitle=document.createElement('h1');qpTitle.textContent='QP OFFLINE';qp.appendChild(qpTitle);
  const qpHint=document.createElement('p');qpHint.textContent='LOCAL ONLY · NO OPPONENTS · NO KILLS';qp.appendChild(qpHint);
  const zenithMenu=document.getElementById('zenithmenu');

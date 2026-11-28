@@ -3003,9 +3003,22 @@
       const openers = TPLS && data && data.openers ? data.openers.flatMap((o) => o.mirror ? [o, { ...o, rows: o.rows.map(rev), empty: (o.empty || []).map(rev), book: revBook(o.book) }] : [o]) : null;
       const like = data ? { openers, pickBeta: data.beta || 0, misdrop: 0 } : {};
       let live = false, lastCells = -1, ready = null, follow = null, keepTpl = null, v3open = null, fireLeft = 0, v3moves = null;
-      const V3LIB = TPLS && !EMBED ? opener_lib_default.flatMap((o) => [{ ...o, mirror: false }, { ...o, name: o.name + " (\u53CD\u8EE2)", mirror: false, rows: o.rows.map(rev), empty: (o.empty || []).map(rev), book: revBook(o.book) }]) : null;
+      const bottomHoles = (o) => {
+        const R = o.rows, E = o.empty || [];
+        let h = 0;
+        for (let x = 0; x < 10; x++) {
+          if (R[0] >> x & 1 || (E[0] || 0) >> x & 1) continue;
+          for (let k = 1; k < R.length; k++) if (R[k] >> x & 1) {
+            h++;
+            break;
+          }
+        }
+        return h;
+      };
+      const V3LIB = TPLS && !EMBED ? opener_lib_default.filter((o) => bottomHoles(o) < 4).flatMap((o) => [{ ...o, mirror: false }, { ...o, name: o.name + " (\u53CD\u8EE2)", mirror: false, rows: o.rows.map(rev), empty: (o.empty || []).map(rev), book: revBook(o.book) }]) : null;
       const pickOpener = (input) => {
-        const seq = [input.current, ...input.queue || []].filter(Boolean), tried = /* @__PURE__ */ new Set(), order = V3LIB.slice().sort(() => Math.random() - 0.5);
+        const seq = [input.current, ...input.queue || []].filter(Boolean), tried = /* @__PURE__ */ new Set(), all = V3LIB.slice().sort(() => Math.random() - 0.5);
+        const short = input.opponent ? all.filter((o) => (o.book || []).length <= 9) : [], order = short.concat(all);
         for (const strict of [true, false]) {
           tried.clear();
           for (const o of order) {
@@ -3067,6 +3080,22 @@
           }
           const fol = follow ? { followBias: follow.bias } : {};
           const fol0 = live && ready && ready.then && ready.then.length ? { followKind: ready.then[0], protect: ready.empty || null } : {};
+          let tplDanger = false;
+          if (V3LIB && inc > 0) {
+            let top = 0;
+            for (let y = 0; y < H; y++) if (board[y].some(Boolean)) {
+              top = H - y;
+              break;
+            }
+            if (top + inc >= (Number(globalThis.__V3TH) || 8)) {
+              tplDanger = true;
+              if (v3open) {
+                if (globalThis.__V3DBG) console.log("v3 opener dropped for garbage", v3open.name, top, inc);
+                v3open = null;
+                v3moves = null;
+              }
+            }
+          }
           let fixed = null;
           if (V3LIB && !input.human && (v3open || fireLeft > 0)) {
             const known = [input.current, ...input.queue || []].filter(Boolean), bb = board.map((r) => r.map(Boolean)).reverse();
@@ -3110,7 +3139,7 @@
           const job = fixed ? null : import_ai_tree_planner.default.create(
             null,
             { board, falling: input.current, hold: input.hold || null, queue: (input.queue || []).slice(0, 13), holdAllowed: true, b2b: Math.max(0, input.b2b | 0), combo: Math.max(0, input.combo | 0) },
-            { ...opts, ...like, ...fol0, ...fol, ...fol0.followKind || fol.followBias ? { maxTail: 5 } : {}, ...keepTpl ? { tplKeep: keepTpl } : {}, openers: openersNow(), openLive: live && !!openersNow(), ...input.human ? { maxTail: 2, pickBeta: 0 } : {}, ...input.rules || {}, ...input.opponent ? { oppRoom: Math.max(0, 20 - (Number(input.opponent.height) || 0) - (Number(input.opponent.incoming) || 0)) } : {}, ms: 1e9, maxIters: input.human ? itersHuman : itersOf(input), incoming: inc, gRows: g, seed: (Date.now() & 65535) + 1 }
+            { ...opts, ...like, ...fol0, ...fol, ...fol0.followKind || fol.followBias ? { maxTail: 5 } : {}, ...keepTpl ? { tplKeep: keepTpl } : {}, openers: openersNow(), openLive: live && !!openersNow(), ...tplDanger ? { tplW: 0, tplDone: 0, tplKeep: null } : {}, ...input.human ? { maxTail: 2, pickBeta: 0 } : {}, ...input.rules || {}, ...input.opponent ? { oppRoom: Math.max(0, 20 - (Number(input.opponent.height) || 0) - (Number(input.opponent.incoming) || 0)) } : {}, ms: 1e9, maxIters: input.human ? itersHuman : itersOf(input), incoming: inc, gRows: g, seed: (Date.now() & 65535) + 1 }
           );
           const conv = (p) => {
             if (!p) return null;
