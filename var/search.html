@@ -26,9 +26,6 @@ button.ng { background: #432428; border-color: var(--ng); }
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 select { font: inherit; background: #262a38; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
 #score { font-size: 18px; font-weight: 700; }
-#pad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 8px; max-width: 420px; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
-#pad button { padding: 14px 0; font-size: 18px; font-weight: 700; }
-#pad .drop { background: #3a3220; border-color: var(--acc); }
 /* phone (user 2026-11-29: iPhone でもできる UI): one column, the board sized to the screen, the choices right under it */
 @media (max-width: 760px) {
   body { font-size: 14px; }
@@ -44,7 +41,6 @@ select { font: inherit; background: #262a38; color: var(--text); border: 1px sol
   #otherRow { order: 9; }
   .panel { margin-bottom: 0; }
   .choices button { padding: 12px 6px; }
-  #pad { width: 100%; }
 }
 </style>
 </head>
@@ -52,16 +48,16 @@ select { font: inherit; background: #262a38; color: var(--text); border: 1px sol
 <div id="start" style="position:fixed;inset:0;background:rgba(10,11,16,.92);display:flex;align-items:center;justify-content:center;z-index:9;padding:16px">
   <div class="panel" style="max-width:420px;width:100%">
     <h2 style="margin:0 0 8px">開幕テンプレ当て</h2>
-    <div class="dim">100問解くと点数がランキングに載ります。名前を出すか選んでください。</div>
-    <div class="row" style="margin-top:10px"><input id="startName" maxlength="32" placeholder="ランキングに出す名前" style="flex:1;font:inherit;padding:8px;background:#262a38;color:var(--text);border:1px solid var(--line);border-radius:6px"></div>
-    <div class="row" style="margin-top:10px"><button id="startNamed">この名前で始める</button><button id="startAnon">名前を書かないで始める</button></div>
+    <div class="dim">100問解くと点数がランキングに載ります。挑戦する言葉と、Discord でログインするかを選んでください。</div>
+    <div class="row" style="margin-top:10px"><b>挑戦</b><label><input type="radio" name="qmode" value="ja" checked> 日本語の名前</label><label><input type="radio" name="qmode" value="en"> 英語の名前</label></div>
+    <div class="row" style="margin-top:10px"><button id="startDiscord" style="background:#3c45a5;border-color:#5865f2">Discord でログインして始める</button><button id="startAnon">名前なし(anon)で始める</button></div>
+    <div class="dim" id="dcInfo" style="margin-top:4px"></div>
+    <div class="dim" style="margin-top:4px">ランキングの名前は Discord のユーザー名だけです(ログインした人のみ)。ログインしないと anon で載ります。</div>
     <div class="dim" id="startMsg"></div>
   </div>
 </div>
 <main>
-  <div id="left"><canvas id="cv" width="420" height="600"></canvas>
-    <div id="pad" style="display:none"><button data-k="KeyC">HOLD</button><button data-k="KeyZ">⟲</button><button data-k="KeyA">180</button><button data-k="ArrowUp">⟳</button>
-      <button data-k="ArrowLeft" data-rep="1">←</button><button data-k="ArrowDown">↓</button><button data-k="ArrowRight" data-rep="1">→</button><button data-k="Space" class="drop">DROP</button></div></div>
+  <div id="left"><canvas id="cv" width="420" height="600"></canvas></div>
   <div id="right">
     <h1 id="ttl">開幕テンプレ当て</h1>
     <div class="panel pScore">
@@ -78,7 +74,7 @@ select { font: inherit; background: #262a38; color: var(--text); border: 1px sol
     </div>
     <div class="panel quizOnly">
       <div class="row" style="justify-content:space-between"><b>ランキング(100問)</b><button id="rkReload">更新</button></div>
-      <div id="rkTabs" class="row" style="margin-top:6px"><label><input type="radio" name="rk" value="ja" checked> 日本語名のみ</label><label><input type="radio" name="rk" value="en"> 英語名あり</label></div>
+      <div id="rkTabs" class="row" style="margin-top:6px"><label><input type="radio" name="rk" value="ja" checked> 日本語の名前</label><label><input type="radio" name="rk" value="en"> 英語の名前</label></div>
       <ol id="rkList" style="margin:8px 0 0;padding-left:2em;max-height:260px;overflow:auto"></ol>
     </div>
     <div class="panel" id="fixPanel" style="display:none">
@@ -86,7 +82,7 @@ select { font: inherit; background: #262a38; color: var(--text); border: 1px sol
       <div class="row" style="margin-top:6px"><input id="fixName" maxlength="60" placeholder="正しい名前" style="flex:1;font:inherit;padding:6px;background:#262a38;color:var(--text);border:1px solid var(--line);border-radius:6px"></div>
       <div class="row" style="margin-top:6px"><input id="fixNote" maxlength="400" placeholder="メモ(どこが違うか、fumen の URL など)" style="flex:1;font:inherit;padding:6px;background:#262a38;color:var(--text);border:1px solid var(--line);border-radius:6px"></div>
       <div class="row" style="margin-top:6px"><button id="fixBuild">ミノで正しい盤面を組む</button><button id="fixUndo">1手戻す</button><button id="fixSend">修正を送る</button></div>
-      <div class="dim" id="fixHelp" style="display:none">左の盤面でキー操作: ← → 移動 / ↓ ソフトドロップ / ↑・X 右回転 / Z 左回転 / A 180° / C・Shift ホールド / Space ハードドロップ</div>
+      <div class="dim" id="fixHelp" style="display:none">左の盤面でキー操作: <span class="plHelp"></span>(感度とキーはテンプレ検索ページの「操作設定」で変えられます)</div>
       <div class="dim" id="fixMsg"></div>
     </div>
     <div class="panel findOnly">
@@ -94,9 +90,10 @@ select { font: inherit; background: #262a38; color: var(--text); border: 1px sol
       <div id="hits" class="choices" style="margin-top:8px"></div>
     </div>
     <div class="panel findOnly">
-      <div class="dim">ミノで組んで探す: 左の盤面で自分でミノを動かして組み、その形に近いテンプレを探します。<br>← → 移動 / ↓ ソフトドロップ / ↑・X 右回転 / Z 左回転 / A 180° / C・Shift ホールド / Space ハードドロップ</div>
+      <div class="dim">ミノで組んで探す: 左の盤面で自分でミノを動かして組み、その形に近いテンプレを探します。<br><span class="plHelp"></span></div>
       <div class="row" style="margin-top:8px"><button id="plStart">組み始める</button><button id="plUndo">1手戻す</button><button id="plFind">この盤面で探す</button></div>
       <div id="plHits" class="choices" style="margin-top:8px"></div>
+      <details style="margin-top:10px"><summary>操作設定(TETR.IO と同じ ARR / DAS / DCD / SDF、キー)</summary><div id="hdBox" style="margin-top:8px"></div></details>
       <div class="dim" style="margin-top:10px">新しいテンプレの登録: 組んだ盤面(T-spin の穴は空けたまま)と名前を送ってください。あとで登録します</div>
       <div class="row" style="margin-top:6px"><input id="regName" maxlength="60" placeholder="テンプレの名前" style="flex:1;font:inherit;padding:6px;background:#262a38;color:var(--text);border:1px solid var(--line);border-radius:6px"><button id="regSend">この盤面を登録に送る</button></div>
       <div class="dim" id="regMsg"></div>
@@ -110,7 +107,6 @@ select { font: inherit; background: #262a38; color: var(--text); border: 1px sol
     <div class="panel row">
       <label>速さ <select id="speed"><option value="700">ゆっくり</option><option value="400" selected>ふつう</option><option value="180">はやい</option></select></label>
       <label><input type="checkbox" id="mirror" checked> 左右反転も出す</label>
-      <label class="quizOnly"><input type="checkbox" id="eng"> 英語名のテンプレも出す</label>
     </div>
     <div class="dim quizOnly">AI がテンプレの形を組んで、T-spin まで撃ちます。早く当てるほど高得点(組み終わる前に当てると +1)。</div>
   </div>
@@ -264,6 +260,10 @@ if (typeof module !== "undefined") module.exports = QUIZ;
 <script>
 // Japanese names only (user 2026-11-28: 日本語の名前を書く / 日本語の名前が存在するもののみ), taken from the Hard Drop wiki pages
 const label = (n) => n;
+// 日本語 / 英語 の挑戦 (user 2026-11-29: 最初に日本語か英語どっち挑戦するか選べるように): 日本語 = 日本語名のあるテンプレを日本語名で、
+// 英語 = 全部のテンプレを英語名で。ランキングも別
+let QMODE = "ja";
+const nameOf = (t) => (QMODE === "en" ? t.en || t.name : t.name);
 const $ = (id) => document.getElementById(id);
 const COL = { i: "#3fc6e8", o: "#f2c94c", t: "#b06ce8", s: "#5fd35f", z: "#ef5b5b", j: "#4a72e8", l: "#f2994a" };
 const cv = $("cv"), cx = cv.getContext("2d"), CS = 26, OX = 90, OY = 20, VIS = 21;
@@ -281,22 +281,21 @@ let sent100 = false, right = 0;
 function send100() { if (sent100 || SEARCH || !/^https:\/\/discord\.com\/api\/webhooks\//.test(QHOOK)) return; sent100 = true;
   // the name chosen on the start screen (user 2026-11-29: 始める前に名前を書くか書かないか); the ranking is kept in GAS,
   // Discord only gets a copy
-  const name = QNAME || "名無し";
-  fetch(QGAS, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ kind: "quiz", name: QNAME, score, right, total: 100, eng: engUsed }) })
+  const name = QNAME || "anon";
+  fetch(QGAS, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ kind: "quiz", name: QDC ? QNAME : "", score, right, total: 100, eng: engUsed, dtoken: DC && QDC ? DC.t : "" }) })
     .then((r) => r.json()).then((d) => { $("sent").textContent = d.ok ? "ランキングに載りました" + (d.rank ? "(" + d.rank + " 位)" : "") : "ランキングに送れませんでした: " + (d.text || ""); if (!d.ok) sent100 = false; loadRanking(); })
     .catch(() => { $("sent").textContent = "ランキングに送れませんでした"; sent100 = false; });
-  const fd = new FormData(); fd.append("payload_json", JSON.stringify({ content: `開幕テンプレ当て 100問  ${name}: ${score} 点 (正解 ${right} 問 / 満点 200)${engUsed ? " 英語名あり" : ""}`, allowed_mentions: { parse: [] } }));
+  const fd = new FormData(); fd.append("payload_json", JSON.stringify({ content: `開幕テンプレ当て 100問  ${name}${DC && QDC ? " (Discord)" : ""}: ${score} 点 (正解 ${right} 問 / 満点 200)${engUsed ? " (英語の名前)" : " (日本語の名前)"}`, allowed_mentions: { parse: [] } }));
   fetch(QHOOK, { method: "POST", body: fd }).catch(() => {}); }
 const QGAS = "https://script.google.com/macros/s/AKfycbzuV-7E7Mn72jK30716SVxOER6YvZjhmAsuY7fImHqVxlthW000_VyA3GQnSdOjypYK_A/exec";
 let QNAME = "", rkItems = [];
 function renderRanking() { const eng = document.querySelector('input[name="rk"]:checked').value === "en", box = $("rkList"); box.innerHTML = "";
   const list = rkItems.filter((it) => !!it.eng === eng).slice(0, 100);
   if (!list.length) { box.innerHTML = '<li class="dim" style="list-style:none">まだありません</li>'; return; }
-  for (const it of list) { const li = document.createElement("li"); li.textContent = (it.name || "名無し") + "  " + it.score + " 点(正解 " + it.right + ")"; box.appendChild(li); } }
+  for (const it of list) { const li = document.createElement("li"); li.textContent = (it.name || "anon") + (it.d ? " ✓" : "") + "  " + it.score + " 点(正解 " + it.right + ")"; box.appendChild(li); } }
 function loadRanking() { fetch(QGAS + "?quiz=1").then((r) => r.json()).then((d) => { rkItems = d.ok ? d.items : []; renderRanking(); }).catch(() => { $("rkList").innerHTML = '<li class="dim" style="list-style:none">読み込めませんでした</li>'; }); }
 let score = 0, total = 0, cur = null, timer = null, stepI = 0, answered = false;
 function draw(st) {
-  try { if (!PL.on) $("pad").style.display = "none"; } catch {}
   cx.fillStyle = "#0b0c11"; cx.fillRect(0, 0, cv.width, cv.height);
   cx.strokeStyle = "#1c1f2a"; for (let x = 0; x <= 10; x++) { cx.beginPath(); cx.moveTo(OX + x * CS, OY); cx.lineTo(OX + x * CS, OY + VIS * CS); cx.stroke(); }
   for (let y = 0; y <= VIS; y++) { cx.beginPath(); cx.moveTo(OX, OY + y * CS); cx.lineTo(OX + 10 * CS, OY + y * CS); cx.stroke(); }
@@ -315,16 +314,16 @@ function draw(st) {
 // choices are never the same template (user 2026-11-29: アルバトロスSP その2 / その3 / その4 が並ぶ)
 const base = (n) => n.replace(/ その\d+$/, "");
 function pickChoices(t) {
-  const others = [...new Set(TPL.map((x) => base(x.name)))].filter((n) => n !== base(t.name)).sort(() => Math.random() - 0.5).slice(0, 3);
-  return [base(t.name), ...others].sort(() => Math.random() - 0.5);
+  const others = [...new Set(TPL.map((x) => base(nameOf(x))))].filter((n) => n !== base(nameOf(t))).sort(() => Math.random() - 0.5).slice(0, 3);
+  return [base(nameOf(t)), ...others].sort(() => Math.random() - 0.5);
 }
 function newQuestion() {
-  $("fixPanel").style.display = "none"; if (typeof fixBoard !== "undefined") { fixBoard = false; PL.on = false; $("fixHelp").style.display = "none"; } TPL = $("eng").checked ? ALL : TPLJ; if ($("eng").checked) engUsed = true;
+  $("fixPanel").style.display = "none"; if (typeof fixBoard !== "undefined") { fixBoard = false; PL.on = false; $("fixHelp").style.display = "none"; } TPL = QMODE === "en" ? ALL : TPLJ; engUsed = QMODE === "en";
   playId++; answered = false; $("result").textContent = ""; $("state").textContent = "AI が組んでいます…";
   let built = null, t = null;
   for (let k = 0; k < 20 && !built; k++) { t = TPL[Math.floor(Math.random() * TPL.length)]; const use = $("mirror").checked && Math.random() < 0.5 ? flip(t) : t; built = QUIZ.build(use, Math.floor(Math.random() * 1e6)); }
   if (!built) { $("state").textContent = "組めるテンプレが見つかりませんでした"; return; }
-  if (total >= 100) send100(); cur = { t, built, choices: pickChoices(t) }; total++;
+  if (total >= 100) send100(); cur = { t, built, choices: pickChoices(t), seen: 0 }; total++;
   const box = $("choices"); box.innerHTML = "";
   for (const n of cur.choices) { const b = document.createElement("button"); b.textContent = label(n); b.onclick = () => answer(n, b); box.appendChild(b); }
   play(); renderScore();
@@ -333,21 +332,23 @@ function newQuestion() {
 // drops on the board as it was, then the piece locks
 let playId = 0;
 async function play() {
-  const id = ++playId; stepI = 0; draw(null); const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const id = ++playId; stepI = 0; draw(null); $("again").disabled = true; const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const steps = cur.built.steps; let prev = null;
   for (let i = 0; i < steps.length; i++) {
     const st = steps[i], sp = Number($("speed").value), fr = Math.max(25, Math.round(sp / 10));
     const before = prev || { board: Array.from({ length: 24 }, () => Array(10).fill(null)) };
     if (st.frames) for (const f of st.frames) { if (id !== playId) return; draw({ ...before, held: st.held, next: st.next, spin: 0, cells: null, lines: 0, falling: f, ft: st.t }); await wait(fr); }
-    if (id !== playId) return; stepI = i + 1; draw(st); $("sub").textContent = stepI + " 手目"; prev = st; await wait(sp);
+    if (id !== playId) return; stepI = i + 1; cur.seen = Math.max(cur.seen || 0, stepI); draw(st); $("sub").textContent = stepI + " 手目"; prev = st; await wait(sp);
   }
+  if (id === playId) $("again").disabled = false;
   if (id === playId) $("state").textContent = "撃ち切りました" + (answered ? "" : " — どれでしょう?");
 }
 function answer(n, btn) {
-  if (answered) return; answered = true; const okName = base(cur.t.name), early = stepI < cur.built.steps.length && !cur.built.steps.slice(0, stepI).some((s) => s.spin);
+  // the +2 counts the furthest the AI ever got on this question, so watching again does not bring the +2 back
+  if (answered) return; answered = true; const okName = base(nameOf(cur.t)), seen = cur.seen || stepI, early = seen < cur.built.steps.length && !cur.built.steps.slice(0, seen).some((s) => s.spin);
   for (const b of $("choices").children) { b.disabled = true; if (b.textContent === label(okName)) b.classList.add("ok"); }
-  if (n === okName) { right++; score += early ? 2 : 1; $("result").textContent = "正解!" + (cur.t.name !== okName ? "(" + cur.t.name + ")" : "") + (early ? "(組み終わる前に当てたので +2)" : ""); $("result").style.color = "var(--ok)"; }
-  else { btn.classList.add("ng"); $("result").textContent = "ざんねん、正解は " + label(okName) + (cur.t.name !== okName ? "(" + cur.t.name + ")" : ""); $("result").style.color = "var(--ng)"; }
+  if (n === okName) { right++; score += early ? 2 : 1; $("result").textContent = "正解!" + (nameOf(cur.t) !== okName ? "(" + nameOf(cur.t) + ")" : "") + (early ? "(組み終わる前に当てたので +2)" : ""); $("result").style.color = "var(--ok)"; }
+  else { btn.classList.add("ng"); $("result").textContent = "ざんねん、正解は " + label(okName) + (nameOf(cur.t) !== okName ? "(" + nameOf(cur.t) + ")" : ""); $("result").style.color = "var(--ng)"; }
   renderScore(); if (total === 100) send100(); showFix();
 }
 function renderScore() { $("score").textContent = score + " 点 / " + total + " 問"; }
@@ -396,7 +397,7 @@ const plCells = (t = PL.t, x = PL.x, y = PL.y, r = PL.r) => QUIZ.TSH[t][r].map((
 const plOk = (c) => c.every(([a, b]) => a >= 0 && a < 10 && b >= 0 && (b >= QUIZ.H || PL.B[b][a] === null));
 function plFill() { while (PL.q.length < 8) PL.q.push(...QUIZ.bagSeq(PL.seed + PL.n++, 7).slice(0, 7)); }
 function plSpawn(t) { PL.t = t; PL.x = t === "o" ? 4 : 3; PL.y = 3; PL.r = 0; if (!plOk(plCells())) { PL.on = false; $("state").textContent = "埋まりました。「組み始める」でやり直し"; } }
-function plDraw() { $("pad").style.display = PL.on ? "" : "none"; let gy = PL.y; while (plOk(plCells(PL.t, PL.x, gy + 1, PL.r))) gy++;
+function plDraw() { let gy = PL.y; while (plOk(plCells(PL.t, PL.x, gy + 1, PL.r))) gy++;
   draw({ board: PL.B, falling: plCells(), ft: PL.t, cells: plCells(PL.t, PL.x, gy, PL.r), held: PL.held, next: PL.q.slice(0, 5) }); }
 function plStart() { if (timer) { clearTimeout(timer); timer = null; } playId++; PL.B = Array.from({ length: QUIZ.H }, () => Array(10).fill(null)); PL.seed = Math.floor(Math.random() * 1e6); PL.n = 0; PL.q = []; PL.held = null; PL.held0 = false; PL.hist = []; plFill();
   PL.on = true; plSpawn(PL.q.shift()); plFill(); $("state").textContent = "組んでいます(キーで操作)"; $("plHits").innerHTML = ""; plDraw(); }
@@ -408,29 +409,73 @@ function plDrop() { PL.hist.push({ B: PL.B.map((r) => r.slice()), t: PL.t, held:
   const kept = PL.B.filter((r) => r.some((v) => v === null)); while (kept.length < QUIZ.H) kept.push(Array(10).fill(null)); PL.B = kept;
   PL.held0 = false; plSpawn(PL.q.shift()); plFill(); }
 $("plStart").onclick = plStart;
-$("plUndo").onclick = () => { const h = PL.hist.pop(); if (!h) return; PL.B = h.B; PL.held = h.held; PL.q = h.q; PL.n = h.n; PL.held0 = false; PL.on = true; plSpawn(h.t); plDraw(); };
 $("plFind").onclick = () => { if (!PL.B) { $("plHits").textContent = "先に「組み始める」で組んでください"; return; }
   findShape(PL.B.slice(0, 9).map((r) => r.reduce((m, v, x) => (v ? m | 1 << x : m), 0)), $("plHits")); };
-// on-screen buttons for phones: the same moves as the keys; ← → repeat while held
-for (const b of document.querySelectorAll("#pad button")) {
-  let t = null; const fire = () => document.dispatchEvent(new KeyboardEvent("keydown", { code: b.dataset.k, bubbles: true }));
-  b.addEventListener("pointerdown", (ev) => { ev.preventDefault(); fire(); if (b.dataset.rep) t = setTimeout(function again() { fire(); t = setTimeout(again, 60); }, 220); });
-  for (const e of ["pointerup", "pointerleave", "pointercancel"]) b.addEventListener(e, () => { clearTimeout(t); t = null; });
+// handling + key config (user 2026-11-29: テンプレ検索で操作感度を設定、tetrioの選択肢がメイン、操作キーも設定 / control+z 使えない)
+// TETR.IO と同じ単位: ARR・DAS・DCD はフレーム(1F = 1/60 秒)、SDF は倍率(41 = ∞)
+const HD0 = { arr: 2, das: 10, dcd: 1, sdf: 6 };
+const KEY0 = { left: ["ArrowLeft", ""], right: ["ArrowRight", ""], soft: ["ArrowDown", ""], hard: ["Space", ""], cw: ["ArrowUp", "KeyX"], ccw: ["KeyZ", "ControlLeft"], r180: ["KeyA", ""], hold: ["KeyC", "ShiftLeft"], undo: ["", ""] };
+const KNAME = { left: "左移動", right: "右移動", soft: "ソフトドロップ", hard: "ハードドロップ", cw: "右回転", ccw: "左回転", r180: "180°回転", hold: "ホールド", undo: "1手戻す" };
+let HD = { ...HD0 }, KEYS = JSON.parse(JSON.stringify(KEY0));
+try { Object.assign(HD, JSON.parse(localStorage.getItem("pl-handling") || "{}")); const k = JSON.parse(localStorage.getItem("pl-keys") || "{}"); for (const a in KEYS) if (Array.isArray(k[a])) KEYS[a] = [k[a][0] || "", k[a][1] || ""]; } catch {}
+const saveHD = () => { try { localStorage.setItem("pl-handling", JSON.stringify(HD)); localStorage.setItem("pl-keys", JSON.stringify(KEYS)); } catch {} };
+const keyLabel = (c) => !c ? "—" : ({ ArrowLeft: "←", ArrowRight: "→", ArrowUp: "↑", ArrowDown: "↓", Space: "Space", ShiftLeft: "左Shift", ShiftRight: "右Shift", ControlLeft: "左Ctrl", ControlRight: "右Ctrl", AltLeft: "左Alt", AltRight: "右Alt", MetaLeft: "左⌘", MetaRight: "右⌘" })[c] || c.replace(/^Key|^Digit/, "").replace(/^Numpad/, "テンキー");
+const actOf = (code) => Object.keys(KEYS).find((a) => KEYS[a].includes(code));
+function helpText() { return ["left", "right", "soft", "cw", "ccw", "r180", "hold", "hard"].map((a) => KEYS[a].filter(Boolean).map(keyLabel).join("・") + " " + KNAME[a]).join(" / ") + " / Ctrl+Z(⌘+Z) 1手戻す"; }
+let binding = null;
+function hdUI() {
+  const box = $("hdBox"); if (!box) return;
+  const sl = (id, lab, min, max, unit) => `<label class="row" style="gap:6px"><span style="width:5.5em">${lab}</span><input type="range" id="hd_${id}" min="${min}" max="${max}" step="${id === "sdf" ? 1 : 0.1}" value="${HD[id]}" style="flex:1"><span id="hdv_${id}" style="width:6.5em;text-align:right"></span></label>`;
+  box.innerHTML = sl("arr", "ARR", 0, 5) + sl("das", "DAS", 1, 20) + sl("dcd", "DCD", 0, 20) + sl("sdf", "SDF", 5, 41) +
+    `<div class="dim" style="margin:6px 0 4px">キー(押してから新しいキー。Esc で消す)</div><div id="kbBox" style="display:grid;grid-template-columns:auto 1fr 1fr;gap:4px 6px;align-items:center"></div>
+    <div class="row" style="margin-top:8px"><button id="hdReset">TETR.IO の初期設定に戻す</button></div>`;
+  const val = (id) => id === "sdf" ? (HD.sdf >= 41 ? "∞" : HD.sdf + "X") : (+HD[id]).toFixed(1) + "F (" + Math.round(HD[id] * 1000 / 60) + "ms)";
+  for (const id of ["arr", "das", "dcd", "sdf"]) { const r = $("hd_" + id); $("hdv_" + id).textContent = val(id); r.oninput = () => { HD[id] = +r.value; $("hdv_" + id).textContent = val(id); saveHD(); }; }
+  const kb = $("kbBox");
+  for (const a in KEYS) { const l = document.createElement("span"); l.textContent = KNAME[a]; kb.appendChild(l);
+    for (let i = 0; i < 2; i++) { const b = document.createElement("button"); b.style.padding = "4px 6px"; b.textContent = binding && binding.a === a && binding.i === i ? "キーを押す…" : keyLabel(KEYS[a][i]);
+      b.onclick = () => { binding = { a, i }; hdUI(); }; kb.appendChild(b); } }
+  $("hdReset").onclick = () => { HD = { ...HD0 }; KEYS = JSON.parse(JSON.stringify(KEY0)); binding = null; saveHD(); hdUI(); };
+  for (const el of document.querySelectorAll(".plHelp")) el.textContent = helpText();
+}
+// one step of each action
+function plMove(d) { if (plOk(plCells(PL.t, PL.x + d))) { PL.x += d; return true; } return false; }
+function plUndo() { const h = PL.hist.pop(); if (!h) return; PL.B = h.B; PL.held = h.held; PL.q = h.q; PL.n = h.n; PL.held0 = false; PL.on = true; plSpawn(h.t); }
+$("plUndo").onclick = () => { plUndo(); plDraw(); };
+const KS = { dir: 0, dirs: [], das: 0, arr: 0, soft: false, sd: 0, last: 0 };
+function dcd() { if (KS.dir && KS.das >= HD.das && HD.dcd > 0) KS.das = Math.max(0, HD.das - HD.dcd); }
+function plAct(a, ev) {
+  if (a === "left" || a === "right") { const d = a === "left" ? -1 : 1; KS.dirs = KS.dirs.filter((x) => x !== d); KS.dirs.push(d); KS.dir = d; KS.das = 0; KS.arr = 0; plMove(d); }
+  else if (a === "soft") { KS.soft = true; KS.sd = 0; if (HD.sdf >= 41) while (plOk(plCells(PL.t, PL.x, PL.y + 1, PL.r))) PL.y++; else if (plOk(plCells(PL.t, PL.x, PL.y + 1, PL.r))) PL.y++; }
+  else if (a === "cw") { plRot(1); dcd(); } else if (a === "ccw") { plRot(3); dcd(); } else if (a === "r180") { plRot(2); dcd(); }
+  else if (a === "hold") { if (!PL.held0) { const h = PL.held; PL.held = PL.t; if (h) plSpawn(h); else { plSpawn(PL.q.shift()); plFill(); } PL.held0 = true; dcd(); } }
+  else if (a === "hard") { plDrop(); dcd(); }
+  else if (a === "undo") plUndo();
 }
 document.addEventListener("keydown", (ev) => {
-  if (!PL.on || ev.target.tagName === "INPUT" || ev.target.tagName === "SELECT") return;
-  const k = ev.code; let used = true;
-  if (k === "ArrowLeft") { if (plOk(plCells(PL.t, PL.x - 1))) PL.x--; }
-  else if (k === "ArrowRight") { if (plOk(plCells(PL.t, PL.x + 1))) PL.x++; }
-  else if (k === "ArrowDown") { while (plOk(plCells(PL.t, PL.x, PL.y + 1, PL.r))) PL.y++; }
-  else if (k === "ArrowUp" || k === "KeyX") plRot(1);
-  else if (k === "KeyZ" || k === "ControlLeft") plRot(3);
-  else if (k === "KeyA") plRot(2);
-  else if (k === "KeyC" || k === "ShiftLeft" || k === "ShiftRight") { if (!PL.held0 && !ev.repeat) { const h = PL.held; PL.held = PL.t; PL.held0 = true; if (h) plSpawn(h); else { plSpawn(PL.q.shift()); plFill(); } PL.held0 = true; } }
-  else if (k === "Space") { if (!ev.repeat) plDrop(); }
-  else used = false;
-  if (used) { ev.preventDefault(); if (PL.B) plDraw(); }
+  if (binding) { ev.preventDefault(); const { a, i } = binding; const c = ev.code === "Escape" ? "" : ev.code;
+    if (c) for (const o in KEYS) KEYS[o] = KEYS[o].map((x) => (x === c ? "" : x)); KEYS[a][i] = c; binding = null; saveHD(); hdUI(); return; }
+  if (!PL.on || ev.target.tagName === "INPUT" || ev.target.tagName === "SELECT" || ev.target.tagName === "TEXTAREA") return;
+  if ((ev.ctrlKey || ev.metaKey) && ev.code === "KeyZ") { ev.preventDefault(); if (!ev.repeat) { plUndo(); plDraw(); } return; }
+  const a = actOf(ev.code); if (!a) return;
+  ev.preventDefault(); if (ev.repeat) return;
+  plAct(a, ev); if (PL.B) plDraw();
 });
+document.addEventListener("keyup", (ev) => { const a = actOf(ev.code);
+  if (a === "left" || a === "right") { const d = a === "left" ? -1 : 1; KS.dirs = KS.dirs.filter((x) => x !== d); if (KS.dir === d) { KS.dir = KS.dirs[KS.dirs.length - 1] || 0; KS.das = 0; KS.arr = 0; } }
+  else if (a === "soft") KS.soft = false; });
+window.addEventListener("blur", () => { KS.dirs = []; KS.dir = 0; KS.soft = false; });
+// DAS / ARR / soft drop run on a frame clock like TETR.IO (time measured in 1/60 s frames)
+(function tick(now) { const f = KS.last ? Math.min(10, (now - KS.last) * 60 / 1000) : 0; KS.last = now;
+  if (PL.on && PL.B) { let moved = false;
+    if (KS.dir) { const before = KS.das; KS.das += f;
+      if (KS.das >= HD.das) { if (HD.arr <= 0) { while (plMove(KS.dir)) moved = true; }
+        else { KS.arr += before < HD.das ? KS.das - HD.das : f; while (KS.arr >= HD.arr) { KS.arr -= HD.arr; if (plMove(KS.dir)) moved = true; else { KS.arr = 0; break; } } } } }
+    if (KS.soft) { if (HD.sdf >= 41) { while (plOk(plCells(PL.t, PL.x, PL.y + 1, PL.r))) { PL.y++; moved = true; } }
+      else { KS.sd += f * HD.sdf / 20; while (KS.sd >= 1) { KS.sd -= 1; if (plOk(plCells(PL.t, PL.x, PL.y + 1, PL.r))) { PL.y++; moved = true; } else { KS.sd = 0; break; } } } }
+    if (moved) plDraw(); }
+  requestAnimationFrame(tick); })(0);
+hdUI();
 drawEd();
 $("next").onclick = newQuestion; $("again").onclick = () => cur && play();
 // two pages from one file (user 2026-11-28: 検索ページも別に作って): quiz.html = the quiz, search.html = name / shape search
@@ -444,7 +489,7 @@ function sendNote(text, msgEl) {
   const fd = new FormData(); fd.append("payload_json", JSON.stringify({ content: text.slice(0, 1990), allowed_mentions: { parse: [] } }));
   fetch(NHOOK, { method: "POST", body: fd }).then((r) => { $(msgEl).textContent = r.ok ? "送りました。ありがとうございます" : "送れませんでした"; }).catch(() => { $(msgEl).textContent = "送れませんでした"; });
 }
-const who = () => QNAME || "名無し";
+const who = () => QNAME || "anon";
 const clean = (v) => String(v).replace(/[@`]/g, "").trim();
 function showFix() { if (!cur) return; $("fixPanel").style.display = ""; $("fixCur").textContent = "今のテンプレ: " + cur.t.name + (cur.t.en && cur.t.en !== cur.t.name ? " / " + cur.t.en : ""); $("fixMsg").textContent = ""; }
 // the right board built with your own pieces (user 2026-11-29: 操作できないじゃん)
@@ -461,13 +506,32 @@ $("regSend").onclick = () => { const v = clean($("regName").value); if (!v) { $(
   let top = 0; B.forEach((r, y) => { if (r.some(Boolean)) top = y + 1; });
   const rows = B.slice(0, top).reverse().map((r) => r.map((c) => (c ? String(c).toUpperCase() : ".")).join("")).join("\n");
   sendNote(`🆕 テンプレの登録 (${who()})\n名前: ${v}\n\`\`\`\n${rows}\n\`\`\``, "regMsg"); $("regName").value = ""; };
-try { $("startName").value = localStorage.getItem("quiz-name") || ""; } catch {}
+try { const m = localStorage.getItem("quiz-mode"); if (m) document.querySelector('input[name="qmode"][value="' + m + '"]').checked = true; } catch {}
 const cleanName = (v) => String(v).replace(/[\u0000-\u001f<>@`*_~|]/g, "").trim().slice(0, 32);
-function startQuiz(name) { QNAME = name; try { localStorage.setItem("quiz-name", name); } catch {} $("start").style.display = "none";
-  $("nameShow").textContent = name ? "名前: " + name : "名前なしで参加中"; draw(null); newQuestion(); }
-$("startNamed").onclick = () => { const n = cleanName($("startName").value); if (!n) { $("startMsg").textContent = "名前を入れてください"; return; } startQuiz(n); };
+// Discord login (user 2026-11-29: discordログインも追加して): implicit OAuth (scope identify), no secret on the page;
+// GAS checks the token with Discord itself, so the ✓ name cannot be faked
+const DC_ID = "1576269662294118490", DC_URI = location.origin + location.pathname;
+let DC = null, QDC = false;
+try { DC = JSON.parse(localStorage.getItem("quiz-discord") || "null"); if (DC && !(DC.exp > Date.now() + 3600e3)) DC = null; } catch {}
+function dcShow() { $("dcInfo").textContent = DC ? DC.name + " でログイン中" : ""; $("startDiscord").textContent = DC ? "Discord の名前(" + DC.name + ")で始める" : "Discord でログインして始める"; }
+(function dcReturn() { const h = new URLSearchParams(location.hash.slice(1)); if (!h.get("access_token") && !h.get("error")) return;
+  history.replaceState(null, "", location.pathname + location.search);
+  let st = ""; try { st = sessionStorage.getItem("quiz-dc-state") || ""; sessionStorage.removeItem("quiz-dc-state"); } catch {}
+  if (h.get("error") || !st || h.get("state") !== st) { $("startMsg").textContent = "Discord のログインをやめました"; return; }
+  const t = h.get("access_token"), exp = Date.now() + Number(h.get("expires_in") || 0) * 1000;
+  $("startMsg").textContent = "Discord を確認しています…";
+  fetch("https://discord.com/api/v10/users/@me", { headers: { Authorization: "Bearer " + t } }).then((r) => r.json()).then((u) => {
+    if (!u.id) throw 0; DC = { t, exp, id: u.id, name: u.username };
+    try { localStorage.setItem("quiz-discord", JSON.stringify(DC)); } catch {}
+    $("startMsg").textContent = ""; dcShow(); startQuiz(DC.name, true); }).catch(() => { $("startMsg").textContent = "Discord のログインに失敗しました"; }); })();
+$("startDiscord").onclick = () => { if (DC) { startQuiz(DC.name, true); return; }
+  const st = Math.random().toString(36).slice(2) + Date.now().toString(36); try { sessionStorage.setItem("quiz-dc-state", st); } catch {}
+  location.href = "https://discord.com/oauth2/authorize?" + new URLSearchParams({ client_id: DC_ID, response_type: "token", scope: "identify", redirect_uri: DC_URI, state: st, prompt: "none" }); };
+dcShow();
+function startQuiz(name, viaDc) { QDC = !!viaDc; QMODE = document.querySelector('input[name="qmode"]:checked').value; try { localStorage.setItem("quiz-mode", QMODE); } catch {}
+  const rk = document.querySelector('input[name="rk"][value="' + QMODE + '"]'); if (rk) { rk.checked = true; renderRanking(); } QNAME = name;  $("start").style.display = "none";
+  $("nameShow").textContent = (name ? "名前: " + name + (QDC ? "(Discord ✓)" : "") : "名前なし(anon)で参加中") + " / " + (QMODE === "en" ? "英語の名前" : "日本語の名前") + "で挑戦"; draw(null); newQuestion(); }
 $("startAnon").onclick = () => startQuiz("");
-$("startName").onkeydown = (ev) => { if (ev.key === "Enter") $("startNamed").click(); };
 $("rkReload").onclick = loadRanking; for (const r of document.querySelectorAll('input[name="rk"]')) r.onchange = renderRanking;
 for (const el of document.querySelectorAll(SEARCH ? ".quizOnly" : ".findOnly")) el.style.display = "none";
 $("other").href = SEARCH ? "quiz.html" : "search.html"; $("other").textContent = SEARCH ? "開幕テンプレ当てへ" : "テンプレ検索へ";
