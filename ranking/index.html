@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ja">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+        <title>QP PB ランキング</title>
+        <script src="../assets/tools.js"></script>
+        <link href="https://fonts.googleapis.com/css?family=Lora:400,700,400italic,700italic" rel="stylesheet" type="text/css" />
+        <link href="https://fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,700italic,800italic,400,300,600,700,800" rel="stylesheet" type="text/css" />
+        <link rel="stylesheet" href="../assets/clean-blog.css" />
+        <link rel="stylesheet" href="../assets/tools.css" />
+        <style>
+          .rk-tabs{display:flex;flex-wrap:wrap;gap:.4em;margin:1em 0}
+          .rk-tabs button{border:1px solid currentColor;background:none;color:inherit;padding:.35em .9em;border-radius:999px;cursor:pointer}
+          .rk-tabs button[aria-selected="true"]{background:#0085a1;border-color:#0085a1;color:#fff}
+          .rk-filters{display:flex;flex-wrap:wrap;gap:1em;align-items:center;margin-bottom:1em}
+          .rk-table{width:100%;border-collapse:collapse;font-size:.95em}
+          .rk-table th,.rk-table td{padding:.4em .5em;border-bottom:1px solid rgba(128,128,128,.3);text-align:left;white-space:nowrap}
+          .rk-table td.num,.rk-table th.num{text-align:right;font-variant-numeric:tabular-nums}
+          .rk-wrap{overflow-x:auto}
+          .rk-mods{white-space:normal;font-size:.85em;opacity:.85}
+          .rk-combo{margin:1.2em 0 .4em}
+          details.rk-group{margin:.4em 0}
+          details.rk-group summary{cursor:pointer;font-weight:600}
+        </style>
+    </head>
+    <body>
+        <nav class="navbar navbar-expand-lg navbar-light" id="mainNav">
+            <div class="container px-4 px-lg-5">
+                <a class="navbar-brand" href="../">TETR.IO tools</a>
+                <button class="navbar-toggler" type="button" aria-controls="navbarResponsive" aria-expanded="false" aria-label="メニュー">Menu ☰</button>
+                <div class="collapse navbar-collapse" id="navbarResponsive">
+                    <ul class="navbar-nav ms-auto py-4 py-lg-0">
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../">Home</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../spin/">盤面回転</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../replay-edit/">盤面修正</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../replay-video/">MP4変換</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../bookmarklets/">QP OFFLINE・パッチ</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../ranking/">ランキング</a></li>
+                        <li class="nav-item"><button class="nav-link px-lg-3 py-3 py-lg-4" id="themeToggle" type="button">☾ ダーク</button></li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+        <header class="tools-band"></header>
+<main class="container px-4 px-lg-5 tools-main">
+  <section class="my-5">
+    <p class="text-uppercase text-primary fw-bold mb-2">QP OFFLINE</p>
+    <h1 class="display-5 fw-bold">QP PB ランキング</h1>
+    <p class="lead">QP OFFLINE(パッチ・ブックマークレット)で「最初から10F相当」をオンにして出した記録のランキングです。猶予あり(攻撃の来ない時間あり)と猶予なしの2つです。1人1記録(各ランキングでいちばん高いもの)を高さ順に並べます。上位3人はリプレイを見られます。</p>
+    <p>登録のしかた: オフライン(アプリ版・ブラウザ版)の記録一覧で、記録の「ランキングに送る」を押します。確認のあと、記録とリプレイがそのまま送られ、10〜30分ほどで載ります(アカウントは要りません)。送れないときは GitHub の登録ページが開くので、保存されたリプレイ(.ttr.json)を「リプレイ」欄にドラッグして送ってください。記録は自己申告です。</p>
+  </section>
+  <section class="card shadow-sm mb-4"><div class="card-body p-4">
+    <div class="rk-tabs" role="tablist" id="tabs"></div>
+    <div class="rk-filters">
+      <label>モード <select id="fMode"><option value="zenith">通常</option><option value="zenithex">EXPERT</option><option value="all">両方</option></select></label>
+      <label><input type="checkbox" id="fDuo"> DUO 練習も入れる</label>
+    </div>
+    <div id="out" class="rk-wrap"><p>読み込み中…</p></div>
+    <p class="small text-muted mt-3 mb-0" id="count"></p>
+  </div></section>
+</main>
+<script>
+(() => {
+  const MODS = [['expert','EXPERT'],['nohold','NO HOLD'],['messy','MESSY'],['gravity','GRAVITY'],['volatile','VOLATILE'],['doublehole','DOUBLE HOLE'],['invisible','INVISIBLE'],['allspin','ALL-SPIN'],['duo','DUO']];
+  const modName = m => { const base = m.replace(/_reversed$/, ''), n = (MODS.find(x => x[0] === base) || [base, base.toUpperCase()])[1]; return m.endsWith('_reversed') ? '裏' + n : n; };
+  // user 2026-11-16: ランキングは「最初から10F相当」の猶予あり / なしだけ(ほかの表はやめた)
+  const TABS = [['floor10lull','10F相当(猶予あり)'],['floor10nolull','10F相当(猶予なし)']];
+  let records = [], rejected = [], tab = 'floor10lull';
+  const $ = id => document.getElementById(id);
+  const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
+  const fmtTime = ms => { if (!ms) return '-'; const s = ms / 1000, m = Math.floor(s / 60); return m + ':' + (s - m * 60).toFixed(1).padStart(4, '0'); };
+  const base = () => records.filter(r => ($('fMode').value === 'all' || r.mode === $('fMode').value) && !r.bot && r.floor10 && ($('fDuo').checked || r.test === 'solo'));
+  // 1人1記録: いちばん高いもの(同じ高さなら早く出した方)
+  const best = (list, key = r => r.altitude) => {
+    const by = new Map();
+    for (const r of list) { const k = r.user + '\u0000' + (r.bot ? r.engine || 'bot' : ''), cur = by.get(k); if (!cur || key(r) > key(cur) || key(r) === key(cur) && r.id < cur.id) by.set(k, r); }
+    return [...by.values()].sort((a, b) => key(b) - key(a) || a.id - b.id);
+  };
+  // TTR はクリックで保存(user: ttrを押したらダウンロード)。読めないとき(Discord は CORS なし)はそのまま開く(Discord は保存として返す)
+  const dl = (url, name) => fetch(url).then(r => { if (!r.ok) throw 0; return r.blob(); }).then(b => { const u = URL.createObjectURL(b), a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 10000); }).catch(() => { location.href = url; });
+  const table = (list, cols) => {
+    if (!list.length) return el('p', 'まだ記録がありません。');
+    const t = el('table', null, 'rk-table'), head = t.createTHead().insertRow();
+    for (const [label, , cls] of cols) { const th = el('th', label); if (cls) th.className = cls; head.appendChild(th); }
+    const body = t.createTBody();
+    list.forEach((r, i) => { const row = body.insertRow(); for (const [, get, cls] of cols) { const td = row.insertCell(); const v = get(r, i); if (cls === 'replay') { if (v && (/^https:\/\/(cdn|media)\.discordapp\.(com|net)\/attachments\//.test(v) || /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec\?ttr=\d{1,13}(&m=\d{5,25})?$/.test(v))) { const a = el('a', '↓ TTR'); a.href = v; a.onclick = e => { e.preventDefault(); dl(v, 'PB-' + r.name.replace(/[^\w.-]+/g, '_') + '-' + Math.round(r.altitude) + 'm.ttr'); }; td.appendChild(a); } } else td.textContent = v; if (cls && cls !== 'replay') td.className = cls; } });
+    return t;
+  };
+  // 表は順位・名前・高さだけ(user: top3のリプレイと高さのみ表示)。上位3人は Discord に保存したリプレイ(.ttr)へのリンク
+  let API = '';
+  const replayCell = (r, i) => i < 3 && API && (r.discord || r.pending) ? API + '?ttr=' + r.id + (r.discord ? '&m=' + r.discord : '') : '';
+  const COLS = [['#', (r, i) => i + 1, 'num'], ['名前', r => r.name + (r.bot ? ' (BOT' + (r.engine ? ' ' + r.engine : '') + ')' : '')], ['高さ', r => r.altitude.toFixed(1) + ' m', 'num'], ['リプレイ', replayCell, 'replay']];
+  const render = () => {
+    const out = $('out'); out.replaceChildren(); 
+    const list = base();
+    // 猶予あり = 火力が来ない時間(まれに最大10秒)を入れた記録、猶予なし = 入れない今までの間隔。MOD は名前の横に出す
+    const cols = [COLS[0], COLS[1], ['MOD', r => r.mods.length ? r.mods.map(modName).join(' + ') : '-'], COLS[2], COLS[3]];
+    out.appendChild(table(best(list.filter(r => tab === 'floor10lull' ? r.lull !== false : r.lull === false)), cols));
+    $('count').textContent = '登録 ' + records.length + ' 件(この条件 ' + list.length + ' 件)';
+  };
+  for (const [k, label] of TABS) { const b = el('button', label); b.type = 'button'; b.setAttribute('role', 'tab'); b.dataset.k = k; b.onclick = () => { tab = k; for (const x of $('tabs').children) x.setAttribute('aria-selected', String(x.dataset.k === k)); try { localStorage.setItem('rk-tab', k); } catch {} render(); }; $('tabs').appendChild(b); }
+  try { const t = localStorage.getItem('rk-tab'); if (TABS.some(x => x[0] === t)) tab = t; } catch {}
+  for (const x of $('tabs').children) x.setAttribute('aria-selected', String(x.dataset.k === tab));
+  for (const id of ['fMode', 'fDuo']) $(id).addEventListener('change', render);
+  // 開くたびに GAS の受付一覧も読み、まだ records.json に移っていない記録もすぐ出す(user: GASに取りに来ればいい 毎回開いた時に)
+  const MODK = MODS.map(x => x[0]);
+  const fromGas = (it, api) => {
+    const d = it && it.record, id = Number(it && it.id);
+    if (!d || d.v !== 1 || !(id > 1e12) || (d.mode !== 'zenith' && d.mode !== 'zenithex') || d.bot === true || d.engine) return null;
+    const alt = Number(d.altitude), floor = Number(d.floor);
+    if (!(alt >= 0.01 && alt <= 100000) || !(floor >= 1 && floor <= 10) || !(Number(d.apm ?? 0) <= 10000) || !(Number(d.pps ?? 0) <= 100)) return null;
+    const mods = [...new Set((Array.isArray(d.mods) ? d.mods : []).map(String))].sort();
+    if (mods.some(m => !MODK.includes(m.replace(/_reversed$/, '')))) return null;
+    const name = String(d.name || '').replace(/[\u0000-\u001f<>@`]/g, '').trim().slice(0, 32) || 'LOCAL';
+    return { id, user: 'name:' + name.toLowerCase(), name, mode: d.mode, altitude: Math.round(alt * 100) / 100, floor, revives: Number(d.revives) || 0, mods,
+      floor10: d.floor10 === true, lull: d.lull !== false, hyper: d.hyper === true && floor === 10, test: ['solo', 'duo-dead', 'duo-reverse-dead'].includes(d.test) ? d.test : 'solo', bot: false, discord: it.discord && /^\d{5,25}$/.test(String(it.discord.message || '')) ? String(it.discord.message) : null, pending: true };
+  };
+  const pending = () => fetch('api.json', { cache: 'no-store' }).then(r => r.json()).then(a => {
+    if (!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(a.url || '')) return;
+    API = a.url; render();
+    return fetch(a.url + '?list=1').then(r => r.json()).then(l => { const have = new Set([...records.map(r => r.id), ...rejected]); for (const it of l.items || []) { const r = fromGas(it, a.url); if (r && !have.has(r.id)) { records.push(r); have.add(r.id); } } render(); });
+  }).catch(() => {});
+  fetch('data/records.json', { cache: 'no-store' }).then(r => r.json()).then(d => { rejected = Array.isArray(d.rejected) ? d.rejected : []; records = (d.records || []).filter(r => r && typeof r.altitude === 'number' && !rejected.includes(r.id)); render(); pending(); })
+    .catch(() => { $('out').textContent = 'ランキングを読み込めませんでした。'; });
+})();
+</script>
+</body>
+</html>

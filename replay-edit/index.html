@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ja">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+        <title>TETR.IO リプレイ盤面修正</title>
+        <script src="../assets/tools.js"></script>
+        <link href="https://fonts.googleapis.com/css?family=Lora:400,700,400italic,700italic" rel="stylesheet" type="text/css" />
+        <link href="https://fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,700italic,800italic,400,300,600,700,800" rel="stylesheet" type="text/css" />
+        <link rel="stylesheet" href="../assets/clean-blog.css" />
+        <link rel="stylesheet" href="../assets/tools.css" />
+    </head>
+    <body>
+        <nav class="navbar navbar-expand-lg navbar-light" id="mainNav">
+            <div class="container px-4 px-lg-5">
+                <a class="navbar-brand" href="../">TETR.IO tools</a>
+                <button class="navbar-toggler" type="button" aria-controls="navbarResponsive" aria-expanded="false" aria-label="メニュー">Menu ☰</button>
+                <div class="collapse navbar-collapse" id="navbarResponsive">
+                    <ul class="navbar-nav ms-auto py-4 py-lg-0">
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../">Home</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../spin/">盤面回転</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../replay-edit/">盤面修正</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../replay-video/">MP4変換</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../bookmarklets/">QP OFFLINE・パッチ</a></li>
+                        <li class="nav-item"><button class="nav-link px-lg-3 py-3 py-lg-4" id="themeToggle" type="button">☾ ダーク</button></li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+        <header class="tools-band"></header>
+<main class="container px-4 px-lg-5 tools-main">
+  <section class="my-5">
+    <p class="text-uppercase text-primary fw-bold mb-2">Bookmarklet</p>
+    <h1 class="display-5 fw-bold">リプレイ盤面修正</h1>
+    <p class="lead">盤面回転・QP OFFLINE とは別のブックマークレットです(スピンカウンターも、このブックマークで一緒に出ます)。公式の <code>https://tetr.io/</code> のリプレイを<strong>一時停止すると、その場面から自分で操作</strong>できます。<strong>再生ボタンを押すと、止めたときの場面に戻ってから</strong>リプレイが続きます。使えるのはリプレイの中だけで、対戦中やルームの盤面には何もしません。</p>
+  </section>
+  <section class="card shadow-sm mb-4"><div class="card-body p-4">
+    <h2 class="h4">登録</h2>
+
+
+    
+    <p>下のボタンを<strong>ブックマークバーへドラッグ</strong>してください(このページでクリックしても動きません)。</p>
+    <p><a id="bmA" class="btn btn-primary" href="#">盤面修正</a></p>
+    <p class="small text-muted">上が動かないときの代替: <a id="bmB" class="btn btn-outline-primary" href="#">盤面修正(fetch版)</a></p>
+    <p><button id="copy" class="btn btn-outline-primary" type="button">ブックマークコードをコピー</button> <span id="copy-status" aria-live="polite"></span></p>
+  </div></section>
+  <section class="card shadow-sm mb-4"><div class="card-body p-4">
+    <h2 class="h4">使い方(PC)</h2>
+
+      <ol>
+        <li><code>https://tetr.io/</code> を開き、<strong>リプレイを開く前に</strong>ブックマークをクリックします(左上に「リプレイ盤面修正」のパネルが出ます)。</li>
+        <li>リプレイを開きます。すでに開いていたときは、一度閉じて開き直してください。押したあとに開いたリプレイが対象です。</li>
+        <li>リプレイを<strong>一時停止</strong>します。パネルが「操作中」になり、その場面の盤面・操作中のミノ・HOLD・NEXT のまま、ふだんのキー設定(TETR.IO の設定どおり)で操作できます。DAS・ARR などのハンドリングも自分の設定です。</li>
+        <li><strong>再生ボタン</strong>を押すと、止めた場面に戻ってからリプレイが続きます。シークバーやフレーム送りで移動したときも、元の状態に戻ります。</li>
+      </ol>
+      <ul>
+        <li>操作中は、キー設定で使っているキーを TETR.IO のリプレイ操作に渡しません。左右キーでシークバーが動いたり、スペース(ハードドロップ)で再生が始まったりはしません。再生はマウスで再生ボタンを押してください。</li>
+        <li><strong>リトライのキー(R)</strong>か、パネルの「止めた場面からやり直す」で、止めた場面から何度でもやり直せます。積み上がって終わったときも、少しして止めた場面に戻ります。</li>
+        <li>操作中の<strong>火力はパネルに表示</strong>しますが、<strong>相手には送りません</strong>(相手の盤面は止まったままです)。</li>
+        <li>2人のリプレイでは、パネルの「操作する盤面」で左右を切り替えます。</li>
+        <li>「2人の左右を入れ替え: ON」にすると、2人のリプレイで左右のプレイヤーの位置が入れ替わります(見た目だけ。止めていなくても使えます)。</li>
+        <li>「止めたら操作: OFF」にすると、止めてもふつうのリプレイのままです。</li>
+        <li>「重力: なし」にすると、操作中のミノが自然には落ちません(ソフトドロップ・ハードドロップで落とします)。</li>
+        <li>操作中のままリプレイを閉じても大丈夫です(止めた場面に戻してから閉じます)。</li>
+      </ul>
+  </div></section>
+  <section class="card shadow-sm mb-4"><div class="card-body p-4">
+    <h2 class="h4">修正を .ttrm に埋め込んで保存</h2>
+      <p>止めて動かしたあと、パネルの「修正を .ttrm に埋め込んで保存」を押すと、TETR.IO のリプレイ(.ttrm / .ttr)に修正を入れたファイル(名前の最後が <code>-edit</code>)を保存します。</p>
+      <ul>
+        <li>このブックマーク(またはデスクトップ版パッチの REPLAY BOARD EDIT)が入っていると、そのファイルは<strong>修正後の内容で再生</strong>されます。止めた場面までは元のリプレイ、そこからは自分の操作です。操作の最後まで来ると、その盤面は止まります。修正の後ろへシークしても、修正後の盤面になります。</li>
+        <li>入っていない TETR.IO では、<strong>ふつうの(元の)リプレイ</strong>として再生されます。修正は各プレイヤーの記録の結果欄に足すだけで、TETR.IO のリプレイの形は変えません。</li>
+        <li>保存すると、今開いているリプレイもすぐ修正後で再生されます。元に戻すときは「埋め込みを外す」を押します。</li>
+        <li>埋め込みのあるリプレイを修正の途中で止めて直すと、前の修正の続きとして1つにまとまります。</li>
+        <li>埋め込みのあるリプレイは、パネルの「埋め込みの再生」を押すたびに 修正後 ⇄ 元の版 と切り替わります(再生中はシークし直すと反映)。マネ練習は別のボタンで、修正後では修正の中だけ、元の版ではリプレイで置いた所を手本にします。</li>
+        <li>修正(手で直したもの・CC 盤面修正の弱い所)の所に来たときは「修正の所に来たら」で <strong>流し見</strong> / <strong>止めて操作</strong>(その修正の置き方を手本にマネ練習、再生ボタンで修正の後の元のプレイへ)を選べます。止めて操作では「操作の前に見本」で先に修正を見せるかどうか、「修正を見せる速さ」(等速・0.5・0.25 倍)、「修正の後に止まる」(0〜3 秒)も選べます。AI がなくても(vR・ブックマークでも)再生できます。</li>
+        <li>vA の CC 盤面修正「トップアウト救済」で作ったリプレイは、死んだラウンドで「死ぬ何手前まで戻れば助かるか」をパネルに出し、その所から AI の助かる置き方を見せます(次に置く所を盤面で光らせ、上に何手前からかを表示)。REN を QUAD か T-SPIN で締める形(10 手以内、または深く掘るもの)や、深く掘る REN の途中で QUAD を打つ形が見つかればそれを見せ、死んだ所の先も REN が切れるまで続けます。さらに REN を伸ばせた・深く掘れた助かり方があれば、そのあとに続けて見せます((1) 同じ順番のまま / (2) 置く順番を変えれば(HOLD)、あなたのプレイとの比較つき)。最後は助かった盤面で止まります。</li>
+        <li>vA パッチの CONFIG「CC 盤面修正」で作った .ttrm(選んだプレイヤーの置き方を Cold Clear が置き直したもの)も同じように見られます。受けたおじゃまと相手の記録は元のままです。</li>
+        <li>修正が元のリプレイより長いときは、元のリプレイの長さまでしか再生されません。</li>
+      </ul>
+  </div></section>
+  <section class="card shadow-sm mb-4"><div class="card-body p-4">
+    <h2 class="h4">地形のマネ練習</h2>
+      <p>「マネ練習: ON」にして止めると、リプレイで<strong>実際に置いた所</strong>が、ゴーストとは別に光る「目標のミノ」で出ます。</p>
+      <ul>
+        <li>目標と同じ所に置くと、次の手の目標に進みます。違う所に置くと、少し見せてから置く前に戻ります。</li>
+        <li>手本は止めた場面から最大80手(または約0.4秒で作れる分)です。HOLD を使った手本は、HOLD してから置きます。</li>
+        <li>手本のプレイヤーがゴミを受けて地形がせり上がった分は、ずらして合わせます。</li>
+        <li>「重力: なし」と組み合わせると、ゆっくり形を確かめられます。</li>
+      </ul>
+      <p><strong>更新は自動です。</strong>30秒ごとに新しい版を確かめ、出ていれば読み込み直します(操作中は待ちます)。</p>
+  </div></section>
+  <section class="card shadow-sm mb-4"><div class="card-body p-4">
+    <h2 class="h4">fumen に書き出す</h2>
+
+      <p>パネルのボタンで、<a href="https://fumen.zui.jp/">連続テト譜エディタ(fumen)</a>を新しいタブで開きます。</p>
+      <ul>
+        <li><strong>操作中</strong>:「fumen に書き出す」。1ページ目が止めた場面、2ページ目からは<strong>ミノを1つ置くごとの地形</strong>です(1ミノ1ページ)。<strong>ラインを消したミノ</strong>は、まず置いた所(そろったラインが残った地形)を1ページ出し、次のページで消えた後の地形を出します。Ctrl+Z で取り消したミノは入りません。</li>
+        <li><strong>操作していないとき</strong>:「fumen で今の盤面を開く」。今の盤面を1ページで開きます。</li>
+      </ul>
+      <p>入るのは地形だけで、操作中のミノ・NEXT・HOLD は入りません。</p>
+  </div></section>
+  <section class="card shadow-sm mb-4"><div class="card-body p-4">
+    <h2 class="h4">スピンカウンター</h2>
+
+      <p>同じブックマークで、右上に「スピンカウンター」のパネルも出ます(盤面修正のパネルの「スピンカウンター: ON/OFF」で表示/非表示)。盤面ごとに数え、<strong>表示だけ</strong>でゲームには何もしません。リプレイだけでなく、SOLO・QP・TL・ルーム・観戦でも数えます(ブックマークを押したあとに始まったゲームが対象)。</p>
+      <table class="table table-sm">
+        <tr><td>SPIN</td><td>スピンの回数(T 以外のミノ・MINI も含む)。かっこ内は MINI の数</td></tr>
+        <tr><td>SPIN の列ごと</td><td>スピンで消したライン数ごとの内訳(0列 / 1列 / 2列 / 3列)。カウンターのパネルのボタンで表示/非表示</td></tr>
+        <tr><td>ミノごと</td><td>スピンをミノの種類ごとに(T・S・Z・L・J・I・O)。ボタンで表示/非表示</td></tr>
+        <tr><td>T-SPIN</td><td><strong>T-spin の回数(MINI 含む) / 置いた T ミノの数</strong>と、その割合。MINI の数も出します</td></tr>
+        <tr><td>QUAD</td><td>4ライン消しの回数</td></tr>
+      </table>
+      <ul>
+        <li>リプレイでは、開いたときに TETR.IO が裏でリプレイ全体を計算するのを見て「何フレーム目に何を置いたか」の一覧を作り、今のフレームまでの分を数えます。前に戻しても先へ飛ばしても正しい数になります。</li>
+        <li>止めて操作した分は、再生して元に戻すと消えます。</li>
+        <li>ブックマークを押し直しても、数えた回数は消えません。</li>
+      </ul>
+  </div></section>
+  <section class="card shadow-sm mb-4"><div class="card-body p-4">
+    <h2 class="h4">操作パネル</h2>
+
+      <table class="table table-sm">
+        <tr><td>止めたら操作: ON / OFF</td><td>一時停止したときに操作できるようにするか</td></tr>
+        <tr><td>操作する盤面</td><td>2人のリプレイで、どちらの盤面を操作するか(押すと切り替え)</td></tr>
+        <tr><td>2人の左右を入れ替え</td><td>2人のリプレイで、左右のプレイヤーの位置を入れ替えます(見た目だけ)</td></tr>
+        <tr><td>重力: あり / なし</td><td>操作中のミノが自然に落ちるか</td></tr>
+        <tr><td>止めた場面からやり直す(R)</td><td>操作した分を消して、止めた場面に戻します</td></tr>
+        <tr><td>マネ練習: ON / OFF</td><td>リプレイで実際に置いた所を目標のミノとして出し、そこに置くと次の手へ進みます</td></tr>
+        <tr><td>修正を .ttrm に埋め込んで保存</td><td>修正を入れたリプレイを保存します(このツールがあれば修正後で再生、なければ元のリプレイ)</td></tr>
+        <tr><td>埋め込みを外す</td><td>今のリプレイから修正を外します(埋め込みがあるときだけ出ます)</td></tr>
+        <tr><td>fumen に書き出す / fumen で今の盤面を開く</td><td>操作中は止めた場面から1ミノごとのページで、操作していないときは今の盤面を、新しいタブの fumen で開きます</td></tr>
+        <tr><td>スピンカウンター: ON / OFF</td><td>右上のスピンカウンターの表示/非表示</td></tr>
+        <tr><td>パネルを閉じる</td><td>左上の小さな「盤面修正」ボタンになります。押すと開きます</td></tr>
+      </table>
+      <p>ゲームパッドでの操作には、まだ対応していません。</p>
+  </div></section>
+  <section class="card shadow-sm mb-4"><div class="card-body p-4">
+    <h2 class="h4">手動コピー用</h2>
+
+      <textarea id="manual" class="code-box" readonly>Loading…</textarea>
+      <p>本体: <a href="tetrio-replay-edit.js">tetrio-replay-edit.js</a>(開発者ツールのコンソールに貼っても動きます)</p>
+  </div></section>
+</main>
+        <footer class="border-top tools-footer">
+            <div class="container px-4 px-lg-5">
+                <div class="small text-center text-muted fst-italic">Copyright &copy; Kei's HomePages 2025</div>
+            </div>
+        </footer>
+
+
+  <script>
+    const url = new URL('tetrio-replay-edit.js', location.href).href;
+    const a = "javascript:(()=>{if(location.hostname!=='tetr.io')return alert('https://tetr.io/ で実行してください');const s=document.createElement('script');s.src='" + url + "?v='+Date.now();s.onerror=()=>alert('load failed');document.head.appendChild(s)})();";
+    const b = "javascript:(()=>{if(location.hostname!=='tetr.io')return alert('https://tetr.io/ で実行してください');fetch('" + url + "?v='+Date.now()).then(r=>r.text()).then(t=>(0,eval)(t)).catch(e=>alert('load failed: '+e))})();";
+    document.getElementById('bmA').href = a;
+    document.getElementById('bmB').href = b;
+    document.getElementById('manual').value = a;
+    for (const id of ['bmA', 'bmB']) document.getElementById(id).addEventListener('click', e => { e.preventDefault(); alert('ブックマークバーへドラッグして登録し、tetr.io で実行してください。'); });
+    document.getElementById('copy').onclick = async () => {
+      const status = document.getElementById('copy-status');
+      try { await navigator.clipboard.writeText(a); status.textContent = 'コピーしました'; }
+      catch (e) { document.getElementById('manual').select(); status.textContent = '自動コピーできませんでした。下の欄からコピーしてください。'; }
+    };
+  </script>
+    </body>
+</html>

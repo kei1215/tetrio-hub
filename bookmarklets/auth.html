@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ja">
+    <head>
+        <meta name="referrer" content="no-referrer" />
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+        <title>TETR.IO Patch A形式</title>
+        <script src="../assets/tools.js"></script>
+        <link href="https://fonts.googleapis.com/css?family=Lora:400,700,400italic,700italic" rel="stylesheet" type="text/css" />
+        <link href="https://fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,700italic,800italic,400,300,600,700,800" rel="stylesheet" type="text/css" />
+        <link rel="stylesheet" href="../assets/clean-blog.css" />
+        <link rel="stylesheet" href="../assets/tools.css" />
+    </head>
+    <body>
+        <nav class="navbar navbar-expand-lg navbar-light" id="mainNav">
+            <div class="container px-4 px-lg-5">
+                <a class="navbar-brand" href="../">TETR.IO tools</a>
+                <button class="navbar-toggler" type="button" aria-controls="navbarResponsive" aria-expanded="false" aria-label="メニュー">Menu ☰</button>
+                <div class="collapse navbar-collapse" id="navbarResponsive">
+                    <ul class="navbar-nav ms-auto py-4 py-lg-0">
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../">Home</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../spin/">盤面回転</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../replay-edit/">盤面修正</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../replay-video/">MP4変換</a></li>
+                        <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="../bookmarklets/">QP OFFLINE・パッチ</a></li>
+                        <li class="nav-item"><button class="nav-link px-lg-3 py-3 py-lg-4" id="themeToggle" type="button">☾ ダーク</button></li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+        <header class="tools-band"></header>
+<main class="container px-4 px-lg-5 tools-main">
+  <section class="my-5">
+    <p class="text-uppercase text-primary fw-bold mb-2">TETR.IO Patch</p>
+    <h1 class="display-5 fw-bold">A形式(AI 版)</h1>
+    <p class="lead">AI 版は、指定の Discord サーバーでロールを持っている人と、個別に許可された Discord アカウントだけがダウンロードできます。</p>
+    <div class="alert alert-info">Discord でログインすると、そのサーバーでの自分のロールを確かめます。読み取るのは、そのサーバーでの自分のロールとユーザー情報だけです。</div>
+  </section>
+  <section class="card shadow-sm mb-5"><div class="card-body p-4">
+    <h2 class="h4">ダウンロード</h2>
+    <div id="view"><p>確認しています…</p></div>
+    <p class="mb-0"><a href="./#desktop">← OS別パッチに戻る</a></p>
+  </div></section>
+</main>
+        <footer class="border-top tools-footer">
+            <div class="container px-4 px-lg-5">
+                <div class="small text-center text-muted fst-italic">Copyright &copy; Kei's HomePages 2025</div>
+            </div>
+        </footer>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <script>
+    // Discord のアプリは Client ID だけを使う(シークレット・ボットのトークンは使わない)。サーバーなしで、本人の権限でロールを読む
+    (() => {
+      const CLIENT_ID = '1563594705151725660';
+      const GUILD = '1483436626855329903';
+      const ROLE = '1562481503185805393';
+      // ロールがなくても、サーバーに入っていなくても許可する Discord アカウント(ユーザーID)
+      const ALLOW = ['1276952393199652924'];
+      const REDIRECT = 'https://kei1215.github.io/tetrio-hub/bookmarklets/auth.html';
+      const CACHE = 'qp-ai-discord-v1';
+      const KEEP_MS = 24 * 60 * 60 * 1000;
+      const BASE = 'https://github.com/kei1215/tetrio-hub/releases/download/patch-v5.21/';
+      const view = document.getElementById('view');
+      const store = {
+        get(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } },
+        set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+        del(k) { try { localStorage.removeItem(k); } catch (e) {} }
+      };
+      const el = (tag, text, attrs = {}) => { const n = document.createElement(tag); if (text) n.textContent = text; for (const k in attrs) n.setAttribute(k, attrs[k]); return n; };
+
+      const showLogin = note => {
+        view.replaceChildren();
+        if (note) view.append(el('p', note));
+        const b = el('a', 'Discord でログインして AI 版を取得', { class: 'btn btn-primary', href: '#' });
+        b.onclick = e => {
+          e.preventDefault();
+          const state = Array.from(crypto.getRandomValues(new Uint8Array(16)), x => x.toString(16).padStart(2, '0')).join('');
+          try { sessionStorage.setItem('qp-ai-state', state); } catch (err) {}
+          location.href = 'https://discord.com/oauth2/authorize?' + new URLSearchParams({
+            client_id: CLIENT_ID, response_type: 'token', redirect_uri: REDIRECT, scope: 'identify guilds.members.read', state
+          });
+        };
+        const row = el('p'); row.append(b); view.append(row);
+      };
+      const showDownloads = name => {
+        view.replaceChildren();
+        view.append(el('p', (name ? name + ' さん、' : '') + '確認できました。'));
+        const ul = el('ul');
+        for (const [os, ext] of [['Mac', '.command'], ['Windows', '.cmd'], ['Linux', '.sh']]) {
+          const li = el('li');
+          li.append(el('a', `${os}(tetrio-patch-${os}-vA5.21${ext})`, { href: BASE + `tetrio-patch-${os}-vA5.21${ext}` }));
+          ul.append(li);
+        }
+        view.append(ul);
+        view.append(el('p', 'AI 版には、別に TETRIO-Resources-1.0.zip(Discord で配布)が必要です。起動ファイルと同じフォルダ、その一つ上、または「ダウンロード」フォルダに置いてください。使い方は通常版と同じです(実行前に TETR.IO を終了)。', { class: 'note' }));
+        // AI 版 QP OFFLINE(ブラウザのブックマークレット)。ログイン確認後だけ表示する
+        const bmHead = el('h3', 'ブラウザ版(AI 入り QP OFFLINE)', { class: 'h5 mt-4' });
+        const bm = el('a', 'QP OFFLINE AI 版', { class: 'btn btn-primary', href: '#' });
+        fetch('./tetrio-offline-ai-v5.21.txt', { cache: 'no-store' }).then(r => r.text()).then(code => bm.setAttribute('href', code.trim())).catch(() => {});
+        const bmRow = el('p'); bmRow.append(bm);
+        view.append(bmHead, bmRow, el('p', 'このボタンをブックマークバーにドラッグして登録し、https://tetr.io/ を開いた状態で押します。初回だけネット接続が必要で、その後30日間は保存した本体で起動します。ダウンロードやインストールは不要です。', { class: 'note' }));
+        const out = el('a', 'この端末の確認を消す', { href: '#' });
+        out.onclick = e => { e.preventDefault(); store.del(CACHE); showLogin(); };
+        const row = el('p'); row.append(out); view.append(row);
+      };
+
+      const p = new URLSearchParams(location.hash.slice(1));
+      if (location.hash) history.replaceState(null, '', location.pathname);   // アドレスバーからトークンを消す
+      const token = p.get('access_token'), error = p.get('error');
+      if (!token && !error) {
+        const c = store.get(CACHE);
+        return c && c.until > Date.now() ? showDownloads(c.name) : showLogin();
+      }
+      let expected = null;
+      try { expected = sessionStorage.getItem('qp-ai-state'); sessionStorage.removeItem('qp-ai-state'); } catch (e) {}
+      if (error) return showLogin('ログインがキャンセルされました。');
+      if (!expected || p.get('state') !== expected) return showLogin('ログインの確認に失敗しました。もう一度ログインしてください。');
+      const auth = { headers: { Authorization: 'Bearer ' + token } };
+      const ok = name => { store.set(CACHE, { name, until: Date.now() + KEEP_MS }); showDownloads(name); };
+      fetch('https://discord.com/api/v10/users/@me', auth)
+        .then(r => r.ok ? r.json() : null).catch(() => null)
+        .then(u => {
+          if (u && ALLOW.includes(String(u.id))) return ok(u.global_name || u.username || '');
+          return fetch(`https://discord.com/api/v10/users/@me/guilds/${GUILD}/member`, auth).then(async r => {
+          if (r.status === 404) return showLogin('このアカウントは、指定の Discord サーバーに参加していません。');
+          if (!r.ok) return showLogin('Discord で確認できませんでした(' + r.status + ')。少し待ってからもう一度ログインしてください。');
+          const m = await r.json();
+          if (!Array.isArray(m.roles) || !m.roles.includes(ROLE)) return showLogin('このアカウントは、指定のロールを持っていません。');
+          ok(m.nick || (m.user && (m.user.global_name || m.user.username)) || '');
+          });
+        })
+        .catch(e => showLogin('Discord で確認できませんでした: ' + e.message));
+    })();
+  </script>
+    </body>
+</html>
