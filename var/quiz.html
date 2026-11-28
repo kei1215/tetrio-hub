@@ -48,8 +48,9 @@ select { font: inherit; background: #262a38; color: var(--text); border: 1px sol
 <div id="start" style="position:fixed;inset:0;background:rgba(10,11,16,.92);display:flex;align-items:center;justify-content:center;z-index:9;padding:16px">
   <div class="panel" style="max-width:420px;width:100%">
     <h2 style="margin:0 0 8px">開幕テンプレ当て</h2>
-    <div class="dim">100問解くと点数がランキングに載ります。挑戦する言葉と、Discord でログインするかを選んでください。</div>
+    <div class="dim">100問か、エンドレス(好きなところで「終了する」、100問以上答えると何問・正解率がランキングに載ります)を選んでください。</div>
     <div class="row" style="margin-top:10px"><b>挑戦</b><label><input type="radio" name="qmode" value="ja" checked> 日本語の名前</label><label><input type="radio" name="qmode" value="en"> 英語の名前</label></div>
+    <div class="row" style="margin-top:6px"><b>問題数</b><label><input type="radio" name="qlen" value="100" checked> 100問</label><label><input type="radio" name="qlen" value="endless"> エンドレス</label></div>
     <div class="row" style="margin-top:10px"><button id="startDiscord" style="background:#3c45a5;border-color:#5865f2">Discord でログインして始める</button><button id="startAnon">名前なし(anon)で始める</button></div>
     <div class="dim" id="dcInfo" style="margin-top:4px"></div>
     <div class="dim" style="margin-top:4px">ランキングの名前は Discord のユーザー名だけです(ログインした人のみ)。ログインしないと anon で載ります。</div>
@@ -70,11 +71,12 @@ select { font: inherit; background: #262a38; color: var(--text); border: 1px sol
     <div class="panel quizOnly pQuiz">
       <div class="choices" id="choices"></div>
       <div id="result"></div>
-      <div class="row" style="margin-top:10px"><button id="next">次の問題</button><button id="again">もう一度見る</button></div>
+      <div class="row" style="margin-top:10px"><button id="next">次の問題</button><button id="again">もう一度見る</button><button id="quit" style="display:none">終了する</button></div>
     </div>
     <div class="panel quizOnly">
-      <div class="row" style="justify-content:space-between"><b>ランキング(100問)</b><button id="rkReload">更新</button></div>
+      <div class="row" style="justify-content:space-between"><b>ランキング</b><button id="rkReload">更新</button></div>
       <div id="rkTabs" class="row" style="margin-top:6px"><label><input type="radio" name="rk" value="ja" checked> 日本語の名前</label><label><input type="radio" name="rk" value="en"> 英語の名前</label></div>
+      <div class="row" style="margin-top:2px"><label><input type="radio" name="rkl" value="100" checked> 100問</label><label><input type="radio" name="rkl" value="endless"> エンドレス(100問以上)</label></div>
       <ol id="rkList" style="margin:8px 0 0;padding-left:2em;max-height:260px;overflow:auto"></ol>
     </div>
     <div class="panel" id="fixPanel" style="display:none">
@@ -287,10 +289,24 @@ function send100() { if (sent100 || SEARCH || !/^https:\/\/discord\.com\/api\/we
   fetch(QHOOK, { method: "POST", body: fd }).catch(() => {}); }
 const QGAS = "https://script.google.com/macros/s/AKfycbzuV-7E7Mn72jK30716SVxOER6YvZjhmAsuY7fImHqVxlthW000_VyA3GQnSdOjypYK_A/exec";
 let QNAME = "", rkItems = [];
-function renderRanking() { const eng = document.querySelector('input[name="rk"]:checked').value === "en", box = $("rkList"); box.innerHTML = "";
-  const list = rkItems.filter((it) => !!it.eng === eng).slice(0, 100);
+function renderRanking() { const eng = document.querySelector('input[name="rk"]:checked').value === "en", md = document.querySelector('input[name="rkl"]:checked').value, box = $("rkList"); box.innerHTML = "";
+  const list = rkItems.filter((it) => !!it.eng === eng && (it.mode || "100") === md).slice(0, 100);
   if (!list.length) { box.innerHTML = '<li class="dim" style="list-style:none">まだありません</li>'; return; }
-  for (const it of list) { const li = document.createElement("li"); li.textContent = (it.name || "anon") + (it.d ? " ✓" : "") + "  " + it.score + " 点(正解 " + it.right + ")"; box.appendChild(li); } }
+  for (const it of list) { const li = document.createElement("li"); li.textContent = (it.name || "anon") + (it.d ? " ✓" : "") + "  " + (md === "endless" ? it.total + " 問 正解率 " + pct(it.right, it.total) : it.score + " 点(正解 " + it.right + ")"); box.appendChild(li); } }
+const pct = (r, n) => (n ? (Math.round((r / n) * 1000) / 10).toFixed(1) : "0") + "%";
+// エンドレス (user 2026-11-29: 100問までとエンドレス、何問まで答えたかと正解率を100問以上の場合のみ、送信用に終了する)
+let QLEN = "100", nAns = 0, ended = false;
+function sendEndless() { if (SEARCH) return;
+  const name = QNAME || "anon";
+  fetch(QGAS, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ kind: "quiz", mode: "endless", name: QDC ? QNAME : "", score, right, total: nAns, eng: engUsed, dtoken: DC && QDC ? DC.t : "" }) })
+    .then((r) => r.json()).then((d) => { $("sent").textContent = d.ok ? "ランキングに載りました" + (d.rank ? "(" + d.rank + " 位)" : "") : "ランキングに送れませんでした: " + (d.text || ""); loadRanking(); })
+    .catch(() => { $("sent").textContent = "ランキングに送れませんでした"; });
+  if (/^https:\/\/discord\.com\/api\/webhooks\//.test(QHOOK)) { const fd = new FormData(); fd.append("payload_json", JSON.stringify({ content: `開幕テンプレ当て エンドレス  ${name}${DC && QDC ? " (Discord)" : ""}: ${nAns} 問 正解率 ${pct(right, nAns)} (正解 ${right})${engUsed ? " (英語の名前)" : " (日本語の名前)"}`, allowed_mentions: { parse: [] } }));
+    fetch(QHOOK, { method: "POST", body: fd }).catch(() => {}); } }
+function quitEndless() { if (ended) return; ended = true; playId++; if (timer) { clearTimeout(timer); timer = null; }
+  for (const b of $("choices").children) b.disabled = true; $("next").disabled = true; $("again").disabled = true; $("quit").disabled = true;
+  if (nAns >= 100) { $("state").textContent = "終了しました: " + nAns + " 問 正解率 " + pct(right, nAns); sendEndless(); }
+  else $("state").textContent = "終了しました: " + nAns + " 問(100 問未満なので記録しません)"; }
 function loadRanking() { fetch(QGAS + "?quiz=1").then((r) => r.json()).then((d) => { rkItems = d.ok ? d.items : []; renderRanking(); }).catch(() => { $("rkList").innerHTML = '<li class="dim" style="list-style:none">読み込めませんでした</li>'; }); }
 let score = 0, total = 0, cur = null, timer = null, stepI = 0, answered = false;
 function draw(st) {
@@ -316,12 +332,14 @@ function pickChoices(t) {
   return [base(nameOf(t)), ...others].sort(() => Math.random() - 0.5);
 }
 function newQuestion() {
+  if (ended) return;
+  if (QLEN === "100" && total >= 100) { send100(); ended = true; playId++; $("next").disabled = true; $("again").disabled = true; for (const b of $("choices").children) b.disabled = true; $("state").textContent = "100 問終わりました: " + score + " 点(正解 " + right + ")。もう一度やるにはページを開き直してください"; return; }
   $("fixPanel").style.display = "none"; if (typeof fixBoard !== "undefined") { fixBoard = false; PL.on = false; $("fixHelp").style.display = "none"; } TPL = QMODE === "en" ? ALL : TPLJ; engUsed = QMODE === "en";
   playId++; answered = false; $("result").textContent = ""; $("state").textContent = "AI が組んでいます…";
   let built = null, t = null;
   for (let k = 0; k < 20 && !built; k++) { t = TPL[Math.floor(Math.random() * TPL.length)]; const use = $("mirror").checked && Math.random() < 0.5 ? flip(t) : t; built = QUIZ.build(use, Math.floor(Math.random() * 1e6)); }
   if (!built) { $("state").textContent = "組めるテンプレが見つかりませんでした"; return; }
-  if (total >= 100) send100(); cur = { t, built, choices: pickChoices(t), seen: 0 }; total++;
+  cur = { t, built, choices: pickChoices(t), seen: 0 }; total++;
   const box = $("choices"); box.innerHTML = "";
   for (const n of cur.choices) { const b = document.createElement("button"); b.textContent = label(n); b.onclick = () => answer(n, b); box.appendChild(b); }
   play(); renderScore();
@@ -347,9 +365,9 @@ function answer(n, btn) {
   for (const b of $("choices").children) { b.disabled = true; if (b.textContent === label(okName)) b.classList.add("ok"); }
   if (n === okName) { right++; score += early ? 2 : 1; $("result").textContent = "正解!" + (nameOf(cur.t) !== okName ? "(" + nameOf(cur.t) + ")" : "") + (early ? "(組み終わる前に当てたので +2)" : ""); $("result").style.color = "var(--ok)"; }
   else { btn.classList.add("ng"); $("result").textContent = "ざんねん、正解は " + label(okName) + (nameOf(cur.t) !== okName ? "(" + nameOf(cur.t) + ")" : ""); $("result").style.color = "var(--ng)"; }
-  renderScore(); if (total === 100) send100(); showFix();
+  nAns++; renderScore(); if (QLEN === "100" && total === 100) send100(); showFix();
 }
-function renderScore() { $("score").textContent = score + " 点 / " + total + " 問"; }
+function renderScore() { $("score").textContent = QLEN === "endless" ? nAns + " 問" + (nAns >= 100 ? " 正解率 " + pct(right, nAns) : "") : score + " 点 / " + total + " 問"; }
 // search: a loose match (kana folded, case and marks ignored): a part of the name first, then shared 2-letter pieces
 const norm = (s) => String(s).toLowerCase().normalize("NFKC").replace(/[\u30a1-\u30f6]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60)).replace(/[\s\-_.'()（）・!?:]/g, "");
 const grams = (s) => { const g = new Set(); for (let i = 0; i < s.length - 1; i++) g.add(s.slice(i, i + 2)); if (s.length === 1) g.add(s); return g; };
@@ -475,7 +493,7 @@ window.addEventListener("blur", () => { KS.dirs = []; KS.dir = 0; KS.soft = fals
   requestAnimationFrame(tick); })(0);
 hdUI();
 drawEd();
-$("next").onclick = newQuestion; $("again").onclick = () => cur && play();
+$("next").onclick = newQuestion; $("quit").onclick = quitEndless; $("again").onclick = () => cur && play();
 // two pages from one file (user 2026-11-28: 検索ページも別に作って): quiz.html = the quiz, search.html = name / shape search
 const SEARCH = /*MODE*/false;
 // name fixes and new templates go to the same Discord channel, registered by hand later (user 2026-11-29: 修正を送れる / テンプレの登録)
@@ -504,7 +522,7 @@ $("regSend").onclick = () => { const v = clean($("regName").value); if (!v) { $(
   let top = 0; B.forEach((r, y) => { if (r.some(Boolean)) top = y + 1; });
   const rows = B.slice(0, top).reverse().map((r) => r.map((c) => (c ? String(c).toUpperCase() : ".")).join("")).join("\n");
   sendNote(`🆕 テンプレの登録 (${who()})\n名前: ${v}\n\`\`\`\n${rows}\n\`\`\``, "regMsg"); $("regName").value = ""; };
-try { const m = localStorage.getItem("quiz-mode"); if (m) document.querySelector('input[name="qmode"][value="' + m + '"]').checked = true; } catch {}
+try { const m = localStorage.getItem("quiz-mode"); if (m) document.querySelector('input[name="qmode"][value="' + m + '"]').checked = true; const ln = localStorage.getItem("quiz-len"); if (ln) document.querySelector('input[name="qlen"][value="' + ln + '"]').checked = true; } catch {}
 const cleanName = (v) => String(v).replace(/[\u0000-\u001f<>@`*_~|]/g, "").trim().slice(0, 32);
 // Discord login (user 2026-11-29: discordログインも追加して): implicit OAuth (scope identify), no secret on the page;
 // GAS checks the token with Discord itself, so the ✓ name cannot be faked
@@ -526,11 +544,12 @@ $("startDiscord").onclick = () => { if (DC) { startQuiz(DC.name, true); return; 
   const st = Math.random().toString(36).slice(2) + Date.now().toString(36); try { sessionStorage.setItem("quiz-dc-state", st); } catch {}
   location.href = "https://discord.com/oauth2/authorize?" + new URLSearchParams({ client_id: DC_ID, response_type: "token", scope: "identify", redirect_uri: DC_URI, state: st, prompt: "none" }); };
 dcShow();
-function startQuiz(name, viaDc) { QDC = !!viaDc; QMODE = document.querySelector('input[name="qmode"]:checked').value; try { localStorage.setItem("quiz-mode", QMODE); } catch {}
+function startQuiz(name, viaDc) { QDC = !!viaDc; QMODE = document.querySelector('input[name="qmode"]:checked').value; QLEN = document.querySelector('input[name="qlen"]:checked').value; try { localStorage.setItem("quiz-mode", QMODE); localStorage.setItem("quiz-len", QLEN); } catch {}
+  $("quit").style.display = QLEN === "endless" ? "" : "none"; const rl = document.querySelector('input[name="rkl"][value="' + QLEN + '"]'); if (rl) rl.checked = true;
   const rk = document.querySelector('input[name="rk"][value="' + QMODE + '"]'); if (rk) { rk.checked = true; renderRanking(); } QNAME = name;  $("start").style.display = "none";
-  $("nameShow").textContent = (name ? "名前: " + name + (QDC ? "(Discord ✓)" : "") : "名前なし(anon)で参加中") + " / " + (QMODE === "en" ? "英語の名前" : "日本語の名前") + "で挑戦"; draw(null); newQuestion(); }
+  $("nameShow").textContent = (name ? "名前: " + name + (QDC ? "(Discord ✓)" : "") : "名前なし(anon)で参加中") + " / " + (QMODE === "en" ? "英語の名前" : "日本語の名前") + "・" + (QLEN === "endless" ? "エンドレス" : "100問") + "で挑戦"; draw(null); newQuestion(); }
 $("startAnon").onclick = () => startQuiz("");
-$("rkReload").onclick = loadRanking; for (const r of document.querySelectorAll('input[name="rk"]')) r.onchange = renderRanking;
+$("rkReload").onclick = loadRanking; for (const r of document.querySelectorAll('input[name="rk"], input[name="rkl"]')) r.onchange = renderRanking;
 for (const el of document.querySelectorAll(SEARCH ? ".quizOnly" : ".findOnly")) el.style.display = "none";
 $("other").href = SEARCH ? "quiz.html" : "search.html"; $("other").textContent = SEARCH ? "開幕テンプレ当てへ" : "テンプレ検索へ";
 if (SEARCH) { $("start").style.display = "none"; $("ttl").textContent = "テンプレ検索"; document.title = "テンプレ検索"; $("score").style.display = "none"; $("state").textContent = "名前か形でテンプレを探して、押すと AI が組んで撃ちます"; draw(null); }
