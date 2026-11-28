@@ -76,7 +76,8 @@
       const ROLE = '1562481503185805393';
       // ロールがなくても、サーバーに入っていなくても許可する Discord アカウント(ユーザーID)
       const ALLOW = ['1276952393199652924'];
-      const REDIRECT = 'https://kei1215.github.io/tetrio-hub/bookmarklets/auth.html';
+      // 開いているサイトに戻す (github.io / tetrio-hub.pages.dev)。どちらも Discord のアプリの Redirects に登録が必要
+      const REDIRECT = location.hostname === 'kei1215.github.io' ? 'https://kei1215.github.io/tetrio-hub/bookmarklets/auth.html' : location.origin + location.pathname.replace(/\.html$/, '');
       const CACHE = 'qp-ai-discord-v1';
       const KEEP_MS = 24 * 60 * 60 * 1000;
       const BASE = 'https://github.com/kei1215/tetrio-hub/releases/download/patch-v5.21/';
