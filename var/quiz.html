@@ -105,7 +105,7 @@ select { font: inherit; background: #262a38; color: var(--text); border: 1px sol
       <div id="edHits" class="choices" style="margin-top:8px"></div>
     </div>
     <div class="panel row">
-      <label>速さ <select id="speed"><option value="700">ゆっくり</option><option value="400" selected>ふつう</option><option value="180">はやい</option></select></label>
+      <input type="hidden" id="speed" value="400"><!-- 速さはふつうのみ (user 2026-11-29) -->
       <label><input type="checkbox" id="mirror" checked> 左右反転も出す</label>
     </div>
     <div class="dim quizOnly">AI がテンプレの形を組んで、T-spin まで撃ちます。早く当てるほど高得点(組み終わる前に当てると +1)。</div>
