@@ -50,10 +50,11 @@
  const api=window.LocalReplayLibrary={portable,duo,matchFile,
   // A long match (FT99 between two Cold Clears) crashed the renderer (2026-11-28): every round rebuilt and wrote
   // the TTRM of the whole match, ~3 MB a round, so by round 60 each save copied hundreds of MB several times.
-  // Now a match is saved in parts of PART rounds: only the open part is rewritten, and the replays of a closed
+  // Now a long match is saved in parts of PART rounds: only the open part is rewritten, and the replays of a closed
   // part are dropped from memory (its TTRM is already saved).
   saveMatch(match,reason){
-   const PART=10,from=match.partFrom||0,rounds=match.rounds.slice(from),part=Math.floor(from/PART)+1;
+   // user 2026-11-29: FT7を上限にして分けない — FT7 is at most 13 rounds, so a match up to FT7 stays in one TTRM
+   const PART=13,from=match.partFrom||0,rounds=match.rounds.slice(from),part=Math.floor(from/PART)+1;
    const wins=[0,0];for(const r of rounds)if(r.winner===0||r.winner===1)wins[r.winner]++;
    const file=matchFile({...match,rounds,wins});
    if(match.recordId)try{QPLocalZen.deleteRecord(match.recordId)}catch(error){console.warn('[AI room] old match record',error)}
