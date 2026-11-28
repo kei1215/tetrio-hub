@@ -1,4 +1,20 @@
 (() => {
+ // Room replays saved with the same name every time: name them by players, score and the time of saving instead
+ {const prev=window.__qpReplayDownloadName;if(prev&&!prev.__qpNamed){
+  const safe=(v,max)=>String(v??'').replace(/[\\/:*?"<>|\s]+/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'').slice(0,max);
+  const p2=n=>String(n).padStart(2,'0');
+  const named=(data,extension)=>{try{
+   const ext=extension==='ttrm'?'ttrm':'ttr',v=data&&typeof data==='object'?data:{};
+   const scope=window.__qpLocalOffline||location.protocol==='tetrio-local:'?'offline':'online';
+   const mode=safe(v.gamemode||v.mode||'match',22)||'match';
+   const lb=Array.isArray(v.replay?.leaderboard)?v.replay.leaderboard:[];
+   const names=(lb.length?lb:(v.users||[])).map(u=>safe(u.username||u.id||'',16)).filter(Boolean).slice(0,4);
+   const score=lb.length>=2&&lb.every(u=>Number.isFinite(u.wins))?lb.map(u=>u.wins).join('-'):'';
+   const d=new Date(),now=d.getFullYear()+p2(d.getMonth()+1)+p2(d.getDate())+'-'+p2(d.getHours())+p2(d.getMinutes())+p2(d.getSeconds());
+   return ['tetrio',scope,mode,names.join('-vs-'),score,now].filter(Boolean).join('_')+'.'+ext;
+  }catch(e){return prev(data,extension)}};
+  named.__qpNamed=true;window.__qpReplayDownloadName=named;
+ }}
  function mode(game){return game.options.zenith?(game.options.zenith_expert?'zenithex':'zenith'):game.options.zenlevels?'zen':game.options.levels?'blitz':game.options.objective_type==='lines'?'40l':'custom'}
  function portable(file){
   if(!file||!file.replay)throw Error('TTRの再生データがありません。');
@@ -28,16 +44,23 @@
   const base=(user,i)=>({id:user.id,username:user.username,active:true,naturalorder:i,shadows:[],shadowedBy:[null,null]});
   const avg=i=>{const all=match.rounds.map(r=>stat(r.replays[i])),n=all.length||1,out=stat({});for(const k of ['apm','pps','vsscore'])out[k]=all.reduce((a,s)=>a+s[k],0)/n;for(const k of ['garbagesent','garbagereceived','kills'])out[k]=all.reduce((a,s)=>a+s[k],0);return out};
   const leaderboard=users.map((user,i)=>({...base(user,i),wins:match.wins[i],stats:avg(i)})).sort((a,b)=>b.wins-a.wins);
-  const rounds=match.rounds.map(r=>users.map((user,i)=>({...base(user,i),alive:i===r.winner,lifetime:Math.round(r.replays[i].frames/60*1000),stats:stat(r.replays[i]),replay:structuredClone(r.replays[i])})));
+  const rounds=match.rounds.map(r=>users.map((user,i)=>({...base(user,i),alive:i===r.winner,lifetime:Math.round(r.replays[i].frames/60*1000),stats:stat(r.replays[i]),replay:r.replays[i]})));
   return {version:1,gamemode:match.mode,ts:new Date().toISOString(),users,replay:{leaderboard,rounds},local:{source:'ai-room',matchKey:match.key,ai:match.ai,wins:[...match.wins],frames:Math.max(...match.rounds.map(r=>Math.max(r.replays[0].frames,r.replays[1].frames))),requiresPatch:false}};
  };
  const api=window.LocalReplayLibrary={portable,duo,matchFile,
+  // A long match (FT99 between two Cold Clears) crashed the renderer (2026-11-28): every round rebuilt and wrote
+  // the TTRM of the whole match, ~3 MB a round, so by round 60 each save copied hundreds of MB several times.
+  // Now a match is saved in parts of PART rounds: only the open part is rewritten, and the replays of a closed
+  // part are dropped from memory (its TTRM is already saved).
   saveMatch(match,reason){
-   const file=matchFile(match);
-   // Replace the previous save of the same match so the list keeps one TTRM per match.
+   const PART=10,from=match.partFrom||0,rounds=match.rounds.slice(from),part=Math.floor(from/PART)+1;
+   const wins=[0,0];for(const r of rounds)if(r.winner===0||r.winner===1)wins[r.winner]++;
+   const file=matchFile({...match,rounds,wins});
    if(match.recordId)try{QPLocalZen.deleteRecord(match.recordId)}catch(error){console.warn('[AI room] old match record',error)}
-   QPLocalZen.record(match.mode,{localMatch:{key:match.key,names:match.names,wins:[...match.wins],rounds:match.rounds.length},localEndReason:reason},file);
+   const long=match.rounds.length>=PART||from>0;
+   QPLocalZen.record(match.mode,{localMatch:{key:match.key,names:match.names,wins:long?wins:[...match.wins],rounds:rounds.length,...(long?{part,total:[...match.wins]}:{})},localEndReason:reason},file);
    const mine=QPLocalZen.records().filter(r=>r.result?.localMatch?.key===match.key);match.recordId=mine.length?mine[mine.length-1].id:null;
+   if(rounds.length>=PART){for(const r of rounds)r.replays=null;match.partFrom=match.rounds.length;match.recordId=null}
    return file;
   },
   save(game,reason){
@@ -71,7 +94,7 @@
    if(!records.length){const empty=document.createElement('div');empty.className='scroller_block';empty.textContent='ローカル記録はまだありません。';host.appendChild(empty)}
    for(const record of records){
     const row=document.createElement('div');row.className='scroller_block';row.dataset.recordId=record.id;
-    const heading=document.createElement('h2');const lm=record.result?.localMatch;heading.textContent=record.mode.toUpperCase()+(lm?' · '+lm.names.join(' vs ')+' '+lm.wins.join('-'):record.replay?.local?.duoMerged?' · DUO':record.replay?.local?.duoSide==='partner'?' · PARTNER':'');
+    const heading=document.createElement('h2');const lm=record.result?.localMatch;heading.textContent=record.mode.toUpperCase()+(lm?' · '+lm.names.join(' vs ')+' '+lm.wins.join('-')+(lm.part?' (PART '+lm.part+' · '+lm.total.join('-')+')':''):record.replay?.local?.duoMerged?' · DUO':record.replay?.local?.duoSide==='partner'?' · PARTNER':'');
     const date=document.createElement('p');date.textContent=new Date(record.date).toLocaleString();row.append(heading,date);
     if(record.replay?.local?.requiresPatch){const note=document.createElement('p');note.textContent='ローカル拡張ルール使用：完全再現には対応パッチが必要です。';row.appendChild(note)}
     const controls=document.createElement('div');controls.className='control_group flex-row';row.appendChild(controls);

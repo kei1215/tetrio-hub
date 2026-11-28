@@ -1512,6 +1512,14 @@
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 10000);
   };
+  let pendingSave = null;   // 埋め込んだがまだファイルにしていない .ttrm
+  const flushSave = () => {
+    const p = pendingSave; pendingSave = null;
+    if (!p) return false;
+    saveFile(p.text, p.file);
+    console.log(TAG, 'saved', p.file);
+    return true;
+  };
   const saveEmbed = () => {
     if (S.active) leave(true);
     const le = S.lastEdit;
@@ -1521,10 +1529,11 @@
     res[EMB] = le.edit;
     const multi = games.filter(g => { try { return g.esm.IsReplay() && alive(g) && !g.iom.IsHeadless(); } catch (e) { return false; } }).length >= 2;
     const cap = captureDownload(multi ? 'downloadreplay_multilog' : 'downloadreplay_results') || captureDownload(multi ? 'downloadreplay_results' : 'downloadreplay_multilog');
-    if (!cap || !cap.text.includes('"' + EMB + '"')) { S.msg = '保存できませんでした(リプレイ画面から開き直してください)'; return; }
+    if (!cap || !cap.text.includes('"' + EMB + '"')) { S.msg = '埋め込めませんでした(リプレイ画面から開き直してください)'; return; }
     const m = /^(.*?)(\.ttrm|\.ttr)?$/i.exec(cap.file);
-    saveFile(cap.text, m[1] + '-edit' + (m[2] || (multi ? '.ttrm' : '.ttr')));
-    S.msg = '修正を埋め込んで保存しました。このツールがあれば修正後の内容で再生されます(なければ元のリプレイ)';
+    // ここでは埋め込むだけ。ファイルの保存は「保存」ボタンか、リプレイを閉じたとき
+    pendingSave = { game: n, text: cap.text, file: m[1] + '-edit' + (m[2] || (multi ? '.ttrm' : '.ttr')) };
+    S.msg = '修正を埋め込みました(まだ保存していません)。リプレイを閉じると保存します';
     console.log(TAG, 'embedded', le.edit.frame, '→', le.edit.end, le.edit.events.length, 'events');
   };
   const removeEmbed = () => {
@@ -1534,6 +1543,7 @@
     if (!e) { S.msg = '埋め込みはありません'; return; }
     delete n.esm.replay.results[EMB];
     S.lastEdit = null;
+    if (pendingSave && pendingSave.game === n) pendingSave = null;
     S.msg = '埋め込みを外しました(保存し直すと元のリプレイになります。今の画面はシークし直すと元に戻ります)';
   };
 
@@ -1653,7 +1663,8 @@
     S.msg = S.practice ? 'マネ練習: 光っている所に置くと次の手へ進みます' : '';
     draw();
   });
-  const bEmbed = btn('修正を .ttrm に埋め込んで保存', () => { saveEmbed(); draw(); });
+  const bEmbed = btn('修正を .ttrm に埋め込む', () => { saveEmbed(); draw(); });
+  const bSave = btn('埋め込んだ .ttrm を今すぐ保存', () => { S.msg = flushSave() ? '保存しました' : '保存するものがありません'; draw(); });
   const MODES = { edit: '修正後', orig: '元の版' };
   const bEmbMode = btn('', () => {
     S.embMode = S.embMode === 'orig' ? 'edit' : 'orig';
@@ -1717,7 +1728,7 @@
     d.addEventListener('toggle', () => { secOpen[key] = d.open; try { localStorage.setItem('rpe-sections-v1', JSON.stringify(secOpen)); } catch (e) { } });
     return d;
   };
-  const secEmb = sec('emb', '修正・埋め込み', [bEmbMode, bSegPlay, bSegDemo, bSegSlow, bSegHold, bImpAi, bImprove, bEmbed, bUnembed], true);
+  const secEmb = sec('emb', '修正・埋め込み', [bEmbMode, bSegPlay, bSegDemo, bSegSlow, bSegHold, bImpAi, bImprove, bEmbed, bSave, bUnembed], true);
   panel.append(status, bReset,
     sec('play', '操作・練習', [bAuto, bSide, bSwap, bGrav, bPractice], false),
     secEmb,
@@ -1835,6 +1846,7 @@
     bSegDemo.textContent = '操作の前に見本: ' + (S.segDemo ? '見せる' : 'なし');
     bSegSlow.textContent = '修正を見せる速さ: ' + (S.segSlow === 1 ? '等速' : S.segSlow + ' 倍');
     bSegHold.textContent = '修正の後に止まる: ' + (S.segHold ? S.segHold + ' 秒' : 'なし');
+    bSave.style.display = pendingSave ? '' : 'none';
     bEmbed.style.opacity = (S.active && rec.some(e => e.t === 'd' || e.t === 'u')) || S.lastEdit ? '1' : '.6';
     let t;
     if (S.active) {
@@ -1903,6 +1915,8 @@
   const loop = now => {
     raf = requestAnimationFrame(loop);
     try {
+      // リプレイを閉じたら、埋め込んだまま保存していない .ttrm を保存する
+      if (pendingSave && (!alive(pendingSave.game) || !replayOnScreen())) { flushSave(); S.msg = 'リプレイを閉じたので修正入りの .ttrm を保存しました'; }
       if (!checkStart()) { last = now; if (ov) ov.style.display = 'none'; return; }
       const list = shown();
       applySwap(list);

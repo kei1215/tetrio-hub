@@ -69,11 +69,20 @@
    await new Promise((resolve, reject) => { const tag = document.createElement('script'); tag.src = url; tag.onload = resolve; tag.onerror = () => reject(Error('外部AIのスクリプトを実行できません: ' + pkg.name)); document.head.appendChild(tag); });
   } finally { URL.revokeObjectURL(url); pendingFiles = null; pendingScript = null; }
  }
+ const STD_BUTTER = /^va-tree(-v[23])?$/, stale = new Set();
  function register(def) {
   if (!def || !/^[a-z0-9_-]{1,32}$/.test(String(def.id || '')) || typeof def.create !== 'function') throw Error('外部AIの登録が不正です(id と create が必要)');
   // A def that brings its own files / script (the built-in CC2) keeps them, even when it
   // registers while a stored package is being loaded (pendingFiles belongs to that package).
+  // v5.22 (user 2026-11-27: すでに入れている場合強制アプデも起こして欲しい): an installed copy of the standard Butter
+  // (va-tree, -v2, -v3; from the easy install) never replaces the built-in one, which is always the newest.
+  if (pendingScript && STD_BUTTER.test(def.id) && defs[def.id]?.builtin) return;
   defs[def.id] = { ...def, files: def.files || pendingFiles || {}, script: def.script || pendingScript || null };
+  // v5.22 (user 2026-11-28: 自作バターが定期的に固まる): the automatic re-learn of a player's Butter installs the new
+  // data between rounds; dropping the running Butter made the next round load it again (worker + warm-up), a stall
+  // every round. While that flag is set the running Butter is kept; the new one is used from the next app start or
+  // from a match started anew.
+  if (window.__qpKeepBots && Object.keys(bots).some(k => k.split('#')[0] === def.id)) { stale.add(def.id); delete errors[def.id]; return; }
   dropBots(def.id); delete errors[def.id];
  }
  // ---- worker host: the package script + files run in a Worker; results come back per slice ----
@@ -90,9 +99,11 @@ const run = (n) => { if (!job || cur !== n) return; let d = false; try { d = job
 onmessage = async (e) => { const m = e.data;
  if (m.t === 'load') { try { const u = URL.createObjectURL(new Blob([m.script], { type: 'text/javascript' })); importScripts(u); URL.revokeObjectURL(u);
    const d = defs[m.id]; if (!d) throw Error('register がありません'); bot = await d.create(m.files, { strength: m.strength });
-   // Warm-up search (the first searches of a fresh wasm are several times slower), max 2 s.
+   // Warm-up search (the first searches of a fresh wasm are several times slower): max 2 s for a wasm AI, 0.3 s for
+   // Butter (plain JS; v5.22, user: 開幕が全く動かないまたは遅い: the 2 s kept every Butter still at the start)
+   const WARM = /^va-tree/.test(m.id) ? 300 : 2000;
    try { const e0 = Array.from({ length: 40 }, () => Array(10).fill(null)), w = bot.begin({ board: e0, current: 't', hold: null, queue: ['i', 'o', 's', 'z', 'l', 'j'], b2b: 0, combo: 0, incoming: [] }), t0 = performance.now();
-    for (let k = 0; k < 2 && performance.now() - t0 < 2000; k++) { let j = k ? bot.begin({ board: e0, current: 'i', hold: null, queue: ['t', 'o', 's', 'z', 'l', 'j'], b2b: 0, combo: 0, incoming: [] }) : w; while (!j.step(50) && performance.now() - t0 < 2000); } } catch {}
+    for (let k = 0; k < 2 && performance.now() - t0 < WARM; k++) { let j = k ? bot.begin({ board: e0, current: 'i', hold: null, queue: ['t', 'o', 's', 'z', 'l', 'j'], b2b: 0, combo: 0, incoming: [] }) : w; while (!j.step(50) && performance.now() - t0 < WARM); } } catch {}
    postMessage({ t: 'ready' }); }
   catch (err) { postMessage({ t: 'error', msg: String(err && err.message || err) }); } }
  else if (m.t === 'begin') { try { job = bot.begin(m.input); cur = m.n; run(m.n); } catch (err) { postMessage({ t: 'res', n: m.n, r: null, done: true, spent: 0 }); } }
@@ -151,12 +162,16 @@ onmessage = async (e) => { const m = e.data;
   return added;
  }
  async function restore() {
-  try { for (const pkg of await allPackages()) { try { await runPackage(pkg); } catch (error) { console.warn(error); } } } catch (error) { console.warn('外部AIの復元: ' + error.message); }
+  try { for (const pkg of await allPackages()) { try {
+   // an installed standard Butter is updated to the built-in script (forced update) and saved that way
+   const b = defs['va-tree']?.builtin ? defs['va-tree'].script : null;
+   if (b && (pkg.ids || []).length && pkg.ids.every(id => STD_BUTTER.test(id)) && pkg.script !== b) { pkg.script = b; pkg.ids = Object.keys(defs).filter(id => STD_BUTTER.test(id)); try { await savePackage(pkg); } catch {} }
+   await runPackage(pkg); } catch (error) { console.warn(error); } } } catch (error) { console.warn('外部AIの復元: ' + error.message); }
  }
 
  // ---- BOT hook ----
  // Native board: rows top-first. Engines: 40 rows, row 0 = bottom.
- function inputOf(base, width, real) {
+ function inputOf(base, width, real, game) {
   const g = base.game, H = g.board.length, board = [];
   // v5.19 (user: 幅が何でも動かせるように): Butter gets the real width; other engines a 10-wide board (outside cells filled).
   const BW = (g.board[0] || []).length || 10, CW = width === 'real' ? BW : 10;
@@ -168,7 +183,16 @@ onmessage = async (e) => { const m = e.data;
    // v5.19 (user: BUTTERのみS1対応): the room's B2B rule (S1 = chaining, no charging / S2 = charging). Only Butter reads it.
    rules: { charging: !!g.setoptions?.b2bcharging, chargeAt: Number(g.setoptions?.b2bcharge_at ?? 4), chargeBase: Number(g.setoptions?.b2bcharge_base ?? 3),
     // perfect clear: the room's attack and B2B bonus (allclears off = no bonus)
-    pcAttack: g.setoptions?.allclears === false ? 0 : Number(g.setoptions?.allclear_garbage ?? 5), pcB2B: g.setoptions?.allclears === false ? 0 : Number(g.setoptions?.allclear_b2b ?? 1) } };
+    pcAttack: g.setoptions?.allclears === false ? 0 : Number(g.setoptions?.allclear_garbage ?? 5), pcB2B: g.setoptions?.allclears === false ? 0 : Number(g.setoptions?.allclear_b2b ?? 1) },
+   // the opponent (user 2026-11-28: もう勝てると思ったら B2B を切る): stack height and garbage waiting for them; Butter breaks
+   // its B2B when the released charge fills what is left of their board
+   opponent: oppOf(game) };
+ }
+ function oppOf(game) {
+  try { const peer = game?._localTLPeer, ps = peer?.state; if (!ps || !peer.isPlaying?.()) return undefined;
+   const pb = ps.board || [], top = pb.findIndex(r => r && r.some(c => c !== null && c !== undefined)), height = top < 0 ? 0 : pb.length - top;
+   const incoming = (ps.impendingdamage || []).filter(d => d && d.active !== false && d.amt > 0).reduce((a, d) => a + d.amt, 0);
+   return { height: Math.min(40, height), incoming: Math.round(incoming) }; } catch { return undefined; }
  }
  function planner(game, base, opts) {
   const bot = bots[keyOf(game?._aiEngine, game?._aiSlot)];
@@ -177,12 +201,14 @@ onmessage = async (e) => { const m = e.data;
   stats.asked++;
   const butter = /^va-tree/.test(game._aiEngine);
   let queue = null;
-  if (!butter) {
+  // v5.22 (user 2026-11-27: Butterが弱い / 2026-11-23: CC1と同じようにしていいよ): Butter sees 13 from the real queue, like CC MAX.
+  if (butter) { try { queue = (game.ejectState?.()?.game?.bag || []).slice(0, 13); } catch {} const shown = window.LocalAIInformation?.known?.(base) || []; if (!queue || queue.length < shown.length) queue = shown; }
+  else {
    const lvl = ccLevel(), shown = window.LocalAIInformation?.known?.(base) || [];
    if (lvl === 'max') { try { queue = (game.ejectState?.()?.game?.bag || []).slice(0, 13); } catch {} if (!queue || queue.length < shown.length) queue = shown; }
    else if (lvl === 'easy' || lvl === 'normal') queue = shown.slice(0, lvl === 'easy' ? 1 : 3);
   }
-  const job = bot.begin(inputOf(base, butter ? 'real' : null, queue));
+  const job = bot.begin(inputOf(base, butter ? 'real' : null, queue, game));
   let out, early = false;
   const convert = () => {
    if (out !== undefined) return out;
@@ -268,7 +294,7 @@ onmessage = async (e) => { const m = e.data;
    for (const k of ['left', 'right']) { const sel = $(`select[data-k="${k}"]`), keep = sel.value; sel.innerHTML = ''; for (const [v, t] of sideOptions()) { const o = document.createElement('option'); o.value = v; o.textContent = t; sel.appendChild(o); } sel.value = keep; if (!sel.value) sel.selectedIndex = k === 'left' ? 0 : sel.options.length - 1; }
    try { const f = localStorage.getItem('qp-local-ai-ext-ft'); if (f) $('input[data-k="ft"]').value = f; } catch {}
    { const es = [extOf($('select[data-k="right"]').value), extOf($('select[data-k="left"]').value)].filter(Boolean), cr = $('label[data-k="ccstrrow"]'); if (cr) cr.style.display = es.some(e => !noLevel(e)) ? '' : 'none'; const cs = $('select[data-k="ccstr"]'); if (cs) cs.value = ccLevel(); }
-   const base = [extOf($('select[data-k="right"]').value), extOf($('select[data-k="left"]').value)].includes('va-tree'), br = $('label[data-k="bstrrow"]'); if (br) br.style.display = base ? '' : 'none'; const bs = $('select[data-k="bstr"]'); if (bs) bs.value = butterLevel();
+   const base = [extOf($('select[data-k="right"]').value), extOf($('select[data-k="left"]').value)].some(e => STD_BUTTER.test(e || '')), br = $('label[data-k="bstrrow"]'); if (br) br.style.display = base ? '' : 'none'; const bs = $('select[data-k="bstr"]'); if (bs) bs.value = butterLevel();
   };
   // In the Tab panel (2026-11-13): the same controls as a section under the vAI
   // test settings; the floating panel stays only where there is no Tab panel.
@@ -319,7 +345,7 @@ onmessage = async (e) => { const m = e.data;
     await window.LocalAI?.load?.();
     const engines = [extOf(L), extOf(R)];
     { const cs = $('select[data-k="ccstr"]'); if (cs && engines.some(e => e && !noLevel(e)) && CC_LEVELS.includes(cs.value)) try { localStorage.setItem('qp-cc-strength', cs.value); } catch {} }
-    { const bs = $('select[data-k="bstr"]'); if (bs && engines.includes('va-tree') && BUTTER_LEVELS.includes(bs.value)) try { localStorage.setItem('qp-butter-strength', bs.value); } catch {} }
+    { const bs = $('select[data-k="bstr"]'); if (bs && engines.some(e => STD_BUTTER.test(e || '')) && BUTTER_LEVELS.includes(bs.value)) try { localStorage.setItem('qp-butter-strength', bs.value); } catch {} }
     for (const id of new Set(engines.filter(Boolean))) {
      status((defs[id]?.label || id) + ' を準備中…'); await load(id, 0); await load(id, 1);
     }
@@ -347,6 +373,7 @@ onmessage = async (e) => { const m = e.data;
     // v5.16 (user: Custom ルームを正常に): CUSTOM opens the native room lobby (local-custom-room.js); START there.
     if ($('select[data-k="mode"]').value === 'vsai' && window.LocalCustomRoom) { window.LocalCustomRoom.open({ vsai: true }); status('VS AI ルームを開きました'); return; }
     if ($('select[data-k="mode"]').value === 'custom' && window.LocalCustomRoom) { window.LocalCustomRoom.open({ left: side(L, engines[0], 0), right: side(R, engines[1], 1), labels, engines }); status('CUSTOM ルームを開きました(/help でコマンド)'); return; }
+    for (const id of stale) dropBots(id); stale.clear(); // a new match takes the re-learned Butter
     window.LocalAIRoom.start({ left: side(L, engines[0], 0), right: side(R, engines[1], 1), mode: $('select[data-k="mode"]').value, labels, engines });
     status('開始: ' + [L, R].map(v => sideOptions().find(o => o[0] === v)?.[1] || v).join(' vs '));
    } catch (e) { status('開始できません: ' + e.message); }
@@ -357,7 +384,7 @@ onmessage = async (e) => { const m = e.data;
   const { games, config } = ev.detail || {};
   (games || []).forEach((g, i) => { g._aiEngine = config?.engines?.[i] || null; g._aiSlot = i; g._aiExternalStats = null; if (g._aiEngine && defs[g._aiEngine]) load(g._aiEngine, i).catch(() => {}); });
  });
- window.LocalExternalAI = { register, load, planner, active, level, inputOf, addFiles, restore, engines: () => Object.keys(defs), label: id => defs[id]?.label || id };
+ window.LocalExternalAI = { refresh: () => { for (const id of stale) dropBots(id); stale.clear(); }, register, load, planner, active, level, inputOf, addFiles, restore, engines: () => Object.keys(defs), label: id => defs[id]?.label || id };
  const mount = () => { if (document.body) panel(); else setTimeout(mount, 200); };
  if (typeof document !== 'undefined') { mount(); restore(); }
 })();

@@ -167,7 +167,7 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
   return LocalNative.solo(mode,aiName);
  });
  const qp=document.createElement('div');qp.id='game_qp_offline';qp.className='scroller_item has_image has_description ns';
- const icon=document.createElement('img');icon.src='https://kei1215.github.io/tetrio-hub/bookmarklets/offline-v4.8255/qpo.svg';icon.alt='';qp.appendChild(icon);
+ const icon=document.createElement('img');icon.src='/res/local/qpo.svg';icon.alt='';qp.appendChild(icon);
  const qpTitle=document.createElement('h1');qpTitle.textContent='QP OFFLINE';qp.appendChild(qpTitle);
  const qpHint=document.createElement('p');qpHint.textContent='LOCAL ONLY · NO OPPONENTS · NO KILLS';qp.appendChild(qpHint);
  const zenithMenu=document.getElementById('zenithmenu');
@@ -193,6 +193,11 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
  const attackLull=field('火力が来ない時間を入れる（まれに最大10秒）',document.createElement('input'));attackLull.type='checkbox';attackLull.checked=saved('qp-local-attack-lull','true')==='true';attackLull.setAttribute('aria-label','火力が来ない時間を入れる');attackLull.addEventListener('change',()=>localStorage.setItem('qp-local-attack-lull',String(attackLull.checked)));
  // v5.07 (user: QP設定に3,2,1,goを入れるかのオンオフ): the board countdown (3, 2, 1, GO!) before a QP start. Default OFF (real QP has none).
  const countdown=field('開始前に 3,2,1,GO',document.createElement('input'));countdown.type='checkbox';countdown.checked=saved('qp-local-countdown','false')==='true';countdown.setAttribute('aria-label','開始前に 3,2,1,GO');countdown.addEventListener('change',()=>localStorage.setItem('qp-local-countdown',String(countdown.checked)));
+ // 2026-11-28 (user: オフラインQPにてデバフの有無と重力の時間経過の上昇有無を選べるように): FATIGUE (8:00 から消せない段・
+ // 受ける火力の倍率上昇) and the gravity that rises with time (native gincrease 0.0005/frame). Both default ON (real QP).
+ // The choices go into the game options, so replays play back the same (client.js fix_no_fatigue).
+ const fatigue=field('デバフ（8分から消せない段・受ける火力が増える FATIGUE）',document.createElement('input'));fatigue.type='checkbox';fatigue.checked=saved('qp-local-fatigue','true')!=='false';fatigue.setAttribute('aria-label','デバフ');fatigue.addEventListener('change',()=>localStorage.setItem('qp-local-fatigue',String(fatigue.checked)));
+ const gravityRise=field('時間がたつと重力が上がる',document.createElement('input'));gravityRise.type='checkbox';gravityRise.checked=saved('qp-local-gravity-rise','true')!=='false';gravityRise.setAttribute('aria-label','時間がたつと重力が上がる');gravityRise.addEventListener('change',()=>localStorage.setItem('qp-local-gravity-rise',String(gravityRise.checked)));
  const missionSource=field('復活ミッション',document.createElement('select'));missionSource.setAttribute('aria-label','復活ミッション');for(const [value,label]of [['standard','標準のみ'],['custom','自作のみ'],['both','すべて表示']]){const option=document.createElement('option');option.value=value;option.textContent=label;missionSource.appendChild(option)}missionSource.value=saved('qp-local-mission-source','standard');
  const missionTools=document.createElement('div');missionTools.id='local-mission-tools';missionTools.style.cssText='display:flex;flex-wrap:wrap;gap:.45em;margin:.7em 0';
  const missionImport=document.createElement('input');missionImport.type='file';missionImport.accept='application/json,text/plain,.json,.txt';missionImport.hidden=true;
@@ -353,6 +358,8 @@ body.qp-local-mode .qp-local-settings-button{position:fixed!important;z-index:21
   // 10F相当 (2026-11-21): scattered holes via the native MESSY garbage flag (not the MESSY MOD: zenith_mods
   // stays as chosen), so the replay options reproduce the holes in every player. See incoming-attacks.js.
   if(config.floor10)config.options={...(config.options||{}),zenith_messy:true};
+  if(!fatigue.checked)config.options={...(config.options||{}),qp_local_nofatigue:true};
+  if(!gravityRise.checked)config.options={...(config.options||{}),gincrease:0};
   config.missions={source:missionSource.value,attackEnabled:config.attackMode!=='none',includeAttackRequired:attackRequired.checked,allowControlPenalties:controlPenalties.checked};
   return config;
  }

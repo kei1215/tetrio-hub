@@ -146,7 +146,7 @@
   for(const k of bools)if(k in options)options[k]=!!options[k];
   window.LocalAIRoom.ft?.(Math.max(1,Math.min(99,Number(room.match.ft)||1)));
   pendingReturn=false;
-  const go=()=>{if(!room||room.state!=='intro')return;window.LocalAIRoom.start({left:sides[0],right:sides[1],engines,labels,mode:'custom',options,customRoom:true,firstTo:Math.max(1,Math.min(99,Math.round(Number(room.match.ft))||1))});room.state='ingame';document.body.classList.add('qp-room-ingame');const m=room.players.find(p=>p._id===me().id);fire('room.chat',{content:'started the game',user:{_id:m?._id||'',username:m?.username||me().username,role:'user',supporter:false,type:'user'},system:true,id:'local-'+Date.now()})};
+  const go=()=>{if(!room||room.state!=="intro")return;try{window.LocalExternalAI?.refresh?.()}catch{}window.LocalAIRoom.start({left:sides[0],right:sides[1],engines,labels,mode:'custom',options,customRoom:true,firstTo:Math.max(1,Math.min(99,Math.round(Number(room.match.ft))||1))});room.state='ingame';document.body.classList.add('qp-room-ingame');const m=room.players.find(p=>p._id===me().id);fire('room.chat',{content:'started the game',user:{_id:m?._id||'',username:m?.username||me().username,role:'user',supporter:false,type:'user'},system:true,id:'local-'+Date.now()})};
   room.state='intro';window.__qpSocialClose?.();
   if(readSetting(SETTINGS[0])&&typeof window.DEVHOOK_PAIRED==='function'){
    // native TETRA LEAGUE match intro (pair screen) with TR hidden (-1); the rank line shows the room record.

@@ -32,7 +32,7 @@
   wellDepth:57,maxWell:17,wellColumn:[20,23,20,50,59,21,59,10,-10,24],
   // rewards
   // rewards: CC1's clear values (style 'cc1') or attack x atkW (style 'atk'), plus the user's changes
-  style:'cc1',clear:[0,-143,-100,-58,390],tspin:[0,121,410,602],b2bClear:104,comboW:150,allSpin:60,
+  style:'cc1',clear:[0,-143,-100,-58,390],tspin:[0,121,410,602],b2bClear:104,comboW:150,allSpin:60,spinKeep:0,b2bBreak:0,breakSafe:15,breakRen:4,
   atkW:105,clear1:-90,clear2:-60,clear3:-30,wastedT:-152,tMiniSolo:-130,renQuad:160,digW:45,
   pcAttack:5,pcB2B:1,charging:true,chargeAt:4,chargeBase:3,simGarbage:true,garbageCap:8,
   // take, then send (user: 火力があっても受けて死なないなら受けてからまとめ打ち): attack that would only cancel
@@ -110,10 +110,21 @@
  }
  function boardValue(rows,node,P,F){
   let v=0;const H=rows.length;
-  if(node.b2b>0){v+=P.backToBack+P.b2bStep*Math.min(node.b2b,P.b2bCap);if(F){F.backToBack=1;F.b2bStep=Math.min(node.b2b,P.b2bCap)}}
+  if(node.b2b>0){v+=P.backToBack+P.b2bStep*Math.min(node.b2b,P.b2bCap);
+   // Butter v2 (user 2026-11-27: B2B をためていく): a charged chain is worth most of its surge while kept, so it is not cashed at 5
+   // no B2B cap (user 2026-11-28: B2Bに上限などない、やばいと思ったら切る、もう勝てると思ったら切る): the charge keeps its
+   // value while it grows, except when it would already kill (oppRoom = rows the opponent can still take): then keeping it
+   // is worth nothing and the search cashes it. chargeMax is only an optional cap.
+   if(P.charging&&P.surgeKeep&&node.b2b>P.chargeAt){const s=Math.min(node.b2b,P.chargeMax||1e9)-P.chargeAt+P.chargeBase;
+    // in danger (stack + waiting garbage at breakSafe) the kept charge is worth nothing either: break it and send it
+    let top=0;if(P.b2bBreak){const hh=heightsOf(rows);for(let x=0;x<W;x++)if(hh[x]>top)top=hh[x]}
+    if(!(P.oppRoom!=null&&s>=P.oppRoom)&&!(P.b2bBreak&&top+(node.pend||0)>=P.breakSafe))v+=P.surgeKeep*P.atkW*s}if(F){F.backToBack=1;F.b2bStep=Math.min(node.b2b,P.b2bCap)}}
   let h=heightsOf(rows);let hp=0;for(let x=0;x<W;x++)if(h[x]>hp)hp=h[x];
   const eff=hp+(node.pend||0);
-  v+=P.topQuarter*Math.max(0,eff-15)+P.topHalf*Math.max(0,eff-10);if(F){F.topQuarter=Math.max(0,eff-15);F.topHalf=Math.max(0,eff-10)}
+  // b2bRoom (user 2026-11-28: ガベージの上にスピンの形を作ってから掘る): while a B2B chain is on, the height alarms start
+  // b2bRoom rows later, so the board can build a spin setup on top of garbage instead of digging it with plain clears
+  const ex=node.b2b>0&&P.b2bRoom?P.b2bRoom:0;
+  v+=P.topQuarter*Math.max(0,eff-15-ex)+P.topHalf*Math.max(0,eff-10-ex);if(F){F.topQuarter=Math.max(0,eff-15);F.topHalf=Math.max(0,eff-10)}
   // T-slots, cut out as many times as Ts are at hand
   let ts=(node.tAhead?1:0)+(node.hold==='t'?1:0);if(ts<1)ts=1;
   for(let i=0;i<ts;i++){const s=findTslot(rows,h);if(!s)break;v+=P.tslot[s.lines];if(F)F['tslot'+s.lines]=(F['tslot'+s.lines]||0)+1;if(s.lines<2)break;rows=s.rows;h=heightsOf(rows)}
@@ -123,6 +134,10 @@
   let well=0;for(let x=1;x<W;x++)if(h[x]<=h[well])well=x;
   let depth=0;for(let yb=h[well];yb<20;yb++){const r=rows[H-1-yb];if((r|(1<<well))!==FULL)break;depth++}
   depth=Math.min(depth,P.maxWell);v+=P.wellDepth*depth;if(depth)v+=(W===10?P.wellColumn[well]:P.wellColumn[Math.round(well*9/Math.max(1,W-1))])||0;if(F){F.wellDepth=depth;if(depth)F['wc'+well]=1}
+  // quadClean (user 2026-11-28, Butter v3: 最終的にTETRISで回収できないものは組んでいない): above the well's floor every row
+  // must still be fillable from above except the well, so the stack can always be cashed with Tetrises; a row with a
+  // covered empty cell (a hole outside the well) can not be, and costs
+  if(P.quadClean){let bad=0;for(let yb=h[well];yb<hp;yb++){const r=rows[H-1-yb];for(let x=0;x<W;x++){if(x===well||r>>x&1)continue;if(yb<h[x]){bad++;break}}}v+=P.quadClean*bad;if(F)F.quadClean=bad}
   // row transitions
   if(P.rowTrans){let t=0;for(let y=0;y<H;y++){const r=rows[y];if(!r)continue;const d=(r|(1<<W))^(1|r<<1);t+=popc(d)}v+=P.rowTrans*t;if(F)F.rowTrans=t}
   // bumpiness outside the well
@@ -136,6 +151,11 @@
   for(let x=0;x<W;x++)for(let yb=h[x]-3;yb>=0;yb--){if(!(rows[H-1-yb]>>x&1)){const c=Math.min(6,h[x]-yb-1);cov+=c;covSq+=c*c}}
   v+=P.cavity*cav+P.cavitySq*cav*cav+P.overhang*ov+P.overhangSq*ov*ov+P.covered*cov+P.coveredSq*covSq;
   if(F)Object.assign(F,{cavity:cav,cavitySq:cav*cav,overhang:ov,overhangSq:ov*ov,covered:cov,coveredSq:covSq});
+  // dead holes (2026-11-28, from Butter vs CC2 boards): a 1-wide hole in the player's own rows, walled left and right and
+  // roofed, that no spin can open (CC2 digs 2-3 wide cavities with S/Z/J/L/I spin singles; Butter left 1-wide holes in
+  // scattered columns and had to dig them with plain clears, breaking B2B). Garbage rows (node.g) are not counted.
+  if(P.deadHole){let dead=0;const g0=node.g|0;for(let yb=g0;yb<hp-1;yb++){const r=rows[H-1-yb],up=rows[H-2-yb];for(let x=0;x<W;x++){if(r>>x&1||!(up>>x&1))continue;
+    if((x===0||r>>(x-1)&1)&&(x===W-1||r>>(x+1)&1))dead++}}v+=P.deadHole*dead}
   return v;
  }
 
@@ -151,6 +171,7 @@
    else if(type==='t'&&p.spin===1){if(combo<2)F.tMiniSolo=1}
    else{F['clear'+Math.min(4,r.lines)]=1;if(p.spin)F.allSpin=1}
    if(special&&b2bBefore>0)F.b2bClear=1;
+   if(p.spin&&type!=='t'&&b2bBefore>0)F.spinKeep=1;
    F.comboW=COMBO_G[Math.min(11,combo-1)];
    if(!special&&b2b>0)b2b=0;if(special)b2b++;
    if(r.lines===4&&combo>=2&&g>0)F.renQuad=1;
@@ -168,7 +189,7 @@
  // weight vector <-> options
  const FIT_KEYS=['backToBack','b2bStep','bump','bumpSq','rowTrans','height','topHalf','topQuarter','cavity','cavitySq','overhang','overhangSq','covered','coveredSq',
   'tslot0','tslot1','tslot2','tslot3','wellDepth','wc0','wc1','wc2','wc3','wc4','wc5','wc6','wc7','wc8','wc9',
-  'clear1','clear2','clear3','clear4','tspin1','tspin2','tspin3','b2bClear','comboW','allSpin','wastedT','tMiniSolo','renQuad','digW'];
+  'clear1','clear2','clear3','clear4','tspin1','tspin2','tspin3','b2bClear','comboW','allSpin','spinKeep','wastedT','tMiniSolo','renQuad','digW'];
  function weightsOf(P0){const P={...DEFAULTS,...(P0||{})},w={};for(const k of FIT_KEYS){let m;
   if((m=/^tslot(\d)$/.exec(k)))w[k]=P.tslot[+m[1]];else if((m=/^wc(\d)$/.exec(k)))w[k]=P.wellColumn[+m[1]];
   else if((m=/^clear(\d)$/.exec(k)))w[k]=P.clear[+m[1]];else if((m=/^tspin(\d)$/.exec(k)))w[k]=P.tspin[+m[1]];else w[k]=P[k]}return w}
@@ -226,6 +247,83 @@
      for(const [X,K] of cs){rem[K]&=~(1<<X);free[K]&=~(1<<X)}cnt[o.type]=(cnt[o.type]|0)+1;stack.push(cs);
      rec();stack.pop();cnt[o.type]--;cs.forEach(([X,K],i)=>{if(was[i])rem[K]|=1<<X;else free[K]|=1<<X});if(found>=cap)return}}};
   rec();return found}
+ // ---- Butter v2: all-spin slots (user 2026-11-27: CC2みたいに変すぎるスピンでなければ butter も同じように見る) ----
+ // A resting spot near the surface where S/Z/J/L/I (in hold or the next few) can not move left, right or up and
+ // clears a line: the all-spin that keeps B2B. Valued like a T-slot (spinSlot[lines]).
+ // shapes as row masks per type / rotation (built once per width)
+ let SLOTW=-1,SLOT=null;
+ function slotShapes(){if(SLOTW===W&&SLOT)return SLOT;const S=SP.__shapes();SLOT={};SLOTW=W;
+  for(const t of ['s','z','l','j','i']){SLOT[t]=[];for(let r=0;r<4;r++){const m=new Map();let minx=9,maxx=-9,miny=9,maxy=-9;
+   for(const [cx,cy] of S[t][r]){m.set(cy,(m.get(cy)||0)|1<<(cx+3));minx=Math.min(minx,cx);maxx=Math.max(maxx,cx);miny=Math.min(miny,cy);maxy=Math.max(maxy,cy)}
+   SLOT[t].push({rows:[...m].map(([dy,b])=>[dy,b]),cells:S[t][r].map(([x,y])=>[x,y]),minx,maxx,miny,maxy})}}return SLOT}
+ function spinSlotBonus(rows,node,seq,P){
+  const H=rows.length,have=new Set(),SL=slotShapes();if(node.hold)have.add(node.hold);
+  for(let i=node.qi;i<Math.min(seq.length,node.qi+(P.spinLook||3));i++)have.add(seq[i]);
+  let top=0;while(top<H&&!rows[top])top++;
+  // quick outs: an all-spin needs a covered empty cell (something right above it: the piece can not move up) and a
+  // row with at most 4 holes in the window; most boards have neither
+  const y0=Math.max(0,top-3),y1=Math.min(H,top+5),covs=[];let near=false;
+  for(let y=Math.max(1,y0);y<y1;y++){const e=~rows[y]&FULL;let c=e&rows[y-1];while(c){const b=c&-c;covs.push(31-Math.clz32(b),y);c^=b}if(e&&popc(e)<=4)near=true}
+  if(!covs.length||!near)return 0;
+  // cell mask of the piece at x (shift from the +3 base); outside the board = blocked
+  const fits=(sh,x,y)=>{if(x+sh.minx<0||x+sh.maxx>=W||y+sh.maxy>=H)return false;
+   for(const [dy,b] of sh.rows){const yy=y+dy;if(yy<0)continue;const m=x>=3?b<<(x-3):b>>(3-x);if(rows[yy]&m)return false}return true};
+  let best=0;
+  for(const type of have){const shs=SL[type];if(!shs)continue;
+   for(let r=0;r<4;r++){const sh=shs[r];
+    // only spots where a piece cell sits in a covered cell
+    const tried=new Set();
+    for(let k=0;k<covs.length;k+=2)for(const [cx,cy] of sh.cells){const x=covs[k]-cx,y=covs[k+1]-cy,key=x*64+y;if(tried.has(key))continue;tried.add(key);
+     if(!fits(sh,x,y)||fits(sh,x,y+1)||fits(sh,x,y-1)||fits(sh,x-1,y)||fits(sh,x+1,y))continue;
+     let lines=0;for(const [dy,b] of sh.rows){const yy=y+dy;if(yy<0)continue;const m=x>=3?b<<(x-3):b>>(3-x);if((rows[yy]|m)===FULL)lines++}
+     if(!lines)continue;const v=P.spinSlot[Math.min(3,lines)]||0;if(v>best)best=v}}}
+  return best}
+ // ---- Butter v3: mid-game T-spin templates (user 2026-11-27: この地形だったら tspin の途中テンプレ何が組めるかで火力を上げる) ----
+ // setTemplates([[name, rows top first, '/' between]]): letters = the template's pieces (T = the T-spin), # = base, X = surface,
+ // . = empty. Only TSD or bigger per T. At the root the templates whose empty / T cells are empty and at least tplMin of
+ // their cells are already there become targets; a leaf earns tplW per target cell filled (x lines / 2) and tplDone x lines
+ // when one is complete, while its empty / T cells stay open. 10-wide boards only.
+ let TPLS=[];
+ function setTemplates(list){const out=[];
+  for(const [name,s] of list||[]){const r0=String(s).split('/');if(r0.some(r=>r.length!==10))continue;
+   for(const rr of [r0,r0.map(r=>r.split('').reverse().join(''))]){const h=rr.length,ch=(x,y)=>y>=0&&y<h&&x>=0&&x<10?rr[h-1-y][x]:'#';
+    const need=[],tc=[],free=new Set();
+    for(let y=0;y<h;y++)for(let x=0;x<10;x++){const c=ch(x,y);if(c==='T')tc.push([x,y]);else if(c!=='.')need.push([x,y])}
+    if(!tc.length)continue;
+    for(const [x,y] of need.concat(tc))for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++)if(ch(x+dx,y+dy)==='.')free.add((x+dx)+','+(y+dy));
+    let lines=0;for(const y of new Set(tc.map(c=>c[1]))){let full=true;for(let x=0;x<10;x++)if(ch(x,y)==='.')full=false;if(full)lines++}
+    if(lines/Math.max(1,Math.round(tc.length/4))<2)continue;
+    out.push({name,h,need,block:tc.concat([...free].map(k=>k.split(',').map(Number))),lines})}}
+  TPLS=out;return out.length}
+ function tplTargets(rows,seq,P){
+  if(!TPLS.length||W!==10)return null;const H=rows.length,at=(x,y)=>y<0?true:y>=H?false:!!((rows[H-1-y]>>x)&1);
+  let top=0;for(let y=0;y<H;y++)if(rows[H-1-y])top=y+1;
+  const room=4*Math.min(seq.length,P.tplPieces||6),found=[],only=P.tplOnly?new Set(P.tplOnly):null;
+  for(const t of TPLS){if(only&&!only.has(t.name))continue;for(let oy=-t.h+1;oy<=top;oy++){let ok=true;
+   for(const [x,y] of t.block)if(at(x,oy+y)){ok=false;break}if(!ok)continue;
+   let have=0,n=0;for(const [x,y] of t.need){if(oy+y<0)continue;n++;if(at(x,oy+y))have++}
+   if(!n||n-have>room||have<n*(P.tplMin??0.5))continue;
+   // keep the template aimed at last move (user 2026-11-28: 全テンプレ, the target kept switching): it counts tplKeepW times
+   found.push({t,oy,have,n,score:t.lines*have/n*(P.tplKeep===t.name?(P.tplKeepW||3):1)})}}
+  found.sort((a,b)=>b.score-a.score);return found.slice(0,P.tplTop||4)}
+ // names of the templates complete on this board (rows top first): every cell of the template's pieces there (at
+ // least 8 on the board), its empty / T cells empty. For the player data (learn-core: which templates the player builds).
+ // frac < 1 (user 2026-11-28: 組み途中も数える): at least that share of the cells is enough, best first [{name, frac}]
+ function matchTemplates(rows,frac=1){
+  if(!TPLS.length)return [];const H=rows.length,at=(x,y)=>y<0?true:y>=H?false:!!((rows[H-1-y]>>x)&1),best=new Map();
+  let top=0;for(let y=0;y<H;y++)if(rows[H-1-y])top=y+1;
+  for(const t of TPLS){
+   for(let oy=-t.h+1;oy<=top;oy++){let ok=true;for(const [x,y] of t.block)if(at(x,oy+y)){ok=false;break}if(!ok)continue;
+    let n=0,have=0;for(const [x,y] of t.need){if(oy+y<0)continue;n++;if(at(x,oy+y))have++}
+    if(n<8||have<n*frac)continue;const f=have/n;if(f>(best.get(t.name)||0))best.set(t.name,f)}}
+  const out=[...best].map(([name,f])=>({name,frac:f})).sort((a,b)=>b.frac-a.frac);
+  return frac>=1?out.map(o=>o.name):out}
+ function tplBonus(rows,T,P){
+  const H=rows.length,at=(x,y)=>y<0?true:y>=H?false:!!((rows[H-1-y]>>x)&1);let best=0;
+  for(const g of T){let ok=true;for(const [x,y] of g.t.block)if(at(x,g.oy+y)){ok=false;break}if(!ok)continue;
+   let have=0;for(const [x,y] of g.t.need)if(g.oy+y>=0&&at(x,g.oy+y))have++;
+   let v=P.tplW*(have-g.have)*g.t.lines/2;if(have>=g.n)v+=P.tplDone*g.t.lines;if(v>best)best=v}
+  return best}
  const REUSE=new Map();
  function sameRows(a,b){if(a.length!==b.length)return false;for(let i=0;i<a.length;i++)if(a[i]!==b[i])return false;return true}
  function create(engine,state,options={}){
@@ -243,6 +341,7 @@
    pend:Math.max(0,Number(P.incoming)||0),g:g0,gi:0,acc:0,eval:0,children:null,spec:null,depth:0};
   // opening shapes in play only when the search starts from an opening (no garbage, no more cells than the shape)
   let rootCells=0;for(const m of rows0)if(m)rootCells+=popc(m);
+  const TPLT=P.tplW?tplTargets(rows0,seq,P):null;
   const opens=(P.openers||[]).map(o=>{const rows=o.rows||o;return {rows,empty:o.empty||rows.map(()=>0),book:o.book||null,n:o.n||1}}).filter(()=>P.openLive!==undefined?!!P.openLive:!g0),openOn=opens.length>0;
   const seen=new Map();let nodes=0,done=false,spent=0,best=null,maxDepth=0,iters=0;
   const pieceAt=(i,extra)=>i<seq.length?seq[i]:extra;
@@ -263,7 +362,8 @@
      if(n.spec)for(const t in n.spec)for(const ch of n.spec[t])walk(ch,mv);
      if(n.children&&n.children.length)n.children.sort((a,b)=>b.eval-a.eval);if(n.spec)for(const t in n.spec)n.spec[t].sort((a,b)=>b.eval-a.eval);
      if(n.children||n.spec)n.eval=score(n);reused++};
-    walk(c,null);c.depth=0;c.move=undefined;rootNode=c;break}
+    // cut the link to the old root: it kept every earlier tree alive, ~27 MB a move (vAR crashed near 500 pieces, 2026-11-28)
+    walk(c,null);c.depth=0;c.move=undefined;c.parent=null;rootNode=c;break}
    if(root.__reuseDbg&&prev){const why=!reused&&prev.root.children?prev.root.children.map(c=>sameRows(c.rows,rows0)?(c.hold!==rootNode.hold?'hold':c.b2b!==rootNode.b2b?'b2b':c.combo!==rootNode.combo?'combo':c.pend!==rootNode.pend?'pend':'seq'):null).find(Boolean)||'board':null;root.__reuseDbg(reused?'ok':prev.sig!==sig?'sig':why)}}
   // children of a node for one known current piece (and the hold swap)
   function expandWith(node,cur,next){
@@ -281,7 +381,7 @@
    let rew=0;
    // the setup's slots stay open until its T-spins are done (protect: rows from the bottom)
    if(P.protect&&!r.lines){const H=r.rows.length;for(let k=0;k<P.protect.length;k++)if(r.rows[H-1-k]&P.protect[k]){rew-=P.protectW;break}}
-   let b2b=node.b2b,combo=node.combo,pend=node.pend,g=node.g-r.dug,rows=r.rows,gi=node.gi;
+   let b2b=node.b2b,combo=node.combo,pend=node.pend,g=node.g-r.dug,rows=r.rows,gi=node.gi,brk=!!node.brk;
    const fullT=type==='t'&&p.spin===2;
    if(r.lines){
     combo++;
@@ -292,11 +392,21 @@
     let pc=true;for(let y=0;y<rows.length;y++)if(rows[y]){pc=false;break}
     if(pc){atk+=P.pcAttack;b2b+=P.pcB2B}
     if(P.style==='cc1'){
-     const b2bBefore=node.b2b;
-     if(fullT)rew+=P.tspin[Math.min(3,r.lines)];
-     else if(type==='t'&&p.spin===1){if(combo<2)rew+=P.tMiniSolo}
+     const b2bBefore=node.b2b,rew0=rew;
+     // Butter v2 (user 2026-11-27: tspin を mini にしない / 下に穴があって TSS の方がいいわけじゃないなら TSD /
+     // allspin は tspin を打つための繋ぎ): tssNoDig = a TSS that digs no garbage, tMiniAny = every T-mini,
+     // spinLink = an all-spin clear (keeps B2B) instead of the plain clear value
+     if(fullT)rew+=r.lines===1&&P.tssNoDig!=null&&!r.dug?P.tssNoDig:P.tspin[Math.min(3,r.lines)];
+     // T-mini only when it clears 2+ lines (user 2026-11-28: Tをminiとして使う場合最低でも2回分増える場合のみ)
+     else if(type==='t'&&p.spin===1){if(P.tMiniAny!=null){if(!(P.tMini2&&r.lines>=2))rew+=P.tMiniAny}else if(combo<2)rew+=P.tMiniSolo}
+     else if(p.spin&&P.spinLink!=null)rew+=P.spinLink;
      else{rew+=P.clear[Math.min(4,r.lines)];if(p.spin)rew+=P.allSpin}
      if(special&&b2bBefore>0)rew+=P.b2bClear;
+     // user 2026-11-28 (allspin は B2B をつなぐ繋ぎ): an all-spin clear while a B2B chain is on (learned from the player)
+     if(p.spin&&type!=='t'&&b2bBefore>0&&P.spinKeep)rew+=P.spinKeep;
+     // all-spins are only links to the T-spins (user 2026-11-28: allspinはB2Bをするための繋ぎ): a non-T spin clear is never
+     // worth more than half a TSD, so a TSD (or TST) always wins over it however high the learned all-spin values get
+     if(p.spin&&type!=='t'){const cap=.5*P.tspin[2],got=rew-rew0;if(got>cap)rew-=got-cap}
      rew+=P.comboW*COMBO_G[Math.min(11,combo-1)];
      if(pc)rew+=P.atkW*P.pcAttack;
      if(!special&&b2bBefore>P.chargeAt&&P.charging)rew+=P.atkW*(b2bBefore-P.chargeAt+P.chargeBase);
@@ -306,7 +416,10 @@
      if(type==='t'&&p.spin===1&&combo<2)rew+=P.tMiniSolo;
     }
     if(r.lines===4&&combo>=2&&node.g>0)rew+=P.renQuad;
-    rew+=P.digW*r.dug;
+    // digOnlySpecial: with a B2B chain on, digging pays only with a spin / Quad (plain digs break the chain)
+    if(!(P.digOnlySpecial&&node.b2b>0&&!(p.spin||r.lines===4)))rew+=P.digW*r.dug;
+    // 3+ garbage lines taken: dig them with a Quad / I-spin triple / spins that keep B2B (digSpecial per row)
+    if(P.digSpecial&&r.dug&&(p.spin||r.lines===4))rew+=P.digSpecial*r.dug;
     // after a setup: the player's next attack from it (followKind, e.g. tspin2 then tspin3)
     if(P.followKind&&kindOf(type,p.spin,r.lines,r.dug,combo,node.g)===P.followKind)rew+=P.followW;
     // the second attack from a setup: the player's share of each kind (followBias {kind: share}), not fixed
@@ -315,15 +428,50 @@
      // the player's mix of attacks (user: 攻撃の種類の割合も合わせる、ただし高さや地形で変える): a soft bonus/penalty per
      // kind, added to the search value, so the board (height, shape, a TSM combo coming) still decides
      if(P.kindBias&&P.kindBias[k])rew+=P.kindBias[k]}}
-    if(P.tank&&pend>0&&atk>0){const h=heightsOf(rows);let top=0;for(let x=0;x<W;x++)if(h[x]>top)top=h[x];if(top+pend<=P.tankSafe)rew-=P.tankW*Math.min(pend,atk)}
+    // take or cancel (user 2026-11-28): take what the board survives and send it back in one burst, but only when
+    // the board stays good or a burst is coming (tankNeed: B2B chain on, or a T-slot ready); 1-2 lines
+    // (pend < tankMin) are better cancelled, best with an all-spin (cancelSpin per line)
+    // B2B is broken only to survive or for a REN (user 2026-11-28: B2Bを切るのはどうしても死にそうな場合、RENquad
+    // または相当なRENが見える場合のみ): breaking costs b2bBreak unless the stack (+ waiting garbage) is at breakSafe;
+    // it is paid back when this REN reaches breakRen clears or ends in a Quad
+    if(P.b2bBreak&&r.lines){const special=p.spin||r.lines===4;
+     // free to break when in danger (stack + waiting garbage at breakSafe) or when the released charge kills (oppRoom)
+     const kills=P.oppRoom!=null&&P.charging&&node.b2b>P.chargeAt&&node.b2b-P.chargeAt+P.chargeBase>=P.oppRoom;
+     let t0=0;{const h0=heightsOf(node.rows);for(let x=0;x<W;x++)if(h0[x]>t0)t0=h0[x]}const danger=t0+node.pend>=P.breakSafe;
+     // and cash it now, not later (the search has no discount, so waiting looked as good)
+     if((kills||danger)&&!special&&node.b2b>P.chargeAt&&P.charging)rew+=3000*Math.max(0,1-.3*node.depth);
+     if(!special&&node.b2b>0&&!kills&&!danger){rew-=P.b2bBreak;brk=true}
+     if(brk&&(combo>=P.breakRen||(r.lines===4&&combo>=2))){rew+=P.b2bBreak;brk=false}}
+    // not while in a REN (user 2026-11-28: RENしてる時はしなくていい)
+    if(P.tank&&pend>0&&atk>0&&!(P.tankMin&&node.combo>=2)){const h=heightsOf(rows);let top=0;for(let x=0;x<W;x++)if(h[x]>top)top=h[x];
+     if(P.tankMin&&pend<P.tankMin){if(P.cancelSpin&&p.spin&&type!=='t')rew+=P.cancelSpin*Math.min(pend,atk)}
+     else if(top+pend<=P.tankSafe&&(!P.tankNeed||b2b>=2||findTslot(rows,h)))rew-=P.tankW*Math.min(pend,atk)}
     pend=Math.max(0,pend-atk);
    }else{
-    combo=0;
+    // a REN ends here: a T-spin seen on the board that beats the REN's last hit is worth switching to
+    // (user 2026-11-28: Tspinが見えてRENの最後の火力より上回ってるならtspinを組んで); renSwitch per line of attack more
+    if(P.renSwitch&&node.combo>=2){const s=findTslot(rows,heightsOf(rows));if(s&&s.lines>=2){const ts=SP.attackOf('t',2,s.lines,b2b,1),last=SP.attackOf('i',0,1,0,node.combo+1);if(ts>last)rew+=P.renSwitch*(ts-last)}}
+    combo=0;brk=false;
     if(P.simGarbage&&pend>0){const n=Math.min(pend,P.garbageCap)|0;if(n>0){const hc=holes[gi]??wellOf(rows);gi++;rows=addGarbage(rows,n,hc);pend-=n;g+=n}}
    }
    if(type==='t'&&!(fullT&&r.lines)&&!(r.lines&&combo>=2))rew+=P.wastedT;
+   // T in a REN (user 2026-11-28: REN途中でT持っててもRENを切って詰みに行ってT発火しないの勿体無い / 後まとめうちでTあとにできるのに
+   // してなかったり): a T-spin fired inside the REN pays renT; a T spent as a plain clear in the REN costs renTPlain; ending the
+   // REN (or stacking) while a T is still in hold costs renHoldT
+   if(P.renT||P.renTPlain||P.renHoldT){
+    if(r.lines&&combo>=2){if(fullT&&P.renT)rew+=P.renT;else if(type==='t'&&!p.spin&&P.renTPlain)rew+=P.renTPlain}
+    if(!r.lines&&node.combo>=2&&hold==='t'&&P.renHoldT)rew+=P.renHoldT}
+   // T and I are not stacking pieces (user 2026-11-28: できるだけTとIを無駄遣い詰みに使わないで): a T that clears nothing
+   // costs tStack more, an I that clears nothing (no Quad / I-spin / dig) costs wastedI; not in a REN
+   // I only for a Quad or an I-spin (user 2026-11-28: Iはquadかspin); stacking with T / I only when nothing else keeps the B2B or
+   // the board (the cost is paid back by those terms in the search)
+   if(node.combo<2){if(!r.lines&&type==='t'&&P.tStack)rew+=P.tStack;if(type==='i'&&P.wastedI&&!(r.lines===4||(p.spin&&r.lines)))rew+=P.wastedI}
+   // keep the garbage well open (user 2026-11-28: すぐ掘れない地形を作ってる): TL garbage comes as tall rows with one hole
+   // column; covering that column above the garbage costs coverGarb (a Quad / spin down the well digs it at once)
+   if(P.coverGarb&&g>0){const cov=(rs,gg)=>{const H=rs.length,t=H-gg;if(t<=0||t>=H)return 0;const hc=~rs[t]&((1<<W)-1);if(!hc)return 0;for(let y=0;y<t;y++)if(rs[y]&hc)return 1;return 0};
+    if(cov(rows,g)&&!cov(node.rows,node.g))rew+=P.coverGarb}
    const qi=node.qi+adv;
-   const n={rows,hold,qi,b2b,combo,pend,g,gi,acc:node.acc+rew,eval:0,children:null,spec:null,parent:node,depth:node.depth+1,
+   const n={rows,hold,qi,b2b,combo,pend,g,gi,brk,acc:node.acc+rew,eval:0,children:null,spec:null,parent:node,depth:node.depth+1,
     own:{x:p.x,y:p.y,r:p.r,type,hold:held,spin:p.spin},dead:rows[0]!==0||rows[1]!==0};
    n.move=node.depth===0?n.own:node.move;
    // same board, hold, queue spot and counters reached another way (piece order swapped
@@ -331,7 +479,7 @@
    if(P.merge){let h1=2166136261,h2=qi*31+b2b*7+combo*3+pend*131+(hold?hold.charCodeAt(0):0);for(let y=0;y<rows.length;y++){const v=rows[y];if(!v)continue;h1=Math.imul(h1^v^(y<<10),16777619);h2=(h2*33+v+y)|0}
     const k=h1+':'+h2,prev=seen.get(k);if(prev!==undefined&&prev>=n.acc)return null;seen.set(k,n.acc)}
    n.tAhead=seq.indexOf('t',qi)>=0;
-   n.eval=n.dead?-1e9:n.acc+boardValue(rows,n,P)+(openOn&&!g?openBonus(rows):0);
+   n.eval=n.dead?-1e9:n.acc+boardValue(rows,n,P)+(openOn&&!g?openBonus(rows):0)+(TPLT&&TPLT.length?tplBonus(rows,TPLT,P):0)+(P.spinSlot?spinSlotBonus(rows,n,seq,P):0);
    return n;
   }
   function openBonus(rows){let best=Infinity;const H=rows.length;
@@ -539,11 +687,11 @@
    // opener searches, which run once when it is done or stopped
    // (an app Worker takes this interim move when the PPS clock runs out and never asks for the final one: the tree is
    // kept here too, so the next move can start from it)
-   result:()=>{if(done)return best;if(P.reuse)REUSE.set(P.reuseKey,{root:rootNode,seq,sig});const l=(rootNode.children||[]).filter(c=>!c.dead);return l.length?out(l[0]):null},get done(){return done},get spent(){return spent},get nodes(){return nodes},
+   result:()=>{if(done)return best;if(P.reuse)REUSE.set(P.reuseKey,{root:rootNode,seq,sig});const l=(rootNode.children||[]).filter(c=>!c.dead);return l.length?out(l[0]):null},get done(){return done},get tpl(){return TPLT&&TPLT.length?TPLT[0].t.name:null},get spent(){return spent},get nodes(){return nodes},
    stop(){if(!done){done=true;best=result()}return best},
   };
  }
  function plan(engine,state,options={}){const p=create(engine,state,options);if(!p)return null;while(!p.step(50));return p.result()}
- const api={create,plan,boardValue,findTslot,nextPossible,moveFeatures,weightsOf,optionsOf,kindOf,KINDS,FIT_KEYS,DEFAULTS};
+ const api={create,plan,setTemplates,matchTemplates,boardValue,findTslot,nextPossible,moveFeatures,weightsOf,optionsOf,kindOf,KINDS,FIT_KEYS,DEFAULTS};
  if(typeof module!=='undefined')module.exports=api;else root.LocalTreePlanner=api;
 })(typeof window==='undefined'?globalThis:window);
